@@ -33,8 +33,9 @@ La sesión se maneja con una cookie httpOnly (`finanzas_session`) firmada con JW
 ### Conceptos recurrentes (`/api/conceptos-recurrentes`) — requieren sesión activa
 - `GET /` — lista los conceptos del hogar con sus puntos de corte asignados
 - `POST /` — `{ nombre, tipoMonto: "fijo" | "variable", montoDefault? }` (requerido si `tipoMonto` es `fijo`). Requiere admin o `puedeEditarGastos`.
-- `PATCH /:id` — editar nombre/activo/tipoMonto/montoDefault. Requiere admin o `puedeEditarGastos`.
+- `PATCH /:id` — editar nombre/activo/tipoMonto/montoDefault/pagadorDefaultUsuarioId. Si el `tipoMonto` final queda en `fijo`, exige `montoDefault`; si queda en `variable`, lo limpia a `null`. Requiere admin o `puedeEditarGastos`.
 - `PUT /:id/puntos-corte` — `{ puntoCorteIds: [] }` → a qué puntos de corte aplica; array vacío = aplica a todos. Requiere admin o `puedeEditarGastos`.
+- `DELETE /:id` — elimina el concepto. Falla con 409 si ya tiene gastos recurrentes generados en algún período (usa `PATCH { activo: false }` para desactivarlo sin perder ese historial). Requiere admin o `puedeEditarGastos`.
 
 ### Split de porcentaje (`/api/split-porcentaje`) — requieren sesión activa
 - `GET /?contexto=general|gastos_variables` — split vigente para ese contexto (el más reciente con `periodoInicio` ≤ hoy). `contexto` es opcional, default `general`.

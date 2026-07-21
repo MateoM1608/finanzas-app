@@ -9,6 +9,7 @@ import {
   crearConcepto,
   actualizarConcepto,
   asignarPuntosCorte,
+  eliminarConcepto,
 } from './conceptosRecurrentes.service.js';
 
 export const getConceptos = asyncHandler(async (req, res) => {
@@ -32,4 +33,9 @@ export const putConceptoPuntosCorte = asyncHandler(async (req, res) => {
   const { puntoCorteIds } = asignarPuntosCorteSchema.parse(req.body);
   const concepto = await asignarPuntosCorte(req.usuario, req.params.id, puntoCorteIds);
   res.json({ concepto });
+});
+
+export const deleteConcepto = asyncHandler(async (req, res) => {
+  await eliminarConcepto(req.usuario, req.params.id);
+  res.status(204).send();
 });

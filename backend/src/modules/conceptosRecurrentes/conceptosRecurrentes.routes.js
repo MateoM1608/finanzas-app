@@ -5,6 +5,7 @@ import {
   postConcepto,
   patchConcepto,
   putConceptoPuntosCorte,
+  deleteConcepto,
 } from './conceptosRecurrentes.controller.js';
 
 export const conceptosRecurrentesRouter = Router();
@@ -14,3 +15,4 @@ conceptosRecurrentesRouter.get('/', getConceptos);
 conceptosRecurrentesRouter.post('/', postConcepto);
 conceptosRecurrentesRouter.patch('/:id', patchConcepto);
 conceptosRecurrentesRouter.put('/:id/puntos-corte', putConceptoPuntosCorte);
+conceptosRecurrentesRouter.delete('/:id', deleteConcepto);

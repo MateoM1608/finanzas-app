@@ -60,9 +60,15 @@ export async function crearConcepto(usuarioActual, data) {
 export async function actualizarConcepto(usuarioActual, conceptoId, data) {
   const hogarId = requireHogarId(usuarioActual);
   requirePermisoEdicion(usuarioActual);
-  await requireConceptoDelHogar(hogarId, conceptoId);
+  const concepto = await requireConceptoDelHogar(hogarId, conceptoId);
   if (data.pagadorDefaultUsuarioId !== undefined) {
     await validarPagadorDelHogar(hogarId, data.pagadorDefaultUsuarioId);
+  }
+
+  const tipoMontoFinal = data.tipoMonto ?? concepto.tipoMonto;
+  const montoDefaultFinal = data.montoDefault === undefined ? concepto.montoDefault : data.montoDefault;
+  if (tipoMontoFinal === 'fijo' && montoDefaultFinal == null) {
+    throw new HttpError(400, 'Los conceptos de monto fijo requieren montoDefault');
   }
 
   return prisma.conceptoRecurrentePareja.update({
@@ -71,11 +77,32 @@ export async function actualizarConcepto(usuarioActual, conceptoId, data) {
       nombre: data.nombre ?? undefined,
       activo: data.activo ?? undefined,
       tipoMonto: data.tipoMonto ?? undefined,
-      montoDefault: data.montoDefault === undefined ? undefined : data.montoDefault,
+      montoDefault: tipoMontoFinal === 'variable' ? null : montoDefaultFinal,
       pagadorDefaultUsuarioId:
         data.pagadorDefaultUsuarioId === undefined ? undefined : data.pagadorDefaultUsuarioId,
     },
   });
+}
+
+export async function eliminarConcepto(usuarioActual, conceptoId) {
+  const hogarId = requireHogarId(usuarioActual);
+  requirePermisoEdicion(usuarioActual);
+  await requireConceptoDelHogar(hogarId, conceptoId);
+
+  const tieneInstancias = await prisma.gastoRecurrenteInstancia.count({
+    where: { conceptoId },
+  });
+  if (tieneInstancias) {
+    throw new HttpError(
+      409,
+      'Este concepto ya tiene gastos registrados en algún período — desactívalo en vez de eliminarlo, para no perder ese historial',
+    );
+  }
+
+  await prisma.$transaction([
+    prisma.conceptoPuntoCorte.deleteMany({ where: { conceptoId } }),
+    prisma.conceptoRecurrentePareja.delete({ where: { id: conceptoId } }),
+  ]);
 }
 
 export async function asignarPuntosCorte(usuarioActual, conceptoId, puntoCorteIds) {

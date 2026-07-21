@@ -1,11 +1,12 @@
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, reactive, onMounted } from 'vue';
 import { obtenerHogarActual, listarMiembros } from '../../api/hogares.js';
 import {
   listarConceptos,
   crearConcepto,
   actualizarConcepto,
   asignarPuntosCorte,
+  eliminarConcepto,
 } from '../../api/conceptosRecurrentes.js';
 import { extractErrorMessage } from '../../api/client.js';
 import { formatCurrency } from '../../utils/format.js';
@@ -28,6 +29,10 @@ const tipoMonto = ref('variable');
 const montoDefault = ref('');
 const pagadorDefaultUsuarioId = ref('');
 const creando = ref(false);
+
+const editandoId = ref(null);
+const edicion = reactive({ nombre: '', tipoMonto: 'variable', montoDefault: '' });
+const eliminandoId = ref(null);
 
 async function cargar() {
   loading.value = true;
@@ -88,6 +93,51 @@ async function onCambiarPagadorDefault(concepto, usuarioId) {
     error.value = extractErrorMessage(e);
   } finally {
     guardandoId.value = null;
+  }
+}
+
+function onIniciarEdicion(concepto) {
+  error.value = '';
+  edicion.nombre = concepto.nombre;
+  edicion.tipoMonto = concepto.tipoMonto;
+  edicion.montoDefault = concepto.montoDefault ?? '';
+  editandoId.value = concepto.id;
+}
+
+function onCancelarEdicion() {
+  editandoId.value = null;
+}
+
+async function onGuardarEdicion(concepto) {
+  error.value = '';
+  guardandoId.value = concepto.id;
+  try {
+    const payload = { nombre: edicion.nombre, tipoMonto: edicion.tipoMonto };
+    if (edicion.tipoMonto === 'fijo') {
+      payload.montoDefault = Number(edicion.montoDefault);
+    }
+    const actualizado = await actualizarConcepto(concepto.id, payload);
+    const idx = conceptos.value.findIndex((c) => c.id === concepto.id);
+    conceptos.value[idx] = { ...conceptos.value[idx], ...actualizado };
+    editandoId.value = null;
+  } catch (e) {
+    error.value = extractErrorMessage(e);
+  } finally {
+    guardandoId.value = null;
+  }
+}
+
+async function onEliminar(concepto) {
+  if (!confirm(`¿Eliminar "${concepto.nombre}"? Esta acción no se puede deshacer.`)) return;
+  error.value = '';
+  eliminandoId.value = concepto.id;
+  try {
+    await eliminarConcepto(concepto.id);
+    conceptos.value = conceptos.value.filter((c) => c.id !== concepto.id);
+  } catch (e) {
+    error.value = extractErrorMessage(e);
+  } finally {
+    eliminandoId.value = null;
   }
 }
 
@@ -188,7 +238,39 @@ onMounted(cargar);
 
       <ul v-else class="divide-y divide-border">
         <li v-for="concepto in conceptos" :key="concepto.id" class="py-4">
-          <div class="flex items-center justify-between gap-4">
+          <div v-if="editandoId === concepto.id" class="space-y-3">
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <FormField v-model="edicion.nombre" label="Nombre" required />
+              <div>
+                <label class="label">Tipo de monto</label>
+                <select v-model="edicion.tipoMonto" class="field">
+                  <option value="variable">Variable</option>
+                  <option value="fijo">Fijo</option>
+                </select>
+              </div>
+              <FormField
+                v-if="edicion.tipoMonto === 'fijo'"
+                v-model="edicion.montoDefault"
+                type="number"
+                label="Monto por defecto (COP)"
+                required
+              />
+            </div>
+            <div class="flex gap-2">
+              <button
+                class="btn-primary !px-3 !py-1.5 text-sm"
+                :disabled="guardandoId === concepto.id"
+                @click="onGuardarEdicion(concepto)"
+              >
+                {{ guardandoId === concepto.id ? 'Guardando…' : 'Guardar' }}
+              </button>
+              <button class="btn-ghost !px-3 !py-1.5 text-sm" @click="onCancelarEdicion">
+                Cancelar
+              </button>
+            </div>
+          </div>
+
+          <div v-else class="flex items-center justify-between gap-4">
             <div>
               <p class="text-ink-primary font-medium" :class="{ 'opacity-50': !concepto.activo }">
                 {{ concepto.nombre }}
@@ -197,15 +279,29 @@ onMounted(cargar);
                 {{ concepto.tipoMonto === 'fijo' ? formatCurrency(concepto.montoDefault) : 'Monto variable' }}
               </p>
             </div>
-            <label v-if="canEdit" class="inline-flex items-center gap-2 text-sm text-ink-secondary shrink-0">
-              <input
-                type="checkbox"
-                :checked="concepto.activo"
-                :disabled="guardandoId === concepto.id"
-                @change="onToggleActivo(concepto)"
-              />
-              Activo
-            </label>
+            <div class="flex items-center gap-3 shrink-0">
+              <template v-if="canEdit">
+                <button class="text-sm text-accent hover:text-accent-hover" @click="onIniciarEdicion(concepto)">
+                  Editar
+                </button>
+                <button
+                  class="text-sm text-ink-tertiary hover:text-negative transition-colors"
+                  :disabled="eliminandoId === concepto.id"
+                  @click="onEliminar(concepto)"
+                >
+                  Eliminar
+                </button>
+              </template>
+              <label v-if="canEdit" class="inline-flex items-center gap-2 text-sm text-ink-secondary">
+                <input
+                  type="checkbox"
+                  :checked="concepto.activo"
+                  :disabled="guardandoId === concepto.id"
+                  @change="onToggleActivo(concepto)"
+                />
+                Activo
+              </label>
+            </div>
           </div>
 
           <div v-if="canEdit" class="flex items-center gap-2 mt-3">

@@ -17,3 +17,7 @@ export function asignarPuntosCorte(id, puntoCorteIds) {
     .put(`/api/conceptos-recurrentes/${id}/puntos-corte`, { puntoCorteIds })
     .then((r) => r.data.concepto);
 }
+
+export function eliminarConcepto(id) {
+  return api.delete(`/api/conceptos-recurrentes/${id}`);
+}
