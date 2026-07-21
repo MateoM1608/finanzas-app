@@ -1,6 +1,6 @@
 <script setup>
 import { ref, onMounted } from 'vue';
-import { obtenerHogarActual } from '../../api/hogares.js';
+import { obtenerHogarActual, listarMiembros } from '../../api/hogares.js';
 import {
   listarConceptos,
   crearConcepto,
@@ -18,6 +18,7 @@ const props = defineProps({
 
 const conceptos = ref([]);
 const puntosCorte = ref([]);
+const miembros = ref([]);
 const loading = ref(true);
 const error = ref('');
 const guardandoId = ref(null);
@@ -25,22 +26,29 @@ const guardandoId = ref(null);
 const nombre = ref('');
 const tipoMonto = ref('variable');
 const montoDefault = ref('');
+const pagadorDefaultUsuarioId = ref('');
 const creando = ref(false);
 
 async function cargar() {
   loading.value = true;
   try {
-    const [listaConceptos, { puntosCorte: puntos }] = await Promise.all([
+    const [listaConceptos, { puntosCorte: puntos }, listaMiembros] = await Promise.all([
       listarConceptos(),
       obtenerHogarActual(),
+      listarMiembros(),
     ]);
     conceptos.value = listaConceptos;
     puntosCorte.value = puntos;
+    miembros.value = listaMiembros;
   } catch (e) {
     error.value = extractErrorMessage(e);
   } finally {
     loading.value = false;
   }
+}
+
+function nombrePagador(usuarioId) {
+  return miembros.value.find((m) => m.id === usuarioId)?.nombre ?? '';
 }
 
 async function onCrearConcepto() {
@@ -51,15 +59,35 @@ async function onCrearConcepto() {
     if (tipoMonto.value === 'fijo') {
       payload.montoDefault = Number(montoDefault.value);
     }
+    if (pagadorDefaultUsuarioId.value) {
+      payload.pagadorDefaultUsuarioId = pagadorDefaultUsuarioId.value;
+    }
     const concepto = await crearConcepto(payload);
     conceptos.value = [...conceptos.value, { ...concepto, puntosCorte: [] }];
     nombre.value = '';
     montoDefault.value = '';
     tipoMonto.value = 'variable';
+    pagadorDefaultUsuarioId.value = '';
   } catch (e) {
     error.value = extractErrorMessage(e);
   } finally {
     creando.value = false;
+  }
+}
+
+async function onCambiarPagadorDefault(concepto, usuarioId) {
+  error.value = '';
+  guardandoId.value = concepto.id;
+  try {
+    const actualizado = await actualizarConcepto(concepto.id, {
+      pagadorDefaultUsuarioId: usuarioId || null,
+    });
+    const idx = conceptos.value.findIndex((c) => c.id === concepto.id);
+    conceptos.value[idx] = { ...conceptos.value[idx], pagadorDefaultUsuarioId: actualizado.pagadorDefaultUsuarioId };
+  } catch (e) {
+    error.value = extractErrorMessage(e);
+  } finally {
+    guardandoId.value = null;
   }
 }
 
@@ -135,6 +163,13 @@ onMounted(cargar);
           label="Monto por defecto (COP)"
           required
         />
+        <div>
+          <label class="label">Pagador por defecto (opcional)</label>
+          <select v-model="pagadorDefaultUsuarioId" class="field">
+            <option value="">Sin definir</option>
+            <option v-for="m in miembros" :key="m.id" :value="m.id">{{ m.nombre }}</option>
+          </select>
+        </div>
         <div class="sm:col-span-3">
           <button type="submit" class="btn-primary" :disabled="creando">
             {{ creando ? 'Creando…' : 'Agregar concepto' }}
@@ -172,6 +207,22 @@ onMounted(cargar);
               Activo
             </label>
           </div>
+
+          <div v-if="canEdit" class="flex items-center gap-2 mt-3">
+            <span class="text-sm text-ink-tertiary shrink-0">Pagador por defecto:</span>
+            <select
+              class="field !w-auto !py-1.5 text-sm"
+              :value="concepto.pagadorDefaultUsuarioId ?? ''"
+              :disabled="guardandoId === concepto.id"
+              @change="onCambiarPagadorDefault(concepto, $event.target.value)"
+            >
+              <option value="">Sin definir</option>
+              <option v-for="m in miembros" :key="m.id" :value="m.id">{{ m.nombre }}</option>
+            </select>
+          </div>
+          <p v-else-if="concepto.pagadorDefaultUsuarioId" class="text-sm text-ink-tertiary mt-2">
+            Pagador por defecto: {{ nombrePagador(concepto.pagadorDefaultUsuarioId) }}
+          </p>
 
           <div v-if="canEdit && puntosCorte.length > 1" class="flex flex-wrap gap-4 mt-3">
             <span class="text-sm text-ink-tertiary">Aplica a:</span>

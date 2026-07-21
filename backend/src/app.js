@@ -6,6 +6,8 @@ import { hogaresRouter } from './modules/hogares/hogares.routes.js';
 import { gastosPersonalesRouter } from './modules/gastosPersonales/gastosPersonales.routes.js';
 import { conceptosRecurrentesRouter } from './modules/conceptosRecurrentes/conceptosRecurrentes.routes.js';
 import { splitPorcentajeRouter } from './modules/splitPorcentaje/splitPorcentaje.routes.js';
+import { gastosRecurrentesRouter } from './modules/gastosRecurrentes/gastosRecurrentes.routes.js';
+import { gastosVariablesRouter } from './modules/gastosVariables/gastosVariables.routes.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 
 export const app = express();
@@ -20,6 +22,8 @@ app.use('/api/hogares', hogaresRouter);
 app.use('/api/gastos-personales', gastosPersonalesRouter);
 app.use('/api/conceptos-recurrentes', conceptosRecurrentesRouter);
 app.use('/api/split-porcentaje', splitPorcentajeRouter);
+app.use('/api/gastos-recurrentes', gastosRecurrentesRouter);
+app.use('/api/gastos-variables', gastosVariablesRouter);
 
 app.use(notFoundHandler);
 app.use(errorHandler);

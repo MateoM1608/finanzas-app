@@ -1,6 +1,6 @@
 # Finanzas — Backend
 
-API REST en Node.js + Express + Prisma + PostgreSQL. Fase 1: autenticación y onboarding. Fase 2: gastos personales. Fase 3: settings del hogar (miembros, permisos, conceptos recurrentes, split).
+API REST en Node.js + Express + Prisma + PostgreSQL. Fase 1: autenticación y onboarding. Fase 2: gastos personales. Fase 3: settings del hogar (miembros, permisos, conceptos recurrentes, split). Fase 4: panel de pareja (gastos recurrentes por período + gastos variables puntuales).
 
 ## Setup
 
@@ -40,9 +40,20 @@ La sesión se maneja con una cookie httpOnly (`finanzas_session`) firmada con JW
 - `GET /` — split vigente (el más reciente con `periodoInicio` ≤ hoy)
 - `PUT /` — `{ splits: [{ usuarioId, porcentaje }] }` → los porcentajes deben sumar 100% entre todos los miembros del hogar (soporta N miembros, no solo 2). Cada actualización crea un nuevo período con fecha de hoy, preservando el historial. Requiere admin o `puedeEditarGastos`.
 
+### Gastos recurrentes (`/api/gastos-recurrentes`) — requieren sesión activa
+- `GET /periodo-actual` — calcula el punto de corte vigente (según `frecuenciaCorte` y los puntos de corte del hogar) y devuelve/genera las instancias de los conceptos activos que aplican a ese punto. Los conceptos de monto fijo se generan con su `montoDefault` y reparto ya calculado; los variables quedan con `monto: null` hasta que alguien lo complete. Es idempotente — no duplica instancias si ya existen para ese período.
+- `PATCH /instancias/:id` — `{ monto?, pagoUsuarioId? }`. Cambiar `monto` recalcula el reparto (proporcional al split vigente, con el último miembro absorbiendo el redondeo); cambiar `pagoUsuarioId` NO toca el reparto — son conceptos independientes (quién puso la plata vs. cuánto le toca a cada quien). No se puede editar una instancia ya `liquidado` (eso lo controla el motor de cortes, fase 5). Requiere admin o `puedeEditarGastos`.
+
+### Gastos variables puntuales (`/api/gastos-variables`) — requieren sesión activa
+- `GET /` — lista los gastos del hogar ordenados por fecha límite
+- `POST /` — `{ item, valorTotal, pagoUsuarioId, fechaLimite, repartos? }`. Si no se pasa `repartos`, se calcula automáticamente desde el split vigente del hogar; si se pasa, debe sumar exactamente `valorTotal` y cada `usuarioId` debe pertenecer al hogar. Requiere admin o `puedeEditarGastos`.
+- `PATCH /:id` — igual que crear, todos los campos opcionales; cambiar `valorTotal` o pasar `repartos` recalcula el reparto, cambiar solo `pagoUsuarioId` no lo toca. No editable si ya está `liquidado`.
+- `DELETE /:id` — solo si sigue `pendiente`.
+
 ## Notas de diseño
 
 - El esquema de Prisma solo incluye las tablas necesarias hasta la fase actual; el resto del modelo de datos se agrega incrementalmente en fases posteriores.
-- Al crear un hogar se generan puntos de corte por defecto según la frecuencia elegida (ej. quincenal → día 15 y fin de mes); editables desde Settings del hogar.
-- El split de porcentaje se modela como una fila por miembro (`SplitPorcentajeMiembro`), no como columnas fijas `usuario1`/`usuario2` — el modelo de datos soporta hogares de N personas, no solo parejas.
+- Al crear un hogar se generan puntos de corte por defecto según la frecuencia elegida (ej. quincenal → día 15 y fin de mes); editables desde Settings del hogar. `PuntoCorteHogar.referencia` es una etiqueta libre editable; el cálculo de fechas real usa `diaMes`/`diaSemana`, campos estructurales que el usuario no edita directamente, para que renombrar la etiqueta no rompa el cálculo del período actual (`src/utils/periodoActual.js`).
+- El split de porcentaje se modela como una fila por miembro (`SplitPorcentajeMiembro`), no como columnas fijas `usuario1`/`usuario2` — el modelo de datos soporta hogares de N personas, no solo parejas. Los repartos de gastos recurrentes/variables siguen el mismo patrón (`GastoRecurrenteInstanciaReparto`, `GastoVariableParejaReparto`).
+- "Quién pagó" y "cómo se reparte" son conceptos separados: el pagador tiene un default configurable por concepto (`pagadorDefaultUsuarioId`) pero es editable en cada instancia hasta que un corte la liquide; el reparto es siempre proporcional al split vigente del hogar (o manual, en variables puntuales).
 - Todo acceso a datos que dependa del usuario autenticado se filtra a nivel de query por su `id`/`hogarId`, nunca solo en la capa de aplicación.

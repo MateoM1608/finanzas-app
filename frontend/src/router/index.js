@@ -32,6 +32,12 @@ const routes = [
     component: () => import('../views/SettingsView.vue'),
     meta: { requiresAuth: true, requiresHogar: true },
   },
+  {
+    path: '/pareja',
+    name: 'panel-pareja',
+    component: () => import('../views/PanelParejaView.vue'),
+    meta: { requiresAuth: true, requiresHogar: true },
+  },
 ];
 
 export const router = createRouter({

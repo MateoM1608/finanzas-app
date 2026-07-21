@@ -14,6 +14,16 @@ function requirePermisoEdicion(usuarioActual) {
   }
 }
 
+async function validarPagadorDelHogar(hogarId, pagadorDefaultUsuarioId) {
+  if (!pagadorDefaultUsuarioId) return;
+  const pertenece = await prisma.usuario.count({
+    where: { id: pagadorDefaultUsuarioId, hogarId },
+  });
+  if (!pertenece) {
+    throw new HttpError(400, 'El pagador por defecto debe ser un miembro de tu hogar');
+  }
+}
+
 async function requireConceptoDelHogar(hogarId, conceptoId) {
   const concepto = await prisma.conceptoRecurrentePareja.findUnique({ where: { id: conceptoId } });
   if (!concepto || concepto.hogarId !== hogarId) {
@@ -34,6 +44,7 @@ export function listarConceptos(usuarioActual) {
 export async function crearConcepto(usuarioActual, data) {
   const hogarId = requireHogarId(usuarioActual);
   requirePermisoEdicion(usuarioActual);
+  await validarPagadorDelHogar(hogarId, data.pagadorDefaultUsuarioId);
 
   return prisma.conceptoRecurrentePareja.create({
     data: {
@@ -41,6 +52,7 @@ export async function crearConcepto(usuarioActual, data) {
       nombre: data.nombre,
       tipoMonto: data.tipoMonto,
       montoDefault: data.tipoMonto === 'fijo' ? data.montoDefault : null,
+      pagadorDefaultUsuarioId: data.pagadorDefaultUsuarioId ?? null,
     },
   });
 }
@@ -49,6 +61,9 @@ export async function actualizarConcepto(usuarioActual, conceptoId, data) {
   const hogarId = requireHogarId(usuarioActual);
   requirePermisoEdicion(usuarioActual);
   await requireConceptoDelHogar(hogarId, conceptoId);
+  if (data.pagadorDefaultUsuarioId !== undefined) {
+    await validarPagadorDelHogar(hogarId, data.pagadorDefaultUsuarioId);
+  }
 
   return prisma.conceptoRecurrentePareja.update({
     where: { id: conceptoId },
@@ -57,6 +72,8 @@ export async function actualizarConcepto(usuarioActual, conceptoId, data) {
       activo: data.activo ?? undefined,
       tipoMonto: data.tipoMonto ?? undefined,
       montoDefault: data.montoDefault === undefined ? undefined : data.montoDefault,
+      pagadorDefaultUsuarioId:
+        data.pagadorDefaultUsuarioId === undefined ? undefined : data.pagadorDefaultUsuarioId,
     },
   });
 }

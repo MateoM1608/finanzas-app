@@ -1,6 +1,6 @@
 # Finanzas — Frontend
 
-Vue 3 + Vite + Tailwind CSS. Fase 2: login, registro, onboarding de hogar y panel personal básico. Fase 3: settings del hogar (frecuencia/puntos de corte, miembros y permisos, conceptos recurrentes, split de gastos).
+Vue 3 + Vite + Tailwind CSS. Fase 2: login, registro, onboarding de hogar y panel personal básico. Fase 3: settings del hogar (frecuencia/puntos de corte, miembros y permisos, conceptos recurrentes, split de gastos). Fase 4: panel de pareja (gastos recurrentes del período + gastos variables puntuales).
 
 ## Setup
 
@@ -18,9 +18,10 @@ Paleta clara minimalista tipo fintech premium: fondo blanco/gris muy claro (`can
 
 - `src/stores/auth.js` — Pinia: usuario autenticado, se hidrata con `GET /api/auth/me` al cargar la app
 - `src/router/index.js` — guards: redirige a `/login` si no hay sesión, a `/onboarding` si hay sesión pero no hogar, y de vuelta a `/` si ya tiene hogar
-- `src/api/` — clientes por recurso (`auth` vive en el store, `hogares`, `gastosPersonales`, `conceptosRecurrentes`, `splitPorcentaje`)
-- `src/views/` — `LoginView`, `RegisterView`, `OnboardingView` (crear/unirse a hogar), `PersonalPanelView` (listar/crear/eliminar gastos personales), `SettingsView` (tabs de configuración del hogar)
-- `src/components/settings/` — una sección por tab de Settings: `SettingsHogarSection` (nombre/frecuencia/puntos de corte), `SettingsMiembrosSection` (invitar, permisos, transferir admin), `SettingsConceptosSection` (conceptos recurrentes fijos/variables y a qué puntos de corte aplican), `SettingsSplitSection` (% de split por miembro, valida que sume 100%)
+- `src/api/` — clientes por recurso (`auth` vive en el store, `hogares`, `gastosPersonales`, `conceptosRecurrentes`, `splitPorcentaje`, `gastosRecurrentes`, `gastosVariables`)
+- `src/views/` — `LoginView`, `RegisterView`, `OnboardingView` (crear/unirse a hogar), `PersonalPanelView` (listar/crear/eliminar gastos personales), `SettingsView` (tabs de configuración del hogar), `PanelParejaView` (gastos recurrentes del período + variables puntuales)
+- `src/components/settings/` — una sección por tab de Settings: `SettingsHogarSection` (nombre/frecuencia/puntos de corte), `SettingsMiembrosSection` (invitar, permisos, transferir admin), `SettingsConceptosSection` (conceptos recurrentes fijos/variables, pagador por defecto y a qué puntos de corte aplican), `SettingsSplitSection` (% de split por miembro, valida que sume 100%)
+- `src/components/pareja/` — `PanelRecurrentesSection` (instancias del período actual, monto editable con guardado al salir del campo, selector de quién pagó) y `PanelVariablesSection` (alta + listado de gastos puntuales, reparto automático desde el split vigente)
 
 Las acciones de edición en Settings se ocultan/deshabilitan en el frontend según `esAdmin`/`puedeEditarGastos` del usuario, pero el backend es quien realmente aplica el permiso — el frontend solo mejora la UX.
 

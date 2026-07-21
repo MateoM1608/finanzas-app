@@ -14,13 +14,16 @@ async function onLogout() {
 <template>
   <header class="border-b border-border">
     <div class="max-w-3xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
-      <div class="inline-flex items-center gap-2">
+      <router-link :to="{ name: 'panel-personal' }" class="inline-flex items-center gap-2">
         <span class="h-2 w-2 rounded-full bg-accent"></span>
         <span class="text-sm font-medium tracking-wide text-ink-secondary uppercase">Finanzas</span>
-      </div>
+      </router-link>
 
       <div class="flex items-center gap-2">
         <span class="text-sm text-ink-secondary hidden sm:inline mr-2">{{ auth.usuario?.nombre }}</span>
+        <router-link :to="{ name: 'panel-pareja' }" class="btn-ghost !px-3 !py-1.5 text-sm">
+          Pareja
+        </router-link>
         <router-link :to="{ name: 'settings' }" class="btn-ghost !px-3 !py-1.5 text-sm">
           Configuración
         </router-link>
