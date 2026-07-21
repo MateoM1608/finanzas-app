@@ -70,14 +70,14 @@ function cambiarModo(nuevo) {
       <div class="card p-2 flex gap-1 mb-4">
         <button
           class="flex-1 rounded-xl px-4 py-2 text-sm font-medium transition-colors"
-          :class="modo === 'crear' ? 'bg-accent text-canvas' : 'text-ink-secondary hover:text-ink-primary'"
+          :class="modo === 'crear' ? 'bg-accent text-white' : 'text-ink-secondary hover:text-ink-primary'"
           @click="cambiarModo('crear')"
         >
           Crear hogar
         </button>
         <button
           class="flex-1 rounded-xl px-4 py-2 text-sm font-medium transition-colors"
-          :class="modo === 'unirse' ? 'bg-accent text-canvas' : 'text-ink-secondary hover:text-ink-primary'"
+          :class="modo === 'unirse' ? 'bg-accent text-white' : 'text-ink-secondary hover:text-ink-primary'"
           @click="cambiarModo('unirse')"
         >
           Unirme con código

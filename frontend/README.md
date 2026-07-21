@@ -12,7 +12,7 @@ Requiere el backend corriendo (ver `../backend/README.md`) — la autenticación
 
 ## Diseño
 
-Paleta oscura minimalista tipo fintech premium: fondo casi negro (`canvas` `#0A0A0B`), tarjetas ligeramente más claras (`surface`), un único color de acento dorado (`accent` `#D4AF37`) para las acciones principales, y verde/rojo (`positive`/`negative`) reservados para semántica financiera. Tipografía Inter. Todo definido en `tailwind.config.js` y las clases base en `src/assets/main.css` (`.card`, `.btn-primary`, `.field`, etc.) para mantener consistencia entre vistas.
+Paleta clara minimalista tipo fintech premium: fondo blanco/gris muy claro (`canvas` `#F7F8FA`), tarjetas blancas con sombra suave (`surface`), un único color de acento azul (`accent` `#2F6FED`) para las acciones principales y enlaces, y verde/rojo (`positive`/`negative`) reservados para semántica financiera. Tipografía Inter. Todo definido en `tailwind.config.js` y las clases base en `src/assets/main.css` (`.card`, `.btn-primary`, `.field`, etc.) para mantener consistencia entre vistas.
 
 ## Estructura
 
