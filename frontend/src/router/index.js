@@ -26,6 +26,12 @@ const routes = [
     component: () => import('../views/PersonalPanelView.vue'),
     meta: { requiresAuth: true, requiresHogar: true },
   },
+  {
+    path: '/settings',
+    name: 'settings',
+    component: () => import('../views/SettingsView.vue'),
+    meta: { requiresAuth: true, requiresHogar: true },
+  },
 ];
 
 export const router = createRouter({

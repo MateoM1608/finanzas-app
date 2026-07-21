@@ -39,6 +39,7 @@
     @apply w-full bg-surface-raised border border-border rounded-xl px-3.5 py-2.5
       text-ink-primary placeholder:text-ink-tertiary
       focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent
+      disabled:opacity-50 disabled:cursor-not-allowed
       transition-colors;
   }
 

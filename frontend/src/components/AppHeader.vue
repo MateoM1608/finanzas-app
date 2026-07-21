@@ -19,8 +19,11 @@ async function onLogout() {
         <span class="text-sm font-medium tracking-wide text-ink-secondary uppercase">Finanzas</span>
       </div>
 
-      <div class="flex items-center gap-4">
-        <span class="text-sm text-ink-secondary hidden sm:inline">{{ auth.usuario?.nombre }}</span>
+      <div class="flex items-center gap-2">
+        <span class="text-sm text-ink-secondary hidden sm:inline mr-2">{{ auth.usuario?.nombre }}</span>
+        <router-link :to="{ name: 'settings' }" class="btn-ghost !px-3 !py-1.5 text-sm">
+          Configuración
+        </router-link>
         <button class="btn-ghost !px-3 !py-1.5 text-sm" @click="onLogout">Cerrar sesión</button>
       </div>
     </div>

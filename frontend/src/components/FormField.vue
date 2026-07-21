@@ -6,6 +6,7 @@ defineProps({
   placeholder: { type: String, default: '' },
   autocomplete: { type: String, default: 'off' },
   required: { type: Boolean, default: false },
+  disabled: { type: Boolean, default: false },
 });
 
 defineEmits(['update:modelValue']);
@@ -21,6 +22,7 @@ defineEmits(['update:modelValue']);
       :placeholder="placeholder"
       :autocomplete="autocomplete"
       :required="required"
+      :disabled="disabled"
       @input="$emit('update:modelValue', $event.target.value)"
     />
   </div>
