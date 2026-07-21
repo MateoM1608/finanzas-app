@@ -13,6 +13,16 @@ enum FrecuenciaCorte {
   mensual
 }
 
+enum TipoGastoPersonal {
+  recurrente
+  puntual
+}
+
+enum OrigenGasto {
+  app
+  bot
+}
+
 model Usuario {
   id                 String   @id @default(uuid())
   nombre             String
@@ -26,6 +36,7 @@ model Usuario {
 
   hogar              Hogar?   @relation(fields: [hogarId], references: [id])
   invitacionesCreadas InvitacionHogar[] @relation("invitacionesCreadas")
+  gastosPersonales   GastoPersonal[]
 
   @@index([hogarId])
   @@map("usuarios")
@@ -71,4 +82,21 @@ model InvitacionHogar {
 
   @@index([hogarId])
   @@map("invitaciones_hogar")
+}
+
+model GastoPersonal {
+  id          String            @id @default(uuid())
+  usuarioId   String            @map("usuario_id")
+  categoria   String?
+  monto       Int
+  fecha       DateTime
+  descripcion String?
+  tipo        TipoGastoPersonal @default(puntual)
+  origen      OrigenGasto       @default(app)
+  creadoEn    DateTime          @default(now()) @map("creado_en")
+
+  usuario     Usuario           @relation(fields: [usuarioId], references: [id])
+
+  @@index([usuarioId])
+  @@map("gastos_personales")
 }
