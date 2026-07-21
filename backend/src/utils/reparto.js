@@ -1,14 +1,24 @@
 import { prisma } from '../config/prisma.js';
 
-export async function obtenerSplitVigente(hogarId, client = prisma) {
+export async function obtenerSplitVigente(hogarId, contexto = 'general', client = prisma) {
   const ultimo = await client.splitPorcentajeMiembro.findFirst({
-    where: { hogarId, periodoInicio: { lte: new Date() } },
+    where: { hogarId, contexto, periodoInicio: { lte: new Date() } },
     orderBy: { periodoInicio: 'desc' },
   });
   if (!ultimo) return [];
   return client.splitPorcentajeMiembro.findMany({
-    where: { hogarId, periodoInicio: ultimo.periodoInicio },
+    where: { hogarId, contexto, periodoInicio: ultimo.periodoInicio },
   });
+}
+
+/**
+ * Split vigente para gastos variables puntuales: usa el split propio de ese
+ * contexto si existe; si nadie lo ha configurado, cae al split general del hogar.
+ */
+export async function obtenerSplitVigenteGastosVariables(hogarId, client = prisma) {
+  const propio = await obtenerSplitVigente(hogarId, 'gastos_variables', client);
+  if (propio.length) return propio;
+  return obtenerSplitVigente(hogarId, 'general', client);
 }
 
 /**

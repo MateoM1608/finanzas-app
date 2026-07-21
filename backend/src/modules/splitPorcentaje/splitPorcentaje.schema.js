@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+export const contextoSplitSchema = z.enum(['general', 'gastos_variables']).default('general');
+
 export const actualizarSplitSchema = z.object({
   splits: z
     .array(

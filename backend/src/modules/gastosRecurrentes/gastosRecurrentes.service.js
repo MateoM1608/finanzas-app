@@ -119,7 +119,7 @@ export async function actualizarInstancia(usuarioActual, instanciaId, data) {
 
     if (data.monto !== undefined) {
       await tx.gastoRecurrenteInstanciaReparto.deleteMany({ where: { instanciaId } });
-      const split = await obtenerSplitVigente(hogarId, tx);
+      const split = await obtenerSplitVigente(hogarId, 'general', tx);
       if (montoFinal != null && split.length) {
         const repartos = calcularReparto(montoFinal, split);
         await tx.gastoRecurrenteInstanciaReparto.createMany({

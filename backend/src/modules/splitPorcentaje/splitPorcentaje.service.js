@@ -18,23 +18,23 @@ function inicioDeHoy() {
   return new Date(new Date().toISOString().slice(0, 10));
 }
 
-export async function obtenerSplitVigente(usuarioActual) {
+export async function obtenerSplitVigente(usuarioActual, contexto = 'general') {
   const hogarId = requireHogarId(usuarioActual);
 
   const ultimo = await prisma.splitPorcentajeMiembro.findFirst({
-    where: { hogarId, periodoInicio: { lte: new Date() } },
+    where: { hogarId, contexto, periodoInicio: { lte: new Date() } },
     orderBy: { periodoInicio: 'desc' },
   });
 
   if (!ultimo) return [];
 
   return prisma.splitPorcentajeMiembro.findMany({
-    where: { hogarId, periodoInicio: ultimo.periodoInicio },
+    where: { hogarId, contexto, periodoInicio: ultimo.periodoInicio },
     include: { usuario: { select: { id: true, nombre: true, usuario: true } } },
   });
 }
 
-export async function actualizarSplit(usuarioActual, splits) {
+export async function actualizarSplit(usuarioActual, splits, contexto = 'general') {
   const hogarId = requireHogarId(usuarioActual);
   requirePermisoEdicion(usuarioActual);
 
@@ -59,16 +59,17 @@ export async function actualizarSplit(usuarioActual, splits) {
   const periodoInicio = inicioDeHoy();
 
   await prisma.$transaction([
-    prisma.splitPorcentajeMiembro.deleteMany({ where: { hogarId, periodoInicio } }),
+    prisma.splitPorcentajeMiembro.deleteMany({ where: { hogarId, periodoInicio, contexto } }),
     prisma.splitPorcentajeMiembro.createMany({
       data: splits.map((s) => ({
         hogarId,
         usuarioId: s.usuarioId,
         porcentaje: s.porcentaje,
         periodoInicio,
+        contexto,
       })),
     }),
   ]);
 
-  return obtenerSplitVigente(usuarioActual);
+  return obtenerSplitVigente(usuarioActual, contexto);
 }

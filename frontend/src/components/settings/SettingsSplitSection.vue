@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, watch, onMounted } from 'vue';
 import { listarMiembros } from '../../api/hogares.js';
 import { obtenerSplit, actualizarSplit } from '../../api/splitPorcentaje.js';
 import { extractErrorMessage } from '../../api/client.js';
@@ -9,7 +9,15 @@ const props = defineProps({
   canEdit: { type: Boolean, default: false },
 });
 
+const contextos = [
+  { id: 'general', label: 'General del hogar' },
+  { id: 'gastos_variables', label: 'Gastos variables puntuales' },
+];
+const contextoActivo = ref('general');
+
+const miembros = ref([]);
 const filas = ref([]); // [{ usuarioId, nombre, porcentaje }]
+const usandoFallbackGeneral = ref(false);
 const loading = ref(true);
 const guardando = ref(false);
 const error = ref('');
@@ -22,10 +30,23 @@ const sumaValida = computed(() => Math.abs(suma.value - 100) < 0.01);
 
 async function cargar() {
   loading.value = true;
+  error.value = '';
+  exito.value = '';
+  usandoFallbackGeneral.value = false;
   try {
-    const [miembros, split] = await Promise.all([listarMiembros(), obtenerSplit()]);
+    if (!miembros.value.length) {
+      miembros.value = await listarMiembros();
+    }
+
+    let split = await obtenerSplit(contextoActivo.value);
+
+    if (!split.length && contextoActivo.value === 'gastos_variables') {
+      split = await obtenerSplit('general');
+      usandoFallbackGeneral.value = true;
+    }
+
     const splitPorUsuario = new Map(split.map((s) => [s.usuarioId, s.porcentaje]));
-    filas.value = miembros.map((m) => ({
+    filas.value = miembros.value.map((m) => ({
       usuarioId: m.id,
       nombre: m.nombre,
       porcentaje: splitPorUsuario.get(m.id) ?? 0,
@@ -44,7 +65,9 @@ async function onGuardar() {
   try {
     await actualizarSplit(
       filas.value.map((f) => ({ usuarioId: f.usuarioId, porcentaje: Number(f.porcentaje) })),
+      contextoActivo.value,
     );
+    usandoFallbackGeneral.value = false;
     exito.value = 'Split actualizado';
   } catch (e) {
     error.value = extractErrorMessage(e);
@@ -53,6 +76,7 @@ async function onGuardar() {
   }
 }
 
+watch(contextoActivo, cargar);
 onMounted(cargar);
 </script>
 
@@ -63,9 +87,34 @@ onMounted(cargar);
       <p class="text-sm text-ink-secondary">Debe sumar 100% entre todos los miembros.</p>
     </div>
 
+    <div class="flex gap-1 bg-surface-raised rounded-xl p-1">
+      <button
+        v-for="c in contextos"
+        :key="c.id"
+        type="button"
+        class="flex-1 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors"
+        :class="contextoActivo === c.id ? 'bg-accent text-white' : 'text-ink-secondary hover:text-ink-primary'"
+        @click="contextoActivo = c.id"
+      >
+        {{ c.label }}
+      </button>
+    </div>
+
+    <p v-if="contextoActivo === 'gastos_variables'" class="text-sm text-ink-tertiary -mt-2">
+      Este split solo aplica a gastos variables puntuales. Si no lo configuras, se usa el split
+      general del hogar.
+    </p>
+
     <AlertError :message="error" />
     <p v-if="exito" class="text-sm text-positive bg-positive/10 border border-positive/20 rounded-xl px-3.5 py-2.5">
       {{ exito }}
+    </p>
+    <p
+      v-if="usandoFallbackGeneral && !loading"
+      class="text-sm text-accent bg-accent-muted border border-accent/20 rounded-xl px-3.5 py-2.5"
+    >
+      Todavía no tienes un split propio para gastos variables — estos valores son los del split
+      general. Guárdalos (o edítalos) para dejar uno independiente.
     </p>
 
     <p v-if="loading" class="text-sm text-ink-secondary">Cargando…</p>

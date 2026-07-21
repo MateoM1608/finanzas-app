@@ -33,9 +33,9 @@ const routes = [
     meta: { requiresAuth: true, requiresHogar: true },
   },
   {
-    path: '/pareja',
-    name: 'panel-pareja',
-    component: () => import('../views/PanelParejaView.vue'),
+    path: '/hogar',
+    name: 'panel-hogar',
+    component: () => import('../views/PanelHogarView.vue'),
     meta: { requiresAuth: true, requiresHogar: true },
   },
 ];

@@ -34,6 +34,11 @@ enum EstadoGastoPareja {
   liquidado
 }
 
+enum SplitContexto {
+  general
+  gastos_variables
+}
+
 model Usuario {
   id                 String   @id @default(uuid())
   nombre             String
@@ -164,17 +169,18 @@ model ConceptoPuntoCorte {
 }
 
 model SplitPorcentajeMiembro {
-  id            String   @id @default(uuid())
-  hogarId       String   @map("hogar_id")
-  usuarioId     String   @map("usuario_id")
+  id            String        @id @default(uuid())
+  hogarId       String        @map("hogar_id")
+  usuarioId     String        @map("usuario_id")
   porcentaje    Float
-  periodoInicio DateTime @map("periodo_inicio")
-  creadoEn      DateTime @default(now()) @map("creado_en")
+  contexto      SplitContexto @default(general)
+  periodoInicio DateTime      @map("periodo_inicio")
+  creadoEn      DateTime      @default(now()) @map("creado_en")
 
   hogar         Hogar    @relation(fields: [hogarId], references: [id])
   usuario       Usuario  @relation(fields: [usuarioId], references: [id])
 
-  @@unique([hogarId, usuarioId, periodoInicio])
+  @@unique([hogarId, usuarioId, periodoInicio, contexto])
   @@index([hogarId])
   @@map("split_porcentaje_miembro")
 }

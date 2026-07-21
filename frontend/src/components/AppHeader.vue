@@ -21,8 +21,8 @@ async function onLogout() {
 
       <div class="flex items-center gap-2">
         <span class="text-sm text-ink-secondary hidden sm:inline mr-2">{{ auth.usuario?.nombre }}</span>
-        <router-link :to="{ name: 'panel-pareja' }" class="btn-ghost !px-3 !py-1.5 text-sm">
-          Pareja
+        <router-link :to="{ name: 'panel-hogar' }" class="btn-ghost !px-3 !py-1.5 text-sm">
+          Hogar
         </router-link>
         <router-link :to="{ name: 'settings' }" class="btn-ghost !px-3 !py-1.5 text-sm">
           Configuración

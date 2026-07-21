@@ -1,6 +1,6 @@
 import { prisma } from '../../config/prisma.js';
 import { HttpError } from '../../middleware/errorHandler.js';
-import { obtenerSplitVigente, calcularReparto } from '../../utils/reparto.js';
+import { obtenerSplitVigenteGastosVariables, calcularReparto } from '../../utils/reparto.js';
 
 const INCLUDE_GASTO = {
   pagador: { select: { id: true, nombre: true } },
@@ -47,11 +47,11 @@ async function resolverRepartos(hogarId, valorTotal, repartosInput) {
     return repartosInput;
   }
 
-  const split = await obtenerSplitVigente(hogarId);
+  const split = await obtenerSplitVigenteGastosVariables(hogarId);
   if (!split.length) {
     throw new HttpError(
       409,
-      'Configura primero el split de porcentaje del hogar (Settings), o especifica el reparto manualmente',
+      'Configura primero un split de porcentaje (general o de gastos variables) en Settings, o especifica el reparto manualmente',
     );
   }
   return calcularReparto(valorTotal, split);
