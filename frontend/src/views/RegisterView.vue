@@ -12,11 +12,18 @@ const auth = useAuthStore();
 const nombre = ref('');
 const usuario = ref('');
 const password = ref('');
+const confirmarPassword = ref('');
 const error = ref('');
 const loading = ref(false);
 
 async function onSubmit() {
   error.value = '';
+
+  if (password.value !== confirmarPassword.value) {
+    error.value = 'Las contraseñas no coinciden';
+    return;
+  }
+
   loading.value = true;
   try {
     await auth.register({ nombre: nombre.value, usuario: usuario.value, password: password.value });
@@ -59,6 +66,14 @@ async function onSubmit() {
           autocomplete="new-password"
           required
           placeholder="Mínimo 8 caracteres"
+        />
+        <FormField
+          v-model="confirmarPassword"
+          label="Confirmar contraseña"
+          type="password"
+          autocomplete="new-password"
+          required
+          placeholder="Repite tu contraseña"
         />
 
         <button type="submit" class="btn-primary w-full" :disabled="loading">
