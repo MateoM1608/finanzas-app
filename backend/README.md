@@ -1,6 +1,6 @@
 # Finanzas — Backend
 
-API REST en Node.js + Express + Prisma + PostgreSQL. Fase 1: autenticación y onboarding. Fase 2: gastos personales. Fase 3: settings del hogar (miembros, permisos, conceptos recurrentes, split). Fase 4: panel del hogar (gastos recurrentes por período + gastos variables puntuales, con split por contexto y reparto personalizable por gasto).
+API REST en Node.js + Express + Prisma + PostgreSQL. Fase 1: autenticación y onboarding. Fase 2: gastos personales. Fase 3: settings del hogar (miembros, permisos, conceptos recurrentes, split). Fase 4: panel del hogar (gastos recurrentes por período + gastos variables puntuales, con split por contexto y reparto personalizable por gasto). Fase 5: motor de cortes (liquidación por lotes).
 
 ## Setup
 
@@ -45,7 +45,7 @@ Hay dos contextos independientes: `general` (lo usan los gastos recurrentes) y `
 
 ### Gastos recurrentes (`/api/gastos-recurrentes`) — requieren sesión activa
 - `GET /periodo-actual` — calcula el punto de corte vigente (según `frecuenciaCorte` y los puntos de corte del hogar) y devuelve/genera las instancias de los conceptos activos que aplican a ese punto. Los conceptos de monto fijo se generan con su `montoDefault` y reparto ya calculado (según el split `general`); los variables quedan con `monto: null` hasta que alguien lo complete. Es idempotente — no duplica instancias si ya existen para ese período.
-- `PATCH /instancias/:id` — `{ monto?, pagoUsuarioId? }`. Cambiar `monto` recalcula el reparto (proporcional al split `general` vigente, con el último miembro absorbiendo el redondeo); cambiar `pagoUsuarioId` NO toca el reparto — son conceptos independientes (quién puso la plata vs. cuánto le toca a cada quien). No se puede editar una instancia ya `liquidado` (eso lo controla el motor de cortes, fase 5). Requiere admin o `puedeEditarGastos`.
+- `PATCH /instancias/:id` — `{ monto?, pagoUsuarioId? }`. Cambiar `monto` recalcula el reparto (proporcional al split `general` vigente, con el último miembro absorbiendo el redondeo); cambiar `pagoUsuarioId` NO toca el reparto — son conceptos independientes (quién puso la plata vs. cuánto le toca a cada quien). No editable si está `incluido_en_corte` o `liquidado`. Requiere admin o `puedeEditarGastos`.
 
 ### Gastos variables puntuales (`/api/gastos-variables`) — requieren sesión activa
 - `GET /` — lista los gastos del hogar ordenados por fecha límite
@@ -53,10 +53,21 @@ Hay dos contextos independientes: `general` (lo usan los gastos recurrentes) y `
 - `PATCH /:id` — igual que crear, todos los campos opcionales; cambiar `valorTotal` o pasar `repartos` recalcula el reparto de ese gasto, cambiar solo `pagoUsuarioId` no lo toca. No editable si ya está `liquidado`.
 - `DELETE /:id` — solo si sigue `pendiente`.
 
+### Cortes (`/api/cortes`) — requieren sesión activa
+- `GET /` — historial de cortes del hogar (abiertos y cerrados), más reciente primero
+- `GET /actual` — el corte `abierto` del hogar, o `null` si no hay ninguno
+- `GET /:id` — detalle completo de un corte (para consultar el historial)
+- `POST /` — inicia un corte nuevo, o devuelve el que ya está abierto si existe. Calcula automáticamente el próximo punto nominal listo para cerrar (el más reciente que ya pasó y no tiene corte todavía — no importa qué día real se ejecute), junta todos los pendientes con fecha ≤ esa fecha nominal (instancias recurrentes con monto ya definido + gastos variables) y los pre-selecciona (`incluido: true`). Si no hay un punto nuevo o no hay nada pendiente, responde `{ corte: null, motivo: "..." }` en vez de crear un corte vacío. Requiere admin o `puedeEditarGastos`.
+- `PATCH /:id/items/:itemId` — `{ incluido }`. Solo mientras el corte sigue `abierto`. Al desmarcar, el gasto origen vuelve a `pendiente` (así reaparece solo en el siguiente corte). Al marcar, se recalcula el `monto` desde el origen por si cambió. Requiere admin o `puedeEditarGastos`.
+- `POST /:id/confirmar` — cierra el corte: los ítems que sigan `incluido` pasan a `liquidado`, se calcula el balance de cada miembro (lo que pagó menos lo que le tocaba pagar según reparto) y se guarda en `corte_balance_miembro`. Falla con 409 si algún ítem incluido no tiene definido quién pagó. Requiere admin o `puedeEditarGastos`.
+
+El balance se guarda **por miembro** (positivo = le deben, negativo = debe), no como un único `deudor_final`/`neto_final` — con 2 personas se ve igual ("Daniela le debe $X a Mateo"), pero el modelo soporta N miembros. Solo puede haber un corte `abierto` por hogar a la vez.
+
 ## Notas de diseño
 
 - El esquema de Prisma solo incluye las tablas necesarias hasta la fase actual; el resto del modelo de datos se agrega incrementalmente en fases posteriores.
 - Al crear un hogar se generan puntos de corte por defecto según la frecuencia elegida (ej. quincenal → día 15 y fin de mes); editables desde Settings del hogar. `PuntoCorteHogar.referencia` es una etiqueta libre editable; el cálculo de fechas real usa `diaMes`/`diaSemana`, campos estructurales que el usuario no edita directamente, para que renombrar la etiqueta no rompa el cálculo del período actual (`src/utils/periodoActual.js`).
 - El split de porcentaje se modela como una fila por miembro (`SplitPorcentajeMiembro`), no como columnas fijas `usuario1`/`usuario2` — el modelo de datos soporta hogares de N personas, no solo parejas. Los repartos de gastos recurrentes/variables siguen el mismo patrón (`GastoRecurrenteInstanciaReparto`, `GastoVariableParejaReparto`).
 - "Quién pagó" y "cómo se reparte" son conceptos separados: el pagador tiene un default configurable por concepto (`pagadorDefaultUsuarioId`) pero es editable en cada instancia hasta que un corte la liquide; el reparto es siempre proporcional al split vigente del hogar (o manual, en variables puntuales).
+- El motor de cortes calcula el próximo punto a cerrar por el **más reciente** que ya pasó, no el más antiguo sin cerrar (`src/utils/periodoActual.js#calcularProximaFechaNominalPendiente`) — como un corte junta todo lo pendiente con fecha ≤ su fecha nominal sin importar cuán viejo sea, un solo corte atrasado atrapa todo el backlog de una vez, en vez de forzar un corte por cada período que quedó sin cerrar.
 - Todo acceso a datos que dependa del usuario autenticado se filtra a nivel de query por su `id`/`hogarId`, nunca solo en la capa de aplicación.

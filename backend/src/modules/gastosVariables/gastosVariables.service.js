@@ -98,6 +98,12 @@ export async function actualizarGastoVariable(usuarioActual, gastoId, data) {
   if (gasto.estado === 'liquidado') {
     throw new HttpError(409, 'Este gasto ya fue liquidado en un corte y no se puede editar');
   }
+  if (gasto.estado === 'incluido_en_corte') {
+    throw new HttpError(
+      409,
+      'Este gasto está incluido en un corte abierto — desmárcalo del corte para poder editarlo',
+    );
+  }
   if (data.pagoUsuarioId) {
     await validarMiembroDelHogar(hogarId, data.pagoUsuarioId);
   }

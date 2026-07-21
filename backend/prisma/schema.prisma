@@ -39,6 +39,16 @@ enum SplitContexto {
   gastos_variables
 }
 
+enum EstadoCorte {
+  abierto
+  cerrado
+}
+
+enum TipoOrigenCorteItem {
+  recurrente
+  variable
+}
+
 model Usuario {
   id                 String   @id @default(uuid())
   nombre             String
@@ -61,6 +71,8 @@ model Usuario {
   repartosGastoRecurrente GastoRecurrenteInstanciaReparto[] @relation("repartoGastoRecurrente")
   gastosVariablesComoPagador GastoVariablePareja[] @relation("gastoVariablePagador")
   repartosGastoVariable GastoVariableParejaReparto[] @relation("repartoGastoVariable")
+  cortesCreados Corte[] @relation("corteCreadoPor")
+  balancesCorte CorteBalanceMiembro[]
 
   @@index([hogarId])
   @@map("usuarios")
@@ -79,6 +91,7 @@ model Hogar {
   splitPorcentajes SplitPorcentajeMiembro[]
   transferenciasAdmin LogTransferenciaAdmin[]
   gastosVariables  GastoVariablePareja[]
+  cortes           Corte[]
 
   @@map("hogares")
 }
@@ -205,6 +218,7 @@ model GastoRecurrenteInstancia {
   conceptoId    String            @map("concepto_id")
   periodoInicio DateTime          @map("periodo_inicio")
   puntoCorteId  String            @map("punto_corte_id")
+  fechaNominal  DateTime          @map("fecha_nominal")
   monto         Int?
   pagoUsuarioId String?           @map("pago_usuario_id")
   estado        EstadoGastoPareja @default(pendiente)
@@ -265,4 +279,52 @@ model GastoVariableParejaReparto {
   @@unique([gastoId, usuarioId])
   @@index([gastoId])
   @@map("gastos_variables_pareja_reparto")
+}
+
+model Corte {
+  id                 String      @id @default(uuid())
+  hogarId            String      @map("hogar_id")
+  fechaNominal       DateTime    @map("fecha_nominal")
+  fechaEjecucion     DateTime?   @map("fecha_ejecucion")
+  estado             EstadoCorte @default(abierto)
+  creadoPorUsuarioId String      @map("creado_por_usuario_id")
+  creadoEn           DateTime    @default(now()) @map("creado_en")
+
+  hogar     Hogar                 @relation(fields: [hogarId], references: [id])
+  creadoPor Usuario               @relation("corteCreadoPor", fields: [creadoPorUsuarioId], references: [id])
+  items     CorteItem[]
+  balances  CorteBalanceMiembro[]
+
+  @@unique([hogarId, fechaNominal])
+  @@index([hogarId])
+  @@map("cortes")
+}
+
+model CorteItem {
+  id         String              @id @default(uuid())
+  corteId    String              @map("corte_id")
+  tipoOrigen TipoOrigenCorteItem @map("tipo_origen")
+  origenId   String              @map("origen_id")
+  incluido   Boolean             @default(true)
+  monto      Int
+
+  corte Corte @relation(fields: [corteId], references: [id])
+
+  @@unique([corteId, tipoOrigen, origenId])
+  @@index([corteId])
+  @@map("corte_items")
+}
+
+model CorteBalanceMiembro {
+  id        String @id @default(uuid())
+  corteId   String @map("corte_id")
+  usuarioId String @map("usuario_id")
+  balance   Int // positivo = le deben, negativo = debe
+
+  corte   Corte   @relation(fields: [corteId], references: [id])
+  usuario Usuario @relation(fields: [usuarioId], references: [id])
+
+  @@unique([corteId, usuarioId])
+  @@index([corteId])
+  @@map("corte_balance_miembro")
 }

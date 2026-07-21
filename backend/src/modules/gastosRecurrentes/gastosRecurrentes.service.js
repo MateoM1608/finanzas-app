@@ -60,6 +60,7 @@ export async function obtenerPeriodoActual(usuarioActual) {
           conceptoId: concepto.id,
           periodoInicio,
           puntoCorteId: puntoCorte.id,
+          fechaNominal,
           monto: montoInicial,
           pagoUsuarioId: concepto.pagadorDefaultUsuarioId,
         },
@@ -97,6 +98,12 @@ export async function actualizarInstancia(usuarioActual, instanciaId, data) {
   }
   if (instancia.estado === 'liquidado') {
     throw new HttpError(409, 'Este gasto ya fue liquidado en un corte y no se puede editar');
+  }
+  if (instancia.estado === 'incluido_en_corte') {
+    throw new HttpError(
+      409,
+      'Este gasto está incluido en un corte abierto — desmárcalo del corte para poder editarlo',
+    );
   }
 
   if (data.pagoUsuarioId) {

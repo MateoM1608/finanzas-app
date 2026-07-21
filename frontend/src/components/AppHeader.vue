@@ -24,6 +24,9 @@ async function onLogout() {
         <router-link :to="{ name: 'panel-hogar' }" class="btn-ghost !px-3 !py-1.5 text-sm">
           Hogar
         </router-link>
+        <router-link :to="{ name: 'cortes' }" class="btn-ghost !px-3 !py-1.5 text-sm">
+          Cortes
+        </router-link>
         <router-link :to="{ name: 'settings' }" class="btn-ghost !px-3 !py-1.5 text-sm">
           Configuración
         </router-link>

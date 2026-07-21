@@ -38,6 +38,12 @@ const routes = [
     component: () => import('../views/PanelHogarView.vue'),
     meta: { requiresAuth: true, requiresHogar: true },
   },
+  {
+    path: '/cortes',
+    name: 'cortes',
+    component: () => import('../views/CortesView.vue'),
+    meta: { requiresAuth: true, requiresHogar: true },
+  },
 ];
 
 export const router = createRouter({

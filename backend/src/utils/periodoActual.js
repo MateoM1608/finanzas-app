@@ -16,6 +16,37 @@ function fechaNominalSemanal(punto, fechaEnLaSemana) {
   return resultado;
 }
 
+function inicioDeHoyUTC(fechaRef) {
+  return new Date(Date.UTC(fechaRef.getUTCFullYear(), fechaRef.getUTCMonth(), fechaRef.getUTCDate()));
+}
+
+// Genera fechas nominales candidatas para cada punto de corte, en un rango de
+// ciclos (meses o semanas) alrededor de `hoy`, según `offsets`.
+function generarCandidatos(hogar, puntosCorte, hoy, offsets) {
+  const candidatos = [];
+
+  if (hogar.frecuenciaCorte === 'semanal') {
+    for (const offsetSemanas of offsets) {
+      const fechaBase = new Date(hoy);
+      fechaBase.setUTCDate(hoy.getUTCDate() + offsetSemanas * 7);
+      for (const punto of puntosCorte) {
+        candidatos.push({ punto, fecha: fechaNominalSemanal(punto, fechaBase) });
+      }
+    }
+  } else {
+    for (const offsetMeses of offsets) {
+      const anio = hoy.getUTCFullYear();
+      const mes = hoy.getUTCMonth() + offsetMeses;
+      for (const punto of puntosCorte) {
+        candidatos.push({ punto, fecha: fechaNominalMensual(punto, anio, mes) });
+      }
+    }
+  }
+
+  candidatos.sort((a, b) => a.fecha - b.fecha);
+  return candidatos;
+}
+
 /**
  * Calcula el punto de corte "vigente" para hoy: el próximo punto nominal que no ha
  * llegado (o que es justo hoy), y el inicio del período que lo precede. Independiente
@@ -27,31 +58,8 @@ export function calcularPeriodoActual(hogar, puntosCorte, fechaRef = new Date())
     throw new Error('El hogar no tiene puntos de corte configurados');
   }
 
-  const hoy = new Date(
-    Date.UTC(fechaRef.getUTCFullYear(), fechaRef.getUTCMonth(), fechaRef.getUTCDate()),
-  );
-
-  const candidatos = [];
-
-  if (hogar.frecuenciaCorte === 'semanal') {
-    for (const offsetSemanas of [-1, 0, 1]) {
-      const fechaBase = new Date(hoy);
-      fechaBase.setUTCDate(hoy.getUTCDate() + offsetSemanas * 7);
-      for (const punto of puntosCorte) {
-        candidatos.push({ punto, fecha: fechaNominalSemanal(punto, fechaBase) });
-      }
-    }
-  } else {
-    for (const offsetMeses of [-1, 0, 1]) {
-      const anio = hoy.getUTCFullYear();
-      const mes = hoy.getUTCMonth() + offsetMeses;
-      for (const punto of puntosCorte) {
-        candidatos.push({ punto, fecha: fechaNominalMensual(punto, anio, mes) });
-      }
-    }
-  }
-
-  candidatos.sort((a, b) => a.fecha - b.fecha);
+  const hoy = inicioDeHoyUTC(fechaRef);
+  const candidatos = generarCandidatos(hogar, puntosCorte, hoy, [-1, 0, 1]);
 
   const siguienteIdx = candidatos.findIndex((c) => c.fecha >= hoy);
   if (siguienteIdx === -1) {
@@ -76,4 +84,40 @@ export function calcularPeriodoActual(hogar, puntosCorte, fechaRef = new Date())
     fechaNominal: actual.fecha,
     periodoInicio,
   };
+}
+
+/**
+ * Determina el punto nominal listo para cerrar en un corte nuevo: el más
+ * reciente que ya pasó (o es hoy). Un corte junta TODO lo pendiente con fecha
+ * ≤ su fecha nominal sin importar cuán viejo sea, así que cerrar el punto más
+ * reciente ya cubre cualquier atraso acumulado de puntos anteriores — por eso
+ * basta con comparar contra el último corte cerrado (si el punto más
+ * reciente ya quedó cubierto por ese corte, no hay nada nuevo que cerrar).
+ */
+export function calcularProximaFechaNominalPendiente(
+  hogar,
+  puntosCorte,
+  fechasNominalesCerradas,
+  fechaRef = new Date(),
+) {
+  if (!puntosCorte.length) {
+    throw new Error('El hogar no tiene puntos de corte configurados');
+  }
+
+  const hoy = inicioDeHoyUTC(fechaRef);
+  const candidatos = generarCandidatos(hogar, puntosCorte, hoy, [-2, -1, 0]);
+  const pasados = candidatos.filter((c) => c.fecha <= hoy);
+  if (!pasados.length) return null;
+
+  const masReciente = pasados[pasados.length - 1];
+
+  const ultimaCerrada = fechasNominalesCerradas.length
+    ? new Date(Math.max(...fechasNominalesCerradas.map((f) => new Date(f).getTime())))
+    : null;
+
+  if (ultimaCerrada && masReciente.fecha <= ultimaCerrada) {
+    return null;
+  }
+
+  return masReciente;
 }
