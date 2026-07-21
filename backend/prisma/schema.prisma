@@ -1,0 +1,74 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum FrecuenciaCorte {
+  semanal
+  quincenal
+  mensual
+}
+
+model Usuario {
+  id                 String   @id @default(uuid())
+  nombre             String
+  usuario            String   @unique
+  passwordHash       String   @map("password_hash")
+  hogarId            String?  @map("hogar_id")
+  esAdmin            Boolean  @default(false) @map("es_admin")
+  puedeEditarGastos  Boolean  @default(false) @map("puede_editar_gastos")
+  puedeInvitar       Boolean  @default(false) @map("puede_invitar")
+  creadoEn           DateTime @default(now()) @map("creado_en")
+
+  hogar              Hogar?   @relation(fields: [hogarId], references: [id])
+  invitacionesCreadas InvitacionHogar[] @relation("invitacionesCreadas")
+
+  @@index([hogarId])
+  @@map("usuarios")
+}
+
+model Hogar {
+  id               String          @id @default(uuid())
+  nombre           String
+  frecuenciaCorte  FrecuenciaCorte @map("frecuencia_corte")
+  creadoEn         DateTime        @default(now()) @map("creado_en")
+
+  usuarios         Usuario[]
+  puntosCorte      PuntoCorteHogar[]
+  invitaciones     InvitacionHogar[]
+
+  @@map("hogares")
+}
+
+model PuntoCorteHogar {
+  id        String @id @default(uuid())
+  hogarId   String @map("hogar_id")
+  orden     Int
+  referencia String // ej. "dia_15", "fin_de_mes", "lunes"
+
+  hogar     Hogar  @relation(fields: [hogarId], references: [id])
+
+  @@unique([hogarId, orden])
+  @@index([hogarId])
+  @@map("puntos_corte_hogar")
+}
+
+model InvitacionHogar {
+  id                  String    @id @default(uuid())
+  hogarId             String    @map("hogar_id")
+  codigo              String    @unique
+  usado               Boolean   @default(false)
+  creadoPorUsuarioId  String    @map("creado_por_usuario_id")
+  expiraEn            DateTime  @map("expira_en")
+  creadoEn            DateTime  @default(now()) @map("creado_en")
+
+  hogar               Hogar     @relation(fields: [hogarId], references: [id])
+  creadoPor           Usuario   @relation("invitacionesCreadas", fields: [creadoPorUsuarioId], references: [id])
+
+  @@index([hogarId])
+  @@map("invitaciones_hogar")
+}
