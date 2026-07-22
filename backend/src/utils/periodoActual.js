@@ -87,12 +87,18 @@ export function calcularPeriodoActual(hogar, puntosCorte, fechaRef = new Date())
 }
 
 /**
- * Determina el punto nominal listo para cerrar en un corte nuevo: el más
- * reciente que ya pasó (o es hoy). Un corte junta TODO lo pendiente con fecha
- * ≤ su fecha nominal sin importar cuán viejo sea, así que cerrar el punto más
- * reciente ya cubre cualquier atraso acumulado de puntos anteriores — por eso
- * basta con comparar contra el último corte cerrado (si el punto más
- * reciente ya quedó cubierto por ese corte, no hay nada nuevo que cerrar).
+ * Determina el punto de "atraso" listo para cerrar: el punto pasado (o de
+ * hoy) más reciente que no se haya cerrado todavía. Un corte junta TODO lo
+ * pendiente con fecha ≤ su fecha nominal sin importar cuán viejo sea, así que
+ * cerrar el punto más reciente ya cubre cualquier atraso acumulado de puntos
+ * anteriores.
+ *
+ * Devuelve `null` si no hay ningún punto pasado sin cerrar — eso NO significa
+ * que no haya nada que cerrar: puede que el hogar esté al día y lo único
+ * pendiente sea el período actual (todavía en curso). Esa posibilidad la
+ * evalúa quien llama esta función, combinándola con `calcularPeriodoActual` y
+ * los datos reales pendientes (ver `cortes.service.js#iniciarCorte`) — esta
+ * función solo sabe de fechas, no de qué hay realmente pendiente.
  */
 export function calcularProximaFechaNominalPendiente(
   hogar,
@@ -106,18 +112,13 @@ export function calcularProximaFechaNominalPendiente(
 
   const hoy = inicioDeHoyUTC(fechaRef);
   const candidatos = generarCandidatos(hogar, puntosCorte, hoy, [-2, -1, 0]);
+  const cerradas = new Set(fechasNominalesCerradas.map((f) => new Date(f).getTime()));
+
   const pasados = candidatos.filter((c) => c.fecha <= hoy);
   if (!pasados.length) return null;
 
   const masReciente = pasados[pasados.length - 1];
-
-  const ultimaCerrada = fechasNominalesCerradas.length
-    ? new Date(Math.max(...fechasNominalesCerradas.map((f) => new Date(f).getTime())))
-    : null;
-
-  if (ultimaCerrada && masReciente.fecha <= ultimaCerrada) {
-    return null;
-  }
+  if (cerradas.has(masReciente.fecha.getTime())) return null;
 
   return masReciente;
 }

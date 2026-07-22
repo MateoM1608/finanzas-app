@@ -1,6 +1,6 @@
 import { prisma } from '../../config/prisma.js';
 import { HttpError } from '../../middleware/errorHandler.js';
-import { calcularProximaFechaNominalPendiente } from '../../utils/periodoActual.js';
+import { calcularPeriodoActual, calcularProximaFechaNominalPendiente } from '../../utils/periodoActual.js';
 
 const INCLUDE_CORTE = {
   items: true,
@@ -119,6 +119,21 @@ export async function obtenerCorte(usuarioActual, corteId) {
   return enriquecerCorte(corte);
 }
 
+async function buscarPendientes(hogarId, fechaObjetivo) {
+  const instancias = await prisma.gastoRecurrenteInstancia.findMany({
+    where: {
+      concepto: { hogarId },
+      estado: 'pendiente',
+      monto: { not: null },
+      fechaNominal: { lte: fechaObjetivo },
+    },
+  });
+  const variables = await prisma.gastoVariablePareja.findMany({
+    where: { hogarId, estado: 'pendiente', fechaLimite: { lte: fechaObjetivo } },
+  });
+  return { instancias, variables };
+}
+
 export async function iniciarCorte(usuarioActual) {
   const hogarId = requireHogarId(usuarioActual);
   requirePermisoEdicion(usuarioActual);
@@ -134,37 +149,53 @@ export async function iniciarCorte(usuarioActual) {
     where: { hogarId },
     select: { fechaNominal: true },
   });
+  const fechasUsadas = new Set(cortesExistentes.map((c) => c.fechaNominal.getTime()));
 
-  const proximo = calcularProximaFechaNominalPendiente(
+  // Primero probamos con cualquier atraso acumulado (períodos ya terminados y sin cerrar).
+  // Si ahí no hay nada pendiente de verdad, caemos al período ACTUAL — el mismo que
+  // Panel del hogar usa para generar las instancias recurrentes — aunque su fecha
+  // nominal todavía no haya llegado. Sin esto, un concepto recurrente que ya se
+  // registró este período (ej. arriendo, mercado) nunca sería incluible en un corte
+  // hasta que el período completo terminara, mientras que los gastos variables sí
+  // podían tener cualquier fecha pasada y colarse igual.
+  let fechaNominal = null;
+  let pendientes = { instancias: [], variables: [] };
+
+  const candidatoAtraso = calcularProximaFechaNominalPendiente(
     hogar,
     puntosCorte,
     cortesExistentes.map((c) => c.fechaNominal),
   );
-  if (!proximo) {
-    return { corte: null, motivo: 'Todavía no ha llegado el próximo punto de corte del hogar' };
+  if (candidatoAtraso && !fechasUsadas.has(candidatoAtraso.fecha.getTime())) {
+    const encontrados = await buscarPendientes(hogarId, candidatoAtraso.fecha);
+    if (encontrados.instancias.length || encontrados.variables.length) {
+      fechaNominal = candidatoAtraso.fecha;
+      pendientes = encontrados;
+    }
   }
 
-  const instanciasPendientes = await prisma.gastoRecurrenteInstancia.findMany({
-    where: {
-      concepto: { hogarId },
-      estado: 'pendiente',
-      monto: { not: null },
-      fechaNominal: { lte: proximo.fecha },
-    },
-  });
-  const variablesPendientes = await prisma.gastoVariablePareja.findMany({
-    where: { hogarId, estado: 'pendiente', fechaLimite: { lte: proximo.fecha } },
-  });
+  if (!fechaNominal) {
+    const periodoActual = calcularPeriodoActual(hogar, puntosCorte);
+    if (!fechasUsadas.has(periodoActual.fechaNominal.getTime())) {
+      const encontrados = await buscarPendientes(hogarId, periodoActual.fechaNominal);
+      if (encontrados.instancias.length || encontrados.variables.length) {
+        fechaNominal = periodoActual.fechaNominal;
+        pendientes = encontrados;
+      }
+    }
+  }
 
-  if (!instanciasPendientes.length && !variablesPendientes.length) {
+  if (!fechaNominal) {
     return { corte: null, motivo: 'No hay ningún gasto pendiente para incluir en un corte todavía' };
   }
+
+  const { instancias: instanciasPendientes, variables: variablesPendientes } = pendientes;
 
   const corte = await prisma.$transaction(async (tx) => {
     const nuevoCorte = await tx.corte.create({
       data: {
         hogarId,
-        fechaNominal: proximo.fecha,
+        fechaNominal,
         creadoPorUsuarioId: usuarioActual.id,
       },
     });
