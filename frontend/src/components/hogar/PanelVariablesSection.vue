@@ -35,6 +35,19 @@ function ordenar(lista) {
   return [...lista].sort((a, b) => new Date(a.fechaLimite) - new Date(b.fechaLimite));
 }
 
+const ESTADO_INFO = {
+  incluido_en_corte: { label: 'En corte abierto', clase: 'bg-accent-muted text-accent' },
+  liquidado: { label: 'Liquidado', clase: 'bg-surface-raised text-ink-tertiary' },
+};
+
+function estadoInfo(gasto) {
+  return ESTADO_INFO[gasto.estado] ?? null;
+}
+
+function esEditable(gasto) {
+  return gasto.estado === 'pendiente';
+}
+
 function inicializarRepartoManual() {
   for (const m of miembros.value) {
     repartoManual[m.id] = repartoManual[m.id] ?? '';
@@ -219,22 +232,39 @@ onMounted(cargar);
     <p v-else-if="!gastos.length" class="text-sm text-ink-secondary">No hay gastos variables pendientes.</p>
 
     <ul v-else class="divide-y divide-border">
-      <li v-for="gasto in gastos" :key="gasto.id" class="py-4 group">
+      <li
+        v-for="gasto in gastos"
+        :key="gasto.id"
+        class="py-4 group"
+        :class="{ 'opacity-50': !esEditable(gasto) }"
+      >
         <div class="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <p class="text-ink-primary font-medium">{{ gasto.item }}</p>
+            <p class="text-ink-primary font-medium flex items-center gap-2">
+              {{ gasto.item }}
+              <span
+                v-if="estadoInfo(gasto)"
+                class="text-xs font-semibold uppercase px-2 py-0.5 rounded-full"
+                :class="estadoInfo(gasto).clase"
+              >
+                {{ estadoInfo(gasto).label }}
+              </span>
+            </p>
             <p class="text-sm text-ink-tertiary">Vence {{ formatDate(gasto.fechaLimite) }}</p>
           </div>
           <div class="flex items-center gap-3">
             <span class="text-ink-primary font-medium">{{ formatCurrency(gasto.valorTotal) }}</span>
             <select
+              v-if="esEditable(gasto)"
               class="field !w-auto text-sm"
               :value="gasto.pagoUsuarioId"
               @change="onCambiarPagador(gasto, $event.target.value)"
             >
               <option v-for="m in miembros" :key="m.id" :value="m.id">{{ m.nombre }}</option>
             </select>
+            <span v-else class="text-sm text-ink-tertiary">{{ gasto.pagador.nombre }}</span>
             <button
+              v-if="esEditable(gasto)"
               class="text-sm text-ink-tertiary hover:text-negative transition-colors opacity-0 group-hover:opacity-100"
               :disabled="eliminandoId === gasto.id"
               @click="onEliminar(gasto)"
@@ -244,12 +274,13 @@ onMounted(cargar);
           </div>
         </div>
 
-        <div v-if="editandoRepartoId !== gasto.id" class="flex items-center justify-between mt-2">
+        <div v-if="!esEditable(gasto) || editandoRepartoId !== gasto.id" class="flex items-center justify-between mt-2">
           <p class="text-sm text-ink-tertiary">
             Pagó {{ gasto.pagador.nombre }} · Reparto:
             {{ gasto.repartos.map((r) => `${r.usuario.nombre} ${formatCurrency(r.monto)}`).join(' · ') }}
           </p>
           <button
+            v-if="esEditable(gasto)"
             class="text-sm text-accent hover:text-accent-hover shrink-0"
             @click="onIniciarEditarReparto(gasto)"
           >

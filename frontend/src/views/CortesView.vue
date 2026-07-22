@@ -20,6 +20,11 @@ const motivoSinPendientes = ref('');
 const iniciando = ref(false);
 const confirmando = ref(false);
 const guardandoItemId = ref(null);
+const expandidoId = ref(null);
+
+function onToggleExpandido(corteId) {
+  expandidoId.value = expandidoId.value === corteId ? null : corteId;
+}
 
 const previewBalances = computed(() => {
   if (!corteAbierto.value) return [];
@@ -195,17 +200,36 @@ onMounted(cargar);
 
           <ul v-else class="divide-y divide-border">
             <li v-for="corte in historial" :key="corte.id" class="py-4">
-              <div class="flex items-center justify-between gap-4">
+              <button class="w-full flex items-center justify-between gap-4 text-left" @click="onToggleExpandido(corte.id)">
                 <div>
                   <p class="text-ink-primary font-medium">Corte del {{ formatDate(corte.fechaNominal) }}</p>
                   <p class="text-sm text-ink-tertiary">
-                    Ejecutado {{ formatDate(corte.fechaEjecucion) }} · {{ corte.items.filter((i) => i.incluido).length }} ítems
+                    Ejecutado {{ formatDate(corte.fechaEjecucion) }} · {{ corte.items.filter((i) => i.incluido).length }} ítems liquidados
                   </p>
                 </div>
-                <span class="text-sm text-ink-primary font-medium text-right">
+                <span class="text-sm text-ink-primary font-medium text-right shrink-0">
                   {{ formatearBalances(corte.balances) }}
                 </span>
-              </div>
+              </button>
+
+              <ul v-if="expandidoId === corte.id" class="mt-3 divide-y divide-border bg-surface-raised rounded-xl px-4">
+                <li v-for="item in corte.items" :key="item.id" class="py-3 flex items-start justify-between gap-4">
+                  <span>
+                    <span class="block text-sm text-ink-primary" :class="{ 'opacity-50 line-through': !item.incluido }">
+                      {{ item.nombre }}
+                      <span class="text-xs text-ink-tertiary font-normal">({{ item.tipoOrigen === 'recurrente' ? 'fijo/recurrente' : 'variable' }})</span>
+                    </span>
+                    <span class="block text-xs text-ink-tertiary">
+                      Pagó {{ item.pagador?.nombre ?? '(sin definir)' }} · Reparto:
+                      {{ item.repartos.map((r) => `${r.usuario.nombre} ${formatCurrency(r.monto)}`).join(' · ') }}
+                    </span>
+                    <span v-if="!item.incluido" class="text-xs text-ink-tertiary italic">
+                      Pospuesto — no se liquidó en este corte
+                    </span>
+                  </span>
+                  <span class="text-sm text-ink-primary font-medium shrink-0">{{ formatCurrency(item.monto) }}</span>
+                </li>
+              </ul>
             </li>
           </ul>
         </div>
