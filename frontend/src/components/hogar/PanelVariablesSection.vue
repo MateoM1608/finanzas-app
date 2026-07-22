@@ -11,12 +11,14 @@ import { extractErrorMessage } from '../../api/client.js';
 import { formatCurrency, formatDate } from '../../utils/format.js';
 import FormField from '../FormField.vue';
 import AlertError from '../AlertError.vue';
+import AppModal from '../AppModal.vue';
 
 const gastos = ref([]);
 const miembros = ref([]);
 const loading = ref(true);
 const error = ref('');
 const eliminandoId = ref(null);
+const mostrarForm = ref(false);
 
 const item = ref('');
 const valorTotal = ref('');
@@ -102,6 +104,7 @@ async function onCrear() {
     fechaLimite.value = '';
     personalizarReparto.value = false;
     for (const m of miembros.value) repartoManual[m.id] = '';
+    mostrarForm.value = false;
   } catch (e) {
     error.value = extractErrorMessage(e);
   } finally {
@@ -174,59 +177,64 @@ onMounted(cargar);
 
 <template>
   <div class="card p-6 sm:p-8">
-    <h3 class="text-base font-semibold text-ink-primary mb-5">Gastos variables puntuales</h3>
+    <div class="flex flex-wrap items-center justify-between gap-3 mb-5">
+      <h3 class="text-base font-semibold text-ink-primary">Gastos variables puntuales</h3>
+      <button class="btn-primary" @click="mostrarForm = true">Agregar gasto variable</button>
+    </div>
 
     <AlertError :message="error" />
 
-    <form class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6 mt-4" @submit.prevent="onCrear">
-      <FormField v-model="item" label="Item" required placeholder="Creta, regalo…" />
-      <FormField v-model="valorTotal" type="number" label="Valor total (COP)" required />
-      <div>
-        <label class="label">Quién pagó</label>
-        <select v-model="pagoUsuarioId" class="field" required>
-          <option value="" disabled>Selecciona</option>
-          <option v-for="m in miembros" :key="m.id" :value="m.id">{{ m.nombre }}</option>
-        </select>
-      </div>
-      <FormField v-model="fechaLimite" type="date" label="Fecha límite" required />
-
-      <div class="sm:col-span-2">
-        <label class="inline-flex items-center gap-2 text-sm text-ink-secondary">
-          <input v-model="personalizarReparto" type="checkbox" />
-          Personalizar el reparto de este gasto
-        </label>
-      </div>
-
-      <template v-if="personalizarReparto">
-        <div v-for="m in miembros" :key="m.id">
-          <FormField
-            v-model="repartoManual[m.id]"
-            type="number"
-            :label="`Le toca a ${m.nombre} (COP)`"
-          />
+    <AppModal v-if="mostrarForm" title="Agregar gasto variable" @close="mostrarForm = false">
+      <form class="grid grid-cols-1 sm:grid-cols-2 gap-4" @submit.prevent="onCrear">
+        <FormField v-model="item" label="Item" required placeholder="Creta, regalo…" />
+        <FormField v-model="valorTotal" type="number" label="Valor total (COP)" required />
+        <div>
+          <label class="label">Quién pagó</label>
+          <select v-model="pagoUsuarioId" class="field" required>
+            <option value="" disabled>Selecciona</option>
+            <option v-for="m in miembros" :key="m.id" :value="m.id">{{ m.nombre }}</option>
+          </select>
         </div>
-        <p
-          class="sm:col-span-2 text-sm"
-          :class="repartoManualValido ? 'text-positive' : 'text-negative'"
-        >
-          Suma del reparto: {{ formatCurrency(sumaRepartoManual) }}
-          <span v-if="valorTotal"> de {{ formatCurrency(Number(valorTotal)) }}</span>
-        </p>
-      </template>
+        <FormField v-model="fechaLimite" type="date" label="Fecha límite" required />
 
-      <div class="sm:col-span-2">
-        <button
-          type="submit"
-          class="btn-primary"
-          :disabled="creando || (personalizarReparto && !repartoManualValido)"
-        >
-          {{ creando ? 'Agregando…' : 'Agregar gasto' }}
-        </button>
-        <p v-if="!personalizarReparto" class="text-xs text-ink-tertiary mt-2">
-          El reparto se calcula automáticamente según el split configurado en Settings.
-        </p>
-      </div>
-    </form>
+        <div class="sm:col-span-2">
+          <label class="inline-flex items-center gap-2 text-sm text-ink-secondary">
+            <input v-model="personalizarReparto" type="checkbox" />
+            Personalizar el reparto de este gasto
+          </label>
+        </div>
+
+        <template v-if="personalizarReparto">
+          <div v-for="m in miembros" :key="m.id">
+            <FormField
+              v-model="repartoManual[m.id]"
+              type="number"
+              :label="`Le toca a ${m.nombre} (COP)`"
+            />
+          </div>
+          <p
+            class="sm:col-span-2 text-sm"
+            :class="repartoManualValido ? 'text-positive' : 'text-negative'"
+          >
+            Suma del reparto: {{ formatCurrency(sumaRepartoManual) }}
+            <span v-if="valorTotal"> de {{ formatCurrency(Number(valorTotal)) }}</span>
+          </p>
+        </template>
+
+        <div class="sm:col-span-2">
+          <button
+            type="submit"
+            class="btn-primary"
+            :disabled="creando || (personalizarReparto && !repartoManualValido)"
+          >
+            {{ creando ? 'Agregando…' : 'Agregar gasto' }}
+          </button>
+          <p v-if="!personalizarReparto" class="text-xs text-ink-tertiary mt-2">
+            El reparto se calcula automáticamente según el split configurado en Settings.
+          </p>
+        </div>
+      </form>
+    </AppModal>
 
     <p v-if="loading" class="text-sm text-ink-secondary">Cargando…</p>
     <p v-else-if="!gastos.length" class="text-sm text-ink-secondary">No hay gastos variables pendientes.</p>

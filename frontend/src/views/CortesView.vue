@@ -1,12 +1,14 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, reactive, computed, onMounted } from 'vue';
 import {
   listarCortes,
   obtenerCorteAbierto,
   iniciarCorte,
   togglearItem,
+  actualizarItemCorte,
   confirmarCorte,
 } from '../api/cortes.js';
+import { listarMiembros } from '../api/hogares.js';
 import { extractErrorMessage } from '../api/client.js';
 import { formatCurrency, formatDate, formatearBalances } from '../utils/format.js';
 import AppHeader from '../components/AppHeader.vue';
@@ -14,6 +16,7 @@ import AlertError from '../components/AlertError.vue';
 
 const corteAbierto = ref(null);
 const historial = ref([]);
+const miembros = ref([]);
 const loading = ref(true);
 const error = ref('');
 const motivoSinPendientes = ref('');
@@ -21,9 +24,70 @@ const iniciando = ref(false);
 const confirmando = ref(false);
 const guardandoItemId = ref(null);
 const expandidoId = ref(null);
+const montosLocales = reactive({});
+
+const TIPO_ORIGEN_LABEL = { recurrente: 'Recurrente', variable: 'Variable' };
 
 function onToggleExpandido(corteId) {
   expandidoId.value = expandidoId.value === corteId ? null : corteId;
+}
+
+function resumenCorte(corte) {
+  const liquidados = corte.items.filter((i) => i.incluido);
+  const totalRecurrentes = liquidados
+    .filter((i) => i.tipoOrigen === 'recurrente')
+    .reduce((acc, i) => acc + i.monto, 0);
+  const totalVariables = liquidados
+    .filter((i) => i.tipoOrigen === 'variable')
+    .reduce((acc, i) => acc + i.monto, 0);
+
+  const pagosPorMiembro = new Map();
+  for (const i of liquidados) {
+    if (!i.pagador) continue;
+    const actual = pagosPorMiembro.get(i.pagador.id) ?? { nombre: i.pagador.nombre, total: 0 };
+    actual.total += i.monto;
+    pagosPorMiembro.set(i.pagador.id, actual);
+  }
+
+  return {
+    totalRecurrentes,
+    totalVariables,
+    total: totalRecurrentes + totalVariables,
+    pagos: [...pagosPorMiembro.values()],
+  };
+}
+
+function esMontoEditable(item) {
+  return item.tipoOrigen === 'recurrente' && item.tipoMonto === 'variable';
+}
+
+async function onGuardarMonto(item) {
+  const nuevoMonto = Number(montosLocales[item.id]);
+  if (!nuevoMonto || nuevoMonto === item.monto) return;
+  error.value = '';
+  guardandoItemId.value = item.id;
+  try {
+    corteAbierto.value = await actualizarItemCorte(corteAbierto.value.id, item.id, { monto: nuevoMonto });
+  } catch (e) {
+    error.value = extractErrorMessage(e);
+  } finally {
+    guardandoItemId.value = null;
+  }
+}
+
+async function onCambiarPagador(item, usuarioId) {
+  if (!usuarioId) return;
+  error.value = '';
+  guardandoItemId.value = item.id;
+  try {
+    corteAbierto.value = await actualizarItemCorte(corteAbierto.value.id, item.id, {
+      pagoUsuarioId: usuarioId,
+    });
+  } catch (e) {
+    error.value = extractErrorMessage(e);
+  } finally {
+    guardandoItemId.value = null;
+  }
 }
 
 const previewBalances = computed(() => {
@@ -47,13 +111,26 @@ const faltaPagador = computed(
   () => corteAbierto.value?.items.some((i) => i.incluido && !i.pagador) ?? false,
 );
 
+function sincronizarMontosLocales(corte) {
+  if (!corte) return;
+  for (const item of corte.items) {
+    montosLocales[item.id] = item.monto ?? '';
+  }
+}
+
 async function cargar() {
   loading.value = true;
   error.value = '';
   try {
-    const [abierto, cortes] = await Promise.all([obtenerCorteAbierto(), listarCortes()]);
+    const [abierto, cortes, listaMiembros] = await Promise.all([
+      obtenerCorteAbierto(),
+      listarCortes(),
+      listarMiembros(),
+    ]);
     corteAbierto.value = abierto;
     historial.value = cortes.filter((c) => c.estado === 'cerrado');
+    miembros.value = listaMiembros;
+    sincronizarMontosLocales(abierto);
   } catch (e) {
     error.value = extractErrorMessage(e);
   } finally {
@@ -69,6 +146,7 @@ async function onIniciarCorte() {
     const { corte, motivo } = await iniciarCorte();
     if (corte) {
       corteAbierto.value = corte;
+      sincronizarMontosLocales(corte);
     } else {
       motivoSinPendientes.value = motivo;
     }
@@ -84,6 +162,7 @@ async function onToggleItem(item) {
   guardandoItemId.value = item.id;
   try {
     corteAbierto.value = await togglearItem(corteAbierto.value.id, item.id, !item.incluido);
+    sincronizarMontosLocales(corteAbierto.value);
   } catch (e) {
     error.value = extractErrorMessage(e);
   } finally {
@@ -161,21 +240,44 @@ onMounted(cargar);
                     @change="onToggleItem(item)"
                   />
                   <span>
-                    <span class="block text-ink-primary font-medium">{{ item.nombre }}</span>
-                    <span class="block text-sm text-ink-tertiary">
-                      Pagó {{ item.pagador?.nombre ?? '(sin definir)' }} · Reparto:
-                      {{ item.repartos.map((r) => `${r.usuario.nombre} ${formatCurrency(r.monto)}`).join(' · ') }}
+                    <span class="text-ink-primary font-medium">{{ item.nombre }}</span>
+                    <span class="text-xs text-ink-tertiary font-normal ml-1">({{ TIPO_ORIGEN_LABEL[item.tipoOrigen] }})</span>
+                    <span class="block text-sm text-ink-tertiary mt-0.5">
+                      Reparto:
+                      {{ item.repartos.map((r) => `${r.usuario.nombre} ${formatCurrency(r.monto)}`).join(' · ') || '(sin definir)' }}
                     </span>
                   </span>
                 </label>
-                <span class="text-ink-primary font-medium shrink-0">{{ formatCurrency(item.monto) }}</span>
+
+                <div class="flex flex-col items-end gap-2 shrink-0">
+                  <input
+                    v-if="esMontoEditable(item)"
+                    v-model="montosLocales[item.id]"
+                    type="number"
+                    class="field w-32 text-right"
+                    placeholder="Monto"
+                    :disabled="guardandoItemId === item.id"
+                    @change="onGuardarMonto(item)"
+                  />
+                  <span v-else class="text-ink-primary font-medium">{{ formatCurrency(item.monto) }}</span>
+
+                  <select
+                    class="field !w-auto text-sm"
+                    :value="item.pagador?.id ?? ''"
+                    :disabled="guardandoItemId === item.id"
+                    @change="onCambiarPagador(item, $event.target.value)"
+                  >
+                    <option value="" disabled>¿Quién pagó?</option>
+                    <option v-for="m in miembros" :key="m.id" :value="m.id">{{ m.nombre }}</option>
+                  </select>
+                </div>
               </div>
             </li>
           </ul>
 
           <div class="mt-5 pt-4 border-t border-border space-y-3">
             <p v-if="faltaPagador" class="text-sm text-negative">
-              Falta definir quién pagó en algún ítem incluido — complétalo en Panel del hogar o desmárcalo.
+              Falta definir quién pagó en algún ítem incluido — complétalo arriba o desmárcalo.
             </p>
             <p class="text-sm text-ink-secondary">
               Balance si confirmas ahora:
@@ -200,16 +302,38 @@ onMounted(cargar);
 
           <ul v-else class="divide-y divide-border">
             <li v-for="corte in historial" :key="corte.id" class="py-4">
-              <button class="w-full flex items-center justify-between gap-4 text-left" @click="onToggleExpandido(corte.id)">
+              <div>
+                <p class="text-ink-primary font-medium">Corte del {{ formatDate(corte.fechaNominal) }}</p>
+                <p class="text-sm text-ink-tertiary">
+                  Ejecutado {{ formatDate(corte.fechaEjecucion) }} · {{ corte.items.filter((i) => i.incluido).length }} ítems liquidados
+                </p>
+              </div>
+
+              <div class="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
                 <div>
-                  <p class="text-ink-primary font-medium">Corte del {{ formatDate(corte.fechaNominal) }}</p>
-                  <p class="text-sm text-ink-tertiary">
-                    Ejecutado {{ formatDate(corte.fechaEjecucion) }} · {{ corte.items.filter((i) => i.incluido).length }} ítems liquidados
-                  </p>
+                  <p class="text-ink-tertiary text-xs">Recurrentes</p>
+                  <p class="text-ink-primary font-medium">{{ formatCurrency(resumenCorte(corte).totalRecurrentes) }}</p>
                 </div>
-                <span class="text-sm text-ink-primary font-medium text-right shrink-0">
-                  {{ formatearBalances(corte.balances) }}
-                </span>
+                <div>
+                  <p class="text-ink-tertiary text-xs">Variables</p>
+                  <p class="text-ink-primary font-medium">{{ formatCurrency(resumenCorte(corte).totalVariables) }}</p>
+                </div>
+                <div v-for="pago in resumenCorte(corte).pagos" :key="pago.nombre">
+                  <p class="text-ink-tertiary text-xs">Pagó {{ pago.nombre }}</p>
+                  <p class="text-ink-primary font-medium">{{ formatCurrency(pago.total) }}</p>
+                </div>
+              </div>
+
+              <p class="mt-3 text-sm text-ink-secondary">
+                Ajuste final:
+                <span class="text-ink-primary font-medium">{{ formatearBalances(corte.balances) }}</span>
+              </p>
+
+              <button
+                class="text-sm text-accent hover:text-accent-hover mt-2"
+                @click="onToggleExpandido(corte.id)"
+              >
+                {{ expandidoId === corte.id ? 'Ocultar detalle' : 'Ver detalle por ítem' }}
               </button>
 
               <ul v-if="expandidoId === corte.id" class="mt-3 divide-y divide-border bg-surface-raised rounded-xl px-4">
@@ -217,7 +341,7 @@ onMounted(cargar);
                   <span>
                     <span class="block text-sm text-ink-primary" :class="{ 'opacity-50 line-through': !item.incluido }">
                       {{ item.nombre }}
-                      <span class="text-xs text-ink-tertiary font-normal">({{ item.tipoOrigen === 'recurrente' ? 'fijo/recurrente' : 'variable' }})</span>
+                      <span class="text-xs text-ink-tertiary font-normal">({{ TIPO_ORIGEN_LABEL[item.tipoOrigen] }})</span>
                     </span>
                     <span class="block text-xs text-ink-tertiary">
                       Pagó {{ item.pagador?.nombre ?? '(sin definir)' }} · Reparto:

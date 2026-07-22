@@ -22,6 +22,12 @@ export function togglearItem(corteId, itemId, incluido) {
     .then((r) => r.data.corte);
 }
 
+export function actualizarItemCorte(corteId, itemId, payload) {
+  return api
+    .patch(`/api/cortes/${corteId}/items/${itemId}`, payload)
+    .then((r) => r.data.corte);
+}
+
 export function confirmarCorte(corteId) {
   return api.post(`/api/cortes/${corteId}/confirmar`).then((r) => r.data.corte);
 }

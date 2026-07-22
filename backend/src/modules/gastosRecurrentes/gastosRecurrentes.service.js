@@ -21,12 +21,74 @@ function requirePermisoEdicion(usuarioActual) {
   }
 }
 
+/**
+ * Genera (si no existen ya) las instancias de gastos recurrentes de un
+ * hogar para un punto/período específico, una por cada concepto activo
+ * aplicable a ese punto de corte. Idempotente: si la instancia ya existe
+ * para ese conceptoId+periodoInicio+puntoCorteId, no hace nada.
+ *
+ * Se usa tanto al consultar el período actual (Settings) como al iniciar un
+ * corte — antes dependía únicamente de que alguien visitara Panel del hogar
+ * para ese período, y un concepto (ej. Arriendo) que nadie visitó a tiempo
+ * nunca generaba su instancia, así que el motor de cortes jamás lo encontraba
+ * pendiente. Ahora `iniciarCorte` la llama directamente para cada punto
+ * pendiente, para no depender de esa visita.
+ */
+export async function asegurarInstanciasRecurrentes(hogarId, puntoCorte, periodoInicio, fechaNominal) {
+  const conceptos = await prisma.conceptoRecurrentePareja.findMany({
+    where: { hogarId, activo: true },
+    include: { puntosCorte: true },
+  });
+
+  const conceptosAplicables = conceptos.filter(
+    (c) =>
+      c.puntosCorte.length === 0 || c.puntosCorte.some((cp) => cp.puntoCorteId === puntoCorte.id),
+  );
+  if (!conceptosAplicables.length) return;
+
+  const split = await obtenerSplitVigente(hogarId);
+
+  for (const concepto of conceptosAplicables) {
+    const existente = await prisma.gastoRecurrenteInstancia.findUnique({
+      where: {
+        conceptoId_periodoInicio_puntoCorteId: {
+          conceptoId: concepto.id,
+          periodoInicio,
+          puntoCorteId: puntoCorte.id,
+        },
+      },
+    });
+    if (existente) continue;
+
+    const montoInicial = concepto.tipoMonto === 'fijo' ? concepto.montoDefault : null;
+    const nueva = await prisma.gastoRecurrenteInstancia.create({
+      data: {
+        conceptoId: concepto.id,
+        periodoInicio,
+        puntoCorteId: puntoCorte.id,
+        fechaNominal,
+        monto: montoInicial,
+        pagoUsuarioId: concepto.pagadorDefaultUsuarioId,
+      },
+    });
+
+    if (montoInicial != null && split.length) {
+      const repartos = calcularReparto(montoInicial, split);
+      await prisma.gastoRecurrenteInstanciaReparto.createMany({
+        data: repartos.map((r) => ({ instanciaId: nueva.id, ...r })),
+      });
+    }
+  }
+}
+
 export async function obtenerPeriodoActual(usuarioActual) {
   const hogarId = requireHogarId(usuarioActual);
 
   const hogar = await prisma.hogar.findUnique({ where: { id: hogarId } });
   const puntosCorte = await prisma.puntoCorteHogar.findMany({ where: { hogarId } });
   const { puntoCorte, periodoInicio, fechaNominal } = calcularPeriodoActual(hogar, puntosCorte);
+
+  await asegurarInstanciasRecurrentes(hogarId, puntoCorte, periodoInicio, fechaNominal);
 
   const conceptos = await prisma.conceptoRecurrentePareja.findMany({
     where: { hogarId, activo: true },
@@ -38,11 +100,9 @@ export async function obtenerPeriodoActual(usuarioActual) {
       c.puntosCorte.length === 0 || c.puntosCorte.some((cp) => cp.puntoCorteId === puntoCorte.id),
   );
 
-  const split = await obtenerSplitVigente(hogarId);
-
   const instancias = [];
   for (const concepto of conceptosAplicables) {
-    let instancia = await prisma.gastoRecurrenteInstancia.findUnique({
+    const instancia = await prisma.gastoRecurrenteInstancia.findUnique({
       where: {
         conceptoId_periodoInicio_puntoCorteId: {
           conceptoId: concepto.id,
@@ -52,32 +112,6 @@ export async function obtenerPeriodoActual(usuarioActual) {
       },
       include: INCLUDE_INSTANCIA,
     });
-
-    if (!instancia) {
-      const montoInicial = concepto.tipoMonto === 'fijo' ? concepto.montoDefault : null;
-      const nueva = await prisma.gastoRecurrenteInstancia.create({
-        data: {
-          conceptoId: concepto.id,
-          periodoInicio,
-          puntoCorteId: puntoCorte.id,
-          fechaNominal,
-          monto: montoInicial,
-          pagoUsuarioId: concepto.pagadorDefaultUsuarioId,
-        },
-      });
-
-      if (montoInicial != null && split.length) {
-        const repartos = calcularReparto(montoInicial, split);
-        await prisma.gastoRecurrenteInstanciaReparto.createMany({
-          data: repartos.map((r) => ({ instanciaId: nueva.id, ...r })),
-        });
-      }
-
-      instancia = await prisma.gastoRecurrenteInstancia.findUnique({
-        where: { id: nueva.id },
-        include: INCLUDE_INSTANCIA,
-      });
-    }
 
     instancias.push({ concepto, instancia });
   }

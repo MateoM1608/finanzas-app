@@ -1,6 +1,12 @@
 import { prisma } from '../../config/prisma.js';
 import { HttpError } from '../../middleware/errorHandler.js';
-import { calcularPeriodoActual, calcularProximaFechaNominalPendiente } from '../../utils/periodoActual.js';
+import {
+  calcularPeriodoActual,
+  calcularPeriodosPendientes,
+  calcularProximaFechaNominalPendiente,
+} from '../../utils/periodoActual.js';
+import { asegurarInstanciasRecurrentes } from '../gastosRecurrentes/gastosRecurrentes.service.js';
+import { obtenerSplitVigente, calcularReparto } from '../../utils/reparto.js';
 
 const INCLUDE_CORTE = {
   items: true,
@@ -58,10 +64,15 @@ async function obtenerOrigenDetallado(tipoOrigen, origenId) {
   if (tipoOrigen === 'recurrente') {
     const instancia = await prisma.gastoRecurrenteInstancia.findUnique({
       where: { id: origenId },
-      include: { ...includeComun, concepto: { select: { nombre: true } } },
+      include: { ...includeComun, concepto: { select: { nombre: true, tipoMonto: true } } },
     });
     if (!instancia) return null;
-    return { nombre: instancia.concepto.nombre, pagador: instancia.pagador, repartos: instancia.repartos };
+    return {
+      nombre: instancia.concepto.nombre,
+      tipoMonto: instancia.concepto.tipoMonto,
+      pagador: instancia.pagador,
+      repartos: instancia.repartos,
+    };
   }
 
   const gasto = await prisma.gastoVariablePareja.findUnique({
@@ -69,7 +80,7 @@ async function obtenerOrigenDetallado(tipoOrigen, origenId) {
     include: includeComun,
   });
   if (!gasto) return null;
-  return { nombre: gasto.item, pagador: gasto.pagador, repartos: gasto.repartos };
+  return { nombre: gasto.item, tipoMonto: null, pagador: gasto.pagador, repartos: gasto.repartos };
 }
 
 async function enriquecerCorte(corte) {
@@ -150,10 +161,22 @@ export async function iniciarCorte(usuarioActual) {
     select: { fechaNominal: true },
   });
   const fechasUsadas = new Set(cortesExistentes.map((c) => c.fechaNominal.getTime()));
+  const fechasCerradas = cortesExistentes.map((c) => c.fechaNominal);
+
+  // Antes de buscar pendientes hay que ASEGURAR que existan las instancias de
+  // cada concepto recurrente para todo punto todavía no cerrado (atraso) y
+  // para el período actual — si no, un concepto (ej. Arriendo) que nadie
+  // visitó a tiempo en Panel del hogar nunca tendría instancia y jamás
+  // aparecería como pendiente, aunque su fecha ya haya pasado.
+  const periodoActual = calcularPeriodoActual(hogar, puntosCorte);
+  const periodosPendientes = calcularPeriodosPendientes(hogar, puntosCorte, fechasCerradas);
+  const periodosAAsegurar = [...periodosPendientes, periodoActual];
+  for (const p of periodosAAsegurar) {
+    await asegurarInstanciasRecurrentes(hogarId, p.puntoCorte, p.periodoInicio, p.fechaNominal);
+  }
 
   // Primero probamos con cualquier atraso acumulado (períodos ya terminados y sin cerrar).
-  // Si ahí no hay nada pendiente de verdad, caemos al período ACTUAL — el mismo que
-  // Panel del hogar usa para generar las instancias recurrentes — aunque su fecha
+  // Si ahí no hay nada pendiente de verdad, caemos al período ACTUAL — aunque su fecha
   // nominal todavía no haya llegado. Sin esto, un concepto recurrente que ya se
   // registró este período (ej. arriendo, mercado) nunca sería incluible en un corte
   // hasta que el período completo terminara, mientras que los gastos variables sí
@@ -161,21 +184,16 @@ export async function iniciarCorte(usuarioActual) {
   let fechaNominal = null;
   let pendientes = { instancias: [], variables: [] };
 
-  const candidatoAtraso = calcularProximaFechaNominalPendiente(
-    hogar,
-    puntosCorte,
-    cortesExistentes.map((c) => c.fechaNominal),
-  );
-  if (candidatoAtraso && !fechasUsadas.has(candidatoAtraso.fecha.getTime())) {
-    const encontrados = await buscarPendientes(hogarId, candidatoAtraso.fecha);
+  const candidatoAtraso = calcularProximaFechaNominalPendiente(hogar, puntosCorte, fechasCerradas);
+  if (candidatoAtraso && !fechasUsadas.has(candidatoAtraso.fechaNominal.getTime())) {
+    const encontrados = await buscarPendientes(hogarId, candidatoAtraso.fechaNominal);
     if (encontrados.instancias.length || encontrados.variables.length) {
-      fechaNominal = candidatoAtraso.fecha;
+      fechaNominal = candidatoAtraso.fechaNominal;
       pendientes = encontrados;
     }
   }
 
   if (!fechaNominal) {
-    const periodoActual = calcularPeriodoActual(hogar, puntosCorte);
     if (!fechasUsadas.has(periodoActual.fechaNominal.getTime())) {
       const encontrados = await buscarPendientes(hogarId, periodoActual.fechaNominal);
       if (encontrados.instancias.length || encontrados.variables.length) {
@@ -258,6 +276,68 @@ export async function togglearItem(usuarioActual, corteId, itemId, incluido) {
     } else {
       await tx.corteItem.update({ where: { id: itemId }, data: { incluido: false } });
       await actualizarEstadoOrigen(tx, item.tipoOrigen, item.origenId, 'pendiente');
+    }
+  });
+
+  return obtenerCorte(usuarioActual, corteId);
+}
+
+/**
+ * Define el monto y/o el pagador de un ítem dentro de un corte abierto.
+ * Existe porque los conceptos recurrentes de monto variable (ej. servicios
+ * públicos) llegan al corte sin monto — el motor los genera con `monto: null`
+ * — y ahora se definen aquí mismo en Cortes, no en Panel del hogar. Solo
+ * aplica a ítems `recurrente`: los `variable` (gastos puntuales) ya traen su
+ * valorTotal definido desde que se crearon.
+ */
+export async function actualizarItemCorte(usuarioActual, corteId, itemId, data) {
+  const hogarId = requireHogarId(usuarioActual);
+  requirePermisoEdicion(usuarioActual);
+  await requireCorteAbierto(hogarId, corteId);
+
+  const item = await prisma.corteItem.findUnique({ where: { id: itemId } });
+  if (!item || item.corteId !== corteId) {
+    throw new HttpError(404, 'Ítem no encontrado en este corte');
+  }
+  if (data.monto !== undefined && item.tipoOrigen !== 'recurrente') {
+    throw new HttpError(409, 'El monto de un gasto variable puntual no se edita desde el corte');
+  }
+  if (data.pagoUsuarioId) {
+    const pertenece = await prisma.usuario.count({ where: { id: data.pagoUsuarioId, hogarId } });
+    if (!pertenece) {
+      throw new HttpError(400, 'El pagador debe ser un miembro de tu hogar');
+    }
+  }
+
+  await prisma.$transaction(async (tx) => {
+    if (item.tipoOrigen === 'recurrente') {
+      await tx.gastoRecurrenteInstancia.update({
+        where: { id: item.origenId },
+        data: {
+          monto: data.monto ?? undefined,
+          pagoUsuarioId: data.pagoUsuarioId === undefined ? undefined : data.pagoUsuarioId,
+        },
+      });
+
+      if (data.monto !== undefined) {
+        await tx.gastoRecurrenteInstanciaReparto.deleteMany({ where: { instanciaId: item.origenId } });
+        const split = await obtenerSplitVigente(hogarId, 'general', tx);
+        if (data.monto != null && split.length) {
+          const repartos = calcularReparto(data.monto, split);
+          await tx.gastoRecurrenteInstanciaReparto.createMany({
+            data: repartos.map((r) => ({ instanciaId: item.origenId, ...r })),
+          });
+        }
+      }
+    } else if (data.pagoUsuarioId !== undefined) {
+      await tx.gastoVariablePareja.update({
+        where: { id: item.origenId },
+        data: { pagoUsuarioId: data.pagoUsuarioId },
+      });
+    }
+
+    if (data.monto !== undefined && item.incluido) {
+      await tx.corteItem.update({ where: { id: itemId }, data: { monto: data.monto } });
     }
   });
 

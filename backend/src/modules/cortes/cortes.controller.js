@@ -1,11 +1,12 @@
 import { asyncHandler } from '../../middleware/asyncHandler.js';
-import { togglearItemSchema } from './cortes.schema.js';
+import { patchItemSchema } from './cortes.schema.js';
 import {
   listarCortes,
   obtenerCorteAbierto,
   obtenerCorte,
   iniciarCorte,
   togglearItem,
+  actualizarItemCorte,
   confirmarCorte,
 } from './cortes.service.js';
 
@@ -30,8 +31,11 @@ export const postCorte = asyncHandler(async (req, res) => {
 });
 
 export const patchCorteItem = asyncHandler(async (req, res) => {
-  const { incluido } = togglearItemSchema.parse(req.body);
-  const corte = await togglearItem(req.usuario, req.params.id, req.params.itemId, incluido);
+  const data = patchItemSchema.parse(req.body);
+  const corte =
+    data.incluido !== undefined
+      ? await togglearItem(req.usuario, req.params.id, req.params.itemId, data.incluido)
+      : await actualizarItemCorte(req.usuario, req.params.id, req.params.itemId, data);
   res.json({ corte });
 });
 

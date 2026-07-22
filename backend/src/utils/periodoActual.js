@@ -47,6 +47,30 @@ function generarCandidatos(hogar, puntosCorte, hoy, offsets) {
   return candidatos;
 }
 
+// Empareja cada candidato con el inicio del período que lo precede (el día
+// siguiente al candidato anterior en la lista ordenada; para el primero de la
+// lista, cae al inicio del ciclo). Se usa tanto para el período actual como
+// para cualquier punto de atraso pendiente, porque un concepto recurrente
+// necesita saber su periodoInicio exacto para generar/buscar su instancia,
+// sin importar si ese punto ya pasó o es el vigente.
+function construirPeriodos(hogar, puntosCorte, hoy, offsets) {
+  const candidatos = generarCandidatos(hogar, puntosCorte, hoy, offsets);
+  return candidatos.map((c, idx) => {
+    const anterior = candidatos[idx - 1];
+    const periodoInicio = anterior
+      ? new Date(
+          Date.UTC(
+            anterior.fecha.getUTCFullYear(),
+            anterior.fecha.getUTCMonth(),
+            anterior.fecha.getUTCDate() + 1,
+          ),
+        )
+      : new Date(Date.UTC(c.fecha.getUTCFullYear(), c.fecha.getUTCMonth(), 1));
+
+    return { puntoCorte: c.punto, fechaNominal: c.fecha, periodoInicio };
+  });
+}
+
 /**
  * Calcula el punto de corte "vigente" para hoy: el próximo punto nominal que no ha
  * llegado (o que es justo hoy), y el inicio del período que lo precede. Independiente
@@ -59,31 +83,35 @@ export function calcularPeriodoActual(hogar, puntosCorte, fechaRef = new Date())
   }
 
   const hoy = inicioDeHoyUTC(fechaRef);
-  const candidatos = generarCandidatos(hogar, puntosCorte, hoy, [-1, 0, 1]);
+  const periodos = construirPeriodos(hogar, puntosCorte, hoy, [-1, 0, 1]);
 
-  const siguienteIdx = candidatos.findIndex((c) => c.fecha >= hoy);
-  if (siguienteIdx === -1) {
+  const actual = periodos.find((p) => p.fechaNominal >= hoy);
+  if (!actual) {
     throw new Error('No se pudo calcular el período actual');
   }
 
-  const actual = candidatos[siguienteIdx];
-  const anterior = candidatos[siguienteIdx - 1];
+  return actual;
+}
 
-  const periodoInicio = anterior
-    ? new Date(
-        Date.UTC(
-          anterior.fecha.getUTCFullYear(),
-          anterior.fecha.getUTCMonth(),
-          anterior.fecha.getUTCDate() + 1,
-        ),
-      )
-    : new Date(Date.UTC(actual.fecha.getUTCFullYear(), actual.fecha.getUTCMonth(), 1));
+/**
+ * Enumera todos los puntos pasados (o de hoy) que todavía no se han cerrado,
+ * cada uno con su periodoInicio ya resuelto. A diferencia de
+ * `calcularProximaFechaNominalPendiente` (que solo devuelve el más reciente,
+ * el que de verdad se usaría para abrir un corte), esta función se usa para
+ * asegurar que existan las instancias recurrentes de CADA punto pendiente
+ * dentro de la ventana — así un concepto no se pierde si nadie generó su
+ * instancia a tiempo (ver `cortes.service.js#iniciarCorte`).
+ */
+export function calcularPeriodosPendientes(hogar, puntosCorte, fechasNominalesCerradas, fechaRef = new Date()) {
+  if (!puntosCorte.length) {
+    throw new Error('El hogar no tiene puntos de corte configurados');
+  }
 
-  return {
-    puntoCorte: actual.punto,
-    fechaNominal: actual.fecha,
-    periodoInicio,
-  };
+  const hoy = inicioDeHoyUTC(fechaRef);
+  const periodos = construirPeriodos(hogar, puntosCorte, hoy, [-2, -1, 0]);
+  const cerradas = new Set(fechasNominalesCerradas.map((f) => new Date(f).getTime()));
+
+  return periodos.filter((p) => p.fechaNominal <= hoy && !cerradas.has(p.fechaNominal.getTime()));
 }
 
 /**
@@ -106,19 +134,8 @@ export function calcularProximaFechaNominalPendiente(
   fechasNominalesCerradas,
   fechaRef = new Date(),
 ) {
-  if (!puntosCorte.length) {
-    throw new Error('El hogar no tiene puntos de corte configurados');
-  }
+  const pendientes = calcularPeriodosPendientes(hogar, puntosCorte, fechasNominalesCerradas, fechaRef);
+  if (!pendientes.length) return null;
 
-  const hoy = inicioDeHoyUTC(fechaRef);
-  const candidatos = generarCandidatos(hogar, puntosCorte, hoy, [-2, -1, 0]);
-  const cerradas = new Set(fechasNominalesCerradas.map((f) => new Date(f).getTime()));
-
-  const pasados = candidatos.filter((c) => c.fecha <= hoy);
-  if (!pasados.length) return null;
-
-  const masReciente = pasados[pasados.length - 1];
-  if (cerradas.has(masReciente.fecha.getTime())) return null;
-
-  return masReciente;
+  return pendientes[pendientes.length - 1];
 }
