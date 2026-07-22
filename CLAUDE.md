@@ -39,15 +39,17 @@ Ver detalle completo en `Especificacion_App_Finanzas_Pareja.md` (sección 4) en 
 
 ## Plan de fases (Fases 1-6 completas, en curso la Fase 7)
 
+Orden re-priorizado: primero se completa la app web (ingreso personal, presupuesto, deudas, metas, inversiones, exportar) y solo después se aborda el bot de Telegram/n8n — decisión explícita para no meterse con la integración del bot hasta que el resto de la app esté lo más completo posible.
+
 1. ✅ Backend (API) + esquema de base de datos + autenticación + onboarding (crear/unirse a hogar)
 2. ✅ Frontend web (Vue 3): login, panel personal básico
 3. ✅ Settings del hogar: frecuencia de corte, conceptos configurables, invitar miembros, % split, permisos
 4. ✅ Panel del hogar: gastos recurrentes + variables puntuales
 5. ✅ Motor de cortes
 6. ✅ Dashboard con gráficos
-7. API para n8n + workflows: login por chat, registro de gastos, recordatorios
-8. Workflow de resúmenes bajo demanda
-9. Deudas, metas de ahorro, inversiones, exportar datos
+7. Ingreso personal por corte, presupuesto, deudas (personales y conjuntas), metas de ahorro (personales y en pareja), inversiones conjuntas, exportar datos
+8. API para n8n + workflows: login por chat, registro de gastos, recordatorios
+9. Workflow de resúmenes bajo demanda
 10. Empaquetado móvil (Capacitor + Ionic Vue)
 
 ## Estado actual (Fases 1-6)
