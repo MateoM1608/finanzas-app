@@ -1,10 +1,6 @@
 import { prisma } from '../../config/prisma.js';
 import { HttpError } from '../../middleware/errorHandler.js';
-import {
-  calcularPeriodoActual,
-  calcularPeriodosPendientes,
-  calcularProximaFechaNominalPendiente,
-} from '../../utils/periodoActual.js';
+import { calcularPeriodoActual, calcularProximaFechaNominalPendiente } from '../../utils/periodoActual.js';
 import { asegurarInstanciasRecurrentes } from '../gastosRecurrentes/gastosRecurrentes.service.js';
 import { obtenerSplitVigente, calcularReparto } from '../../utils/reparto.js';
 
@@ -216,13 +212,23 @@ export async function iniciarCorte(usuarioActual) {
   const fechasCerradas = cortesExistentes.map((c) => c.fechaNominal);
 
   // Antes de buscar pendientes hay que ASEGURAR que existan las instancias de
-  // cada concepto recurrente para todo punto todavía no cerrado (atraso) y
-  // para el período actual — si no, un concepto (ej. Arriendo) que nadie
-  // visitó a tiempo en Panel del hogar nunca tendría instancia y jamás
-  // aparecería como pendiente, aunque su fecha ya haya pasado.
+  // cada concepto recurrente para el punto de atraso (si hay) y el período
+  // actual — si no, un concepto (ej. Arriendo) que nadie visitó a tiempo en
+  // Panel del hogar nunca tendría instancia y jamás aparecería como
+  // pendiente, aunque su fecha ya haya pasado.
+  //
+  // OJO: solo se asegura el atraso MÁS RECIENTE (uno solo), no todo punto sin
+  // cerrar de una ventana de varios ciclos — como un corte junta todo lo
+  // pendiente con fecha ≤ su fecha nominal, cerrar el más reciente ya cubre
+  // cualquier atraso acumulado. Generar instancias para cada punto pasado de
+  // la ventana duplicaba un concepto marcado para "todos los puntos" (una
+  // instancia distinta por cada ciclo pasado), y todas con fecha ≤ la del
+  // corte terminaban cayendo juntas en el mismo cierre.
   const periodoActual = calcularPeriodoActual(hogar, puntosCorte);
-  const periodosPendientes = calcularPeriodosPendientes(hogar, puntosCorte, fechasCerradas);
-  const periodosAAsegurar = [...periodosPendientes, periodoActual];
+  const candidatoAtrasoParaAsegurar = calcularProximaFechaNominalPendiente(hogar, puntosCorte, fechasCerradas);
+  const periodosAAsegurar = candidatoAtrasoParaAsegurar
+    ? [candidatoAtrasoParaAsegurar, periodoActual]
+    : [periodoActual];
   for (const p of periodosAAsegurar) {
     await asegurarInstanciasRecurrentes(hogarId, p.puntoCorte, p.periodoInicio, p.fechaNominal);
   }
