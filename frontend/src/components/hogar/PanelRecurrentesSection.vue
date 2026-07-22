@@ -2,7 +2,7 @@
 import { ref, onMounted } from 'vue';
 import { obtenerPeriodoActual } from '../../api/gastosRecurrentes.js';
 import { extractErrorMessage } from '../../api/client.js';
-import { formatCurrency, formatDate } from '../../utils/format.js';
+import { formatCurrency, formatDate, formatReparto } from '../../utils/format.js';
 import AlertError from '../AlertError.vue';
 
 const periodo = ref(null);
@@ -53,8 +53,7 @@ onMounted(cargar);
         <p class="text-sm text-ink-tertiary mt-2">
           {{ instancia.pagador ? `Pagó ${instancia.pagador.nombre}` : 'Sin pagador definido aún' }}
           <template v-if="instancia.repartos.length">
-            · Reparto:
-            {{ instancia.repartos.map((r) => `${r.usuario.nombre} ${formatCurrency(r.monto)}`).join(' · ') }}
+            · Reparto: {{ formatReparto(instancia.repartos) }}
           </template>
         </p>
       </li>

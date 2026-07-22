@@ -22,6 +22,12 @@ const routes = [
   },
   {
     path: '/',
+    name: 'dashboard',
+    component: () => import('../views/DashboardView.vue'),
+    meta: { requiresAuth: true, requiresHogar: true },
+  },
+  {
+    path: '/personal',
     name: 'panel-personal',
     component: () => import('../views/PersonalPanelView.vue'),
     meta: { requiresAuth: true, requiresHogar: true },
@@ -59,7 +65,7 @@ router.beforeEach(async (to) => {
   }
 
   if (to.meta.guest && auth.isAuthenticated) {
-    return auth.hasHogar ? { name: 'panel-personal' } : { name: 'onboarding' };
+    return auth.hasHogar ? { name: 'dashboard' } : { name: 'onboarding' };
   }
 
   if (to.meta.requiresAuth && !auth.isAuthenticated) {
@@ -71,7 +77,7 @@ router.beforeEach(async (to) => {
   }
 
   if (to.name === 'onboarding' && auth.hasHogar) {
-    return { name: 'panel-personal' };
+    return { name: 'dashboard' };
   }
 
   return true;

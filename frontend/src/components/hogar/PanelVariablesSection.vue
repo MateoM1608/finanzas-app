@@ -8,7 +8,7 @@ import {
 } from '../../api/gastosVariables.js';
 import { listarMiembros } from '../../api/hogares.js';
 import { extractErrorMessage } from '../../api/client.js';
-import { formatCurrency, formatDate } from '../../utils/format.js';
+import { formatCurrency, formatDate, formatReparto } from '../../utils/format.js';
 import FormField from '../FormField.vue';
 import AlertError from '../AlertError.vue';
 import AppModal from '../AppModal.vue';
@@ -284,8 +284,7 @@ onMounted(cargar);
 
         <div v-if="!esEditable(gasto) || editandoRepartoId !== gasto.id" class="flex items-center justify-between mt-2">
           <p class="text-sm text-ink-tertiary">
-            Pagó {{ gasto.pagador.nombre }} · Reparto:
-            {{ gasto.repartos.map((r) => `${r.usuario.nombre} ${formatCurrency(r.monto)}`).join(' · ') }}
+            Pagó {{ gasto.pagador.nombre }} · Reparto: {{ formatReparto(gasto.repartos) }}
           </p>
           <button
             v-if="esEditable(gasto)"

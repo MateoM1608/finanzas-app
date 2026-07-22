@@ -3,6 +3,7 @@ import { HttpError } from '../../middleware/errorHandler.js';
 import { calcularPeriodoActual, calcularProximaFechaNominalPendiente } from '../../utils/periodoActual.js';
 import { asegurarInstanciasRecurrentes } from '../gastosRecurrentes/gastosRecurrentes.service.js';
 import { obtenerSplitVigente, calcularReparto } from '../../utils/reparto.js';
+import { obtenerOrigenesDetalladosPorLote, origenClave } from '../../utils/corteItemOrigen.js';
 
 const INCLUDE_CORTE = {
   items: true,
@@ -51,43 +52,14 @@ function montoDelOrigen(tipoOrigen, origen) {
   return tipoOrigen === 'recurrente' ? origen.monto : origen.valorTotal;
 }
 
-async function obtenerOrigenDetallado(tipoOrigen, origenId) {
-  const includeComun = {
-    pagador: { select: { id: true, nombre: true } },
-    repartos: { include: { usuario: { select: { id: true, nombre: true } } } },
-  };
-
-  if (tipoOrigen === 'recurrente') {
-    const instancia = await prisma.gastoRecurrenteInstancia.findUnique({
-      where: { id: origenId },
-      include: { ...includeComun, concepto: { select: { nombre: true, tipoMonto: true } } },
-    });
-    if (!instancia) return null;
-    return {
-      nombre: instancia.concepto.nombre,
-      tipoMonto: instancia.concepto.tipoMonto,
-      pagador: instancia.pagador,
-      repartos: instancia.repartos,
-    };
-  }
-
-  const gasto = await prisma.gastoVariablePareja.findUnique({
-    where: { id: origenId },
-    include: includeComun,
-  });
-  if (!gasto) return null;
-  return { nombre: gasto.item, tipoMonto: null, pagador: gasto.pagador, repartos: gasto.repartos };
+function enriquecerItemsConMapa(items, mapa) {
+  return items.map((item) => ({ ...item, ...mapa.get(origenClave(item)) }));
 }
 
 async function enriquecerCorte(corte) {
   if (!corte) return corte;
-  const items = await Promise.all(
-    corte.items.map(async (item) => ({
-      ...item,
-      ...(await obtenerOrigenDetallado(item.tipoOrigen, item.origenId)),
-    })),
-  );
-  return { ...corte, items };
+  const mapa = await obtenerOrigenesDetalladosPorLote(corte.items);
+  return { ...corte, items: enriquecerItemsConMapa(corte.items, mapa) };
 }
 
 async function actualizarEstadoOrigen(tx, tipoOrigen, origenId, estado) {
@@ -105,7 +77,8 @@ export async function listarCortes(usuarioActual) {
     orderBy: { fechaNominal: 'desc' },
     include: INCLUDE_CORTE,
   });
-  return Promise.all(cortes.map(enriquecerCorte));
+  const mapa = await obtenerOrigenesDetalladosPorLote(cortes.flatMap((c) => c.items));
+  return cortes.map((corte) => ({ ...corte, items: enriquecerItemsConMapa(corte.items, mapa) }));
 }
 
 export async function obtenerCorteAbierto(usuarioActual) {
@@ -374,6 +347,7 @@ export async function confirmarCorte(usuarioActual, corteId) {
   const corte = await requireCorteAbierto(hogarId, corteId);
 
   const items = await prisma.corteItem.findMany({ where: { corteId, incluido: true } });
+  const mapa = await obtenerOrigenesDetalladosPorLote(items);
 
   const balancePorMiembro = new Map();
   const sumar = (usuarioId, delta) => {
@@ -387,8 +361,8 @@ export async function confirmarCorte(usuarioActual, corteId) {
         'Hay un ítem incluido sin definir su monto — complétalo o desmárcalo antes de confirmar',
       );
     }
-    const origen = await obtenerOrigen(item.tipoOrigen, item.origenId);
-    const pagoUsuarioId = origen.pagoUsuarioId;
+    const origen = mapa.get(origenClave(item));
+    const pagoUsuarioId = origen?.pagador?.id;
     if (!pagoUsuarioId) {
       throw new HttpError(
         409,

@@ -27,7 +27,7 @@ async function onCrear() {
       frecuenciaCorte: frecuenciaCorte.value,
     });
     auth.setUsuario(usuario);
-    router.push({ name: 'panel-personal' });
+    router.push({ name: 'dashboard' });
   } catch (e) {
     error.value = extractErrorMessage(e);
   } finally {
@@ -41,7 +41,7 @@ async function onUnirse() {
   try {
     const { usuario } = await unirseHogar(codigo.value.trim().toUpperCase());
     auth.setUsuario(usuario);
-    router.push({ name: 'panel-personal' });
+    router.push({ name: 'dashboard' });
   } catch (e) {
     error.value = extractErrorMessage(e);
   } finally {

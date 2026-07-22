@@ -37,38 +37,38 @@ App web (con APK futuro) para manejar finanzas personales y de pareja: panel pri
 
 Ver detalle completo en `Especificacion_App_Finanzas_Pareja.md` (sección 4) en este mismo repo — inclúyelo como referencia si necesitas el esquema completo de tablas.
 
-## Plan de fases (Fases 1-5 completas y estabilizadas, en curso la Fase 6)
+## Plan de fases (Fases 1-6 completas, en curso la Fase 7)
 
 1. ✅ Backend (API) + esquema de base de datos + autenticación + onboarding (crear/unirse a hogar)
 2. ✅ Frontend web (Vue 3): login, panel personal básico
 3. ✅ Settings del hogar: frecuencia de corte, conceptos configurables, invitar miembros, % split, permisos
 4. ✅ Panel del hogar: gastos recurrentes + variables puntuales
 5. ✅ Motor de cortes
-6. Dashboard con gráficos
+6. ✅ Dashboard con gráficos
 7. API para n8n + workflows: login por chat, registro de gastos, recordatorios
 8. Workflow de resúmenes bajo demanda
 9. Deudas, metas de ahorro, inversiones, exportar datos
 10. Empaquetado móvil (Capacitor + Ionic Vue)
 
-## Estado actual (Fases 1-5, estabilizadas)
+## Estado actual (Fases 1-6)
 
 - **Fase 1 — Auth + onboarding:** registro/login con cookie httpOnly firmada (JWT, ~1 año), bcrypt. Onboarding: crear hogar (define `frecuenciaCorte` y genera sus puntos de corte por defecto) o unirse con código de invitación de un solo uso.
 - **Fase 2 — Panel personal:** CRUD de gastos personales, estrictamente scopeados por `usuario_id` a nivel de query. Frontend con diseño claro/fintech (tokens en `tailwind.config.js`, clases base en `frontend/src/assets/main.css`).
 - **Fase 3 — Settings del hogar:** miembros y permisos (`puedeEditarGastos`, `puedeInvitar`, transferencia de admin), conceptos recurrentes (crear/editar/desactivar/eliminar con guardas de integridad), split de porcentaje por contexto (`general` y `gastos_variables`, independientes, historizados por período).
 - **Fase 4 — Panel del hogar:** gastos recurrentes por período (generación idempotente de instancias, monto y reparto según el concepto, pagador editable con default configurable) + gastos variables puntuales (reparto automático por split vigente o personalizado por gasto, estado visual pendiente/en corte/liquidado).
 - **Fase 5 — Motor de cortes:** junta pendientes (recurrentes + variables) primero por atraso acumulado y si no hay, por el período actual en curso; permite deseleccionar ítems no pagados en la realidad (vuelven a `pendiente`); al confirmar calcula el balance por miembro (`corte_balance_miembro`, soporta N miembros) y cierra el corte. Historial expandible con detalle de ítems liquidados y pospuestos, más un resumen fijo por corte (total recurrentes, total variables, cuánto pagó cada miembro, ajuste neto).
-- **Estabilización post-Fase 5 (antes de arrancar Fase 6):** las instancias de gastos recurrentes ya no dependen de que alguien visite Panel del hogar — se generan al iniciar/consultar un corte, solo para el punto de atraso más reciente + el período actual (nunca una ventana de varios ciclos, eso causaba instancias duplicadas de un mismo concepto). Panel del hogar dejó de editar recurrentes (quedó un modal de solo lectura); su monto/pagador se define en el propio corte. `CorteItem.monto` es nullable — un ítem puede entrar al corte sin precio, pero `confirmarCorte` exige monto y pagador en todo ítem incluido antes de cerrar. Un corte `abierto` se refresca con pendientes nuevos en cada visita en vez de quedar pegado con lo que tenía al crearse.
+- **Estabilización post-Fase 5:** las instancias de gastos recurrentes ya no dependen de que alguien visite Panel del hogar — se generan al iniciar/consultar un corte, solo para el punto de atraso más reciente + el período actual (nunca una ventana de varios ciclos, eso causaba instancias duplicadas de un mismo concepto). Panel del hogar dejó de editar recurrentes (quedó un modal de solo lectura); su monto/pagador se define en el propio corte. `CorteItem.monto` es nullable — un ítem puede entrar al corte sin precio, pero `confirmarCorte` exige monto y pagador en todo ítem incluido antes de cerrar. Un corte `abierto` se refresca con pendientes nuevos en cada visita en vez de quedar pegado con lo que tenía al crearse.
+- **Fase 6 — Dashboard:** nueva landing tras login (`/`, movió Panel personal a `/personal`). Backend agrega dos endpoints de solo lectura (`GET /api/dashboard/personal` y `/hogar`) que nunca asumen períodos "fantasma" — el personal arma su serie mensual y desglose por categoría iterando `GastoPersonal` real; el de hogar itera los últimos `Corte` **cerrados** que existen de verdad. Frontend usa Chart.js (`vue-chartjs`) para barra mensual + donut por categoría (personal) y barra apilada recurrentes/variables + balance por miembro (hogar), todo con estado vacío explícito. De paso se resolvió el N+1 del backlog (ver abajo) y se extrajo `formatReparto` a un util compartido.
 
 Detalle de endpoints y decisiones de diseño de cada fase: `backend/README.md` y `frontend/README.md` (mantenidos al día en cada fase).
 
-## Mejoras técnicas pendientes (backlog antes/durante la Fase 6)
+## Mejoras técnicas pendientes (backlog)
 
-- **N+1 en el motor de cortes:** `enriquecerCorte` y `confirmarCorte` (`backend/src/modules/cortes/cortes.service.js`) resuelven el origen de cada `CorteItem` con una query individual dentro de un loop (`obtenerOrigenDetallado`/`obtenerOrigen`). Funciona bien con pocos ítems por corte, pero no escala — reemplazar por un fetch por lotes (`findMany` con `id: { in: [...] }`, agrupado por `tipoOrigen`) antes de que el volumen de conceptos/gastos por hogar crezca.
+- ~~**N+1 en el motor de cortes**~~ — resuelto en Fase 6: `obtenerOrigenesDetalladosPorLote` (`backend/src/utils/corteItemOrigen.js`) resuelve el origen de todos los `CorteItem` de un corte (o de todo el historial) en dos queries por lote en vez de una por ítem. La usan `cortes.service.js` y `dashboard.service.js`.
 - **Índices de base de datos:** revisar que los campos usados en filtros frecuentes de `iniciarCorte`/`buscarPendientes` (`hogarId`, `estado`, `fechaNominal`, `fechaLimite`) tengan índice explícito en `prisma/schema.prisma`, no solo los que Prisma crea automáticamente por relaciones/unique constraints.
-- **Refactor de componentes visuales del hogar:** `PanelRecurrentesSection.vue`, `PanelVariablesSection.vue` y `CortesView.vue` repiten la misma lógica de formateo de reparto (`nombre monto · nombre monto`) y de badges/estado por su lado — extraer a un composable/componente compartido (`frontend/src/components/hogar/`) antes de agregar más vistas que dependan del mismo patrón (ej. dashboard de Fase 6).
-- **Cálculo de balances duplicado:** la lógica de `previewBalances` en `CortesView.vue` (balance en vivo del corte abierto) reimplementa en el cliente lo mismo que `confirmarCorte` calcula en el backend — mantenerlos sincronizados a mano es frágil; considerar exponer un endpoint de preview o extraer la función a un util compartible si el dashboard de Fase 6 necesita algo similar.
-- **Revisión de diseño visual:** antes de construir el dashboard (Fase 6), revisar consistencia visual entre las vistas ya construidas (Panel personal, Settings, Panel del hogar, Cortes) — quedaron implementadas en momentos distintos y no ha habido una pasada final de pulido UI/UX sobre el conjunto.
-- **Ojo con los períodos "fantasma" al construir el dashboard:** las instancias de gastos recurrentes NO se backfillean para todo el histórico calendario — solo existen para los períodos donde alguien realmente inició/consultó un corte (punto de atraso más reciente + período actual, ver `iniciarCorte`). Si el dashboard de Fase 6 muestra series de tiempo o comparativas por período, debe basarse en los `Corte`/`CorteItem` (y gastos personales) que realmente existen, nunca asumir que todo punto de corte calendario tiene datos.
+- ~~**Refactor de componentes visuales del hogar**~~ — parcialmente resuelto en Fase 6: se extrajo `formatReparto` (`frontend/src/utils/format.js`) para el formateo de reparto, usado por `PanelRecurrentesSection.vue`, `PanelVariablesSection.vue` y `CortesView.vue`. Sigue pendiente unificar badges/estado si aparecen más vistas con ese patrón.
+- **Cálculo de balances duplicado:** la lógica de `previewBalances` en `CortesView.vue` (balance en vivo del corte abierto) sigue reimplementando en el cliente lo mismo que `confirmarCorte` calcula en el backend — mantenerlos sincronizados a mano es frágil; considerar exponer un endpoint de preview o extraer la función a un util compartible.
+- **Revisión de diseño visual:** sigue pendiente una pasada de consistencia visual entre las vistas (Panel personal, Settings, Panel del hogar, Cortes, Dashboard) — quedaron implementadas en momentos distintos y no ha habido un pulido final de UI/UX sobre el conjunto.
 
 ## Notas de la base de datos de desarrollo
 

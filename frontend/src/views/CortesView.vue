@@ -10,7 +10,7 @@ import {
 } from '../api/cortes.js';
 import { listarMiembros } from '../api/hogares.js';
 import { extractErrorMessage } from '../api/client.js';
-import { formatCurrency, formatDate, formatearBalances } from '../utils/format.js';
+import { formatCurrency, formatDate, formatearBalances, formatReparto } from '../utils/format.js';
 import AppHeader from '../components/AppHeader.vue';
 import AlertError from '../components/AlertError.vue';
 
@@ -277,8 +277,7 @@ onMounted(cargar);
                     <span>
                       <span class="text-ink-primary font-medium">{{ item.nombre }}</span>
                       <span class="block text-sm text-ink-tertiary mt-0.5">
-                        Reparto:
-                        {{ item.repartos.map((r) => `${r.usuario.nombre} ${formatCurrency(r.monto)}`).join(' · ') || '(sin definir)' }}
+                        Reparto: {{ formatReparto(item.repartos) }}
                       </span>
                     </span>
                   </label>
@@ -390,7 +389,7 @@ onMounted(cargar);
                     </span>
                     <span class="block text-xs text-ink-tertiary">
                       Pagó {{ item.pagador?.nombre ?? '(sin definir)' }} · Reparto:
-                      {{ item.repartos.map((r) => `${r.usuario.nombre} ${formatCurrency(r.monto)}`).join(' · ') }}
+                      {{ formatReparto(item.repartos) }}
                     </span>
                     <span v-if="!item.incluido" class="text-xs text-ink-tertiary italic">
                       Pospuesto — no se liquidó en este corte

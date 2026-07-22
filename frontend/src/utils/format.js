@@ -18,6 +18,11 @@ export function formatDate(fecha) {
   return dateFormatter.format(new Date(fecha));
 }
 
+export function formatReparto(repartos) {
+  if (!repartos?.length) return '(sin definir)';
+  return repartos.map((r) => `${r.usuario.nombre} ${formatCurrency(r.monto)}`).join(' · ');
+}
+
 /**
  * Resume una lista de balances de corte [{ usuario: { nombre }, balance }] en
  * texto legible. Con 2 miembros da el formato "X le debe $N a Y"; con más,
