@@ -16,7 +16,9 @@ App web (con APK futuro) para manejar finanzas personales y de pareja: panel pri
 
 **Hogares multi-usuario:** al registrarse, si el usuario no tiene hogar, elige crear uno o unirse con código de invitación. Permisos por miembro, independientes entre sí: `puede_editar_gastos` y `puede_invitar`. Rol de admin/creador transferible (uno activo a la vez).
 
-**Panel personal (privado, aislado):** gastos puntuales, ingreso por corte (modo automático con monto default, o manual), presupuesto, deudas personales, metas de ahorro. Nada de esto es visible para el otro miembro del hogar ni se expone a consultas de pareja.
+**Panel personal (privado, aislado):** gastos puntuales, gastos recurrentes personales con su propio mini-corte de revisión (frecuencia y puntos de corte independientes de los del hogar — ver más abajo), ingreso por corte (modo automático con monto default, o manual), presupuesto, deudas personales, metas de ahorro. Nada de esto es visible para el otro miembro del hogar ni se expone a consultas de pareja.
+
+**Gastos recurrentes personales:** mismo patrón que los de pareja (concepto configurable con `tipo_monto` fijo/variable + instancia generada por período + mini-corte de revisión antes de contabilizarse), pero a nivel de una sola persona — sin pagador, sin reparto y sin balance, porque no hay nadie más con quien liquidar. Cada usuario tiene su propia frecuencia de corte y puntos de corte, independientes del hogar. Al confirmar el corte personal, cada ítem incluido se registra directamente como un gasto personal real.
 
 **Panel de pareja:**
 
@@ -47,12 +49,12 @@ Orden re-priorizado: primero se completa la app web (ingreso personal, presupues
 4. ✅ Panel del hogar: gastos recurrentes + variables puntuales
 5. ✅ Motor de cortes
 6. ✅ Dashboard con gráficos
-7. Ingreso personal por corte, presupuesto, deudas (personales y conjuntas), metas de ahorro (personales y en pareja), inversiones conjuntas, exportar datos
+7. Gastos recurrentes personales con mini-corte propio ✅, ingreso personal por corte, presupuesto, deudas (personales y conjuntas), metas de ahorro (personales y en pareja), inversiones conjuntas, exportar datos
 8. API para n8n + workflows: login por chat, registro de gastos, recordatorios
 9. Workflow de resúmenes bajo demanda
 10. Empaquetado móvil (Capacitor + Ionic Vue)
 
-## Estado actual (Fases 1-6)
+## Estado actual (Fases 1-6 completas, Fase 7 en curso)
 
 - **Fase 1 — Auth + onboarding:** registro/login con cookie httpOnly firmada (JWT, ~1 año), bcrypt. Onboarding: crear hogar (define `frecuenciaCorte` y genera sus puntos de corte por defecto) o unirse con código de invitación de un solo uso.
 - **Fase 2 — Panel personal:** CRUD de gastos personales, estrictamente scopeados por `usuario_id` a nivel de query. Frontend con diseño claro/fintech (tokens en `tailwind.config.js`, clases base en `frontend/src/assets/main.css`).
@@ -61,6 +63,7 @@ Orden re-priorizado: primero se completa la app web (ingreso personal, presupues
 - **Fase 5 — Motor de cortes:** junta pendientes (recurrentes + variables) primero por atraso acumulado y si no hay, por el período actual en curso; permite deseleccionar ítems no pagados en la realidad (vuelven a `pendiente`); al confirmar calcula el balance por miembro (`corte_balance_miembro`, soporta N miembros) y cierra el corte. Historial expandible con detalle de ítems liquidados y pospuestos, más un resumen fijo por corte (total recurrentes, total variables, cuánto pagó cada miembro, ajuste neto).
 - **Estabilización post-Fase 5:** las instancias de gastos recurrentes ya no dependen de que alguien visite Panel del hogar — se generan al iniciar/consultar un corte, solo para el punto de atraso más reciente + el período actual (nunca una ventana de varios ciclos, eso causaba instancias duplicadas de un mismo concepto). Panel del hogar dejó de editar recurrentes (quedó un modal de solo lectura); su monto/pagador se define en el propio corte. `CorteItem.monto` es nullable — un ítem puede entrar al corte sin precio, pero `confirmarCorte` exige monto y pagador en todo ítem incluido antes de cerrar. Un corte `abierto` se refresca con pendientes nuevos en cada visita en vez de quedar pegado con lo que tenía al crearse.
 - **Fase 6 — Dashboard:** nueva landing tras login (`/`, movió Panel personal a `/personal`). Backend agrega dos endpoints de solo lectura (`GET /api/dashboard/personal` y `/hogar`) que nunca asumen períodos "fantasma" — el personal arma su serie mensual y desglose por categoría iterando `GastoPersonal` real; el de hogar itera los últimos `Corte` **cerrados** que existen de verdad. Frontend usa Chart.js (`vue-chartjs`) para barra mensual + donut por categoría (personal) y barra apilada recurrentes/variables + balance por miembro (hogar), todo con estado vacío explícito. De paso se resolvió el N+1 del backlog (ver abajo) y se extrajo `formatReparto` a un util compartido.
+- **Fase 7 (en curso) — Gastos recurrentes personales:** primera pieza lista. Cada `Usuario` tiene su propia `frecuenciaCortePersonal` y `PuntoCortePersonal` (default `mensual`, generados al registrarse), totalmente independientes del hogar. `ConceptoRecurrentePersonal` + `GastoRecurrentePersonalInstancia` replican el patrón de pareja (fijo/variable, aplica a puntos de corte específicos o a todos), pero sin pagador ni reparto. El mini-corte (`CortePersonal`/`CorteItemPersonal`) reusa la misma mecánica de iniciar/refrescar/deseleccionar/confirmar que el corte de pareja, sin balance — al confirmar, cada ítem incluido crea directamente un `GastoPersonal` real, así que aparece de inmediato en el listado de Panel personal y en el dashboard. Todo vive dentro de `PersonalPanelView.vue` (sección "Recurrentes personales" + modal de configuración), no en una vista de navegación aparte.
 
 Detalle de endpoints y decisiones de diseño de cada fase: `backend/README.md` y `frontend/README.md` (mantenidos al día en cada fase).
 

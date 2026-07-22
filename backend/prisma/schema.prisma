@@ -50,48 +50,52 @@ enum TipoOrigenCorteItem {
 }
 
 model Usuario {
-  id                 String   @id @default(uuid())
-  nombre             String
-  usuario            String   @unique
-  passwordHash       String   @map("password_hash")
-  hogarId            String?  @map("hogar_id")
-  esAdmin            Boolean  @default(false) @map("es_admin")
-  puedeEditarGastos  Boolean  @default(false) @map("puede_editar_gastos")
-  puedeInvitar       Boolean  @default(false) @map("puede_invitar")
-  creadoEn           DateTime @default(now()) @map("creado_en")
+  id                      String          @id @default(uuid())
+  nombre                  String
+  usuario                 String          @unique
+  passwordHash            String          @map("password_hash")
+  hogarId                 String?         @map("hogar_id")
+  esAdmin                 Boolean         @default(false) @map("es_admin")
+  puedeEditarGastos       Boolean         @default(false) @map("puede_editar_gastos")
+  puedeInvitar            Boolean         @default(false) @map("puede_invitar")
+  frecuenciaCortePersonal FrecuenciaCorte @default(mensual) @map("frecuencia_corte_personal")
+  creadoEn                DateTime        @default(now()) @map("creado_en")
 
-  hogar              Hogar?   @relation(fields: [hogarId], references: [id])
-  invitacionesCreadas InvitacionHogar[] @relation("invitacionesCreadas")
-  gastosPersonales   GastoPersonal[]
-  splitPorcentajes   SplitPorcentajeMiembro[]
-  transferenciasComoAnterior LogTransferenciaAdmin[] @relation("transferenciaAnterior")
-  transferenciasComoNuevo    LogTransferenciaAdmin[] @relation("transferenciaNueva")
-  conceptosComoPagadorDefault ConceptoRecurrentePareja[]
-  gastosRecurrentesComoPagador GastoRecurrenteInstancia[] @relation("gastoRecurrentePagador")
-  repartosGastoRecurrente GastoRecurrenteInstanciaReparto[] @relation("repartoGastoRecurrente")
-  gastosVariablesComoPagador GastoVariablePareja[] @relation("gastoVariablePagador")
-  repartosGastoVariable GastoVariableParejaReparto[] @relation("repartoGastoVariable")
-  cortesCreados Corte[] @relation("corteCreadoPor")
-  balancesCorte CorteBalanceMiembro[]
+  hogar                          Hogar?                            @relation(fields: [hogarId], references: [id])
+  invitacionesCreadas            InvitacionHogar[]                 @relation("invitacionesCreadas")
+  gastosPersonales               GastoPersonal[]
+  splitPorcentajes               SplitPorcentajeMiembro[]
+  transferenciasComoAnterior     LogTransferenciaAdmin[]           @relation("transferenciaAnterior")
+  transferenciasComoNuevo        LogTransferenciaAdmin[]           @relation("transferenciaNueva")
+  conceptosComoPagadorDefault    ConceptoRecurrentePareja[]
+  gastosRecurrentesComoPagador   GastoRecurrenteInstancia[]        @relation("gastoRecurrentePagador")
+  repartosGastoRecurrente        GastoRecurrenteInstanciaReparto[] @relation("repartoGastoRecurrente")
+  gastosVariablesComoPagador     GastoVariablePareja[]             @relation("gastoVariablePagador")
+  repartosGastoVariable          GastoVariableParejaReparto[]      @relation("repartoGastoVariable")
+  cortesCreados                  Corte[]                           @relation("corteCreadoPor")
+  balancesCorte                  CorteBalanceMiembro[]
+  puntosCortePersonales          PuntoCortePersonal[]
+  conceptosRecurrentesPersonales ConceptoRecurrentePersonal[]
+  cortesPersonales               CortePersonal[]
 
   @@index([hogarId])
   @@map("usuarios")
 }
 
 model Hogar {
-  id               String          @id @default(uuid())
-  nombre           String
-  frecuenciaCorte  FrecuenciaCorte @map("frecuencia_corte")
-  creadoEn         DateTime        @default(now()) @map("creado_en")
+  id              String          @id @default(uuid())
+  nombre          String
+  frecuenciaCorte FrecuenciaCorte @map("frecuencia_corte")
+  creadoEn        DateTime        @default(now()) @map("creado_en")
 
-  usuarios         Usuario[]
-  puntosCorte      PuntoCorteHogar[]
-  invitaciones     InvitacionHogar[]
+  usuarios             Usuario[]
+  puntosCorte          PuntoCorteHogar[]
+  invitaciones         InvitacionHogar[]
   conceptosRecurrentes ConceptoRecurrentePareja[]
-  splitPorcentajes SplitPorcentajeMiembro[]
-  transferenciasAdmin LogTransferenciaAdmin[]
-  gastosVariables  GastoVariablePareja[]
-  cortes           Corte[]
+  splitPorcentajes     SplitPorcentajeMiembro[]
+  transferenciasAdmin  LogTransferenciaAdmin[]
+  gastosVariables      GastoVariablePareja[]
+  cortes               Corte[]
 
   @@map("hogares")
 }
@@ -104,11 +108,11 @@ model PuntoCorteHogar {
 
   // Campos estructurales (no editables por el usuario) que maneja el cálculo de fechas,
   // independientes de "referencia" para que renombrar la etiqueta no rompa la lógica.
-  diaMes     Int?   @map("dia_mes") // 1-31 para mensual/quincenal; null = último día del mes
-  diaSemana  Int?   @map("dia_semana") // 1-7 (ISO, lunes=1) para semanal
+  diaMes    Int? @map("dia_mes") // 1-31 para mensual/quincenal; null = último día del mes
+  diaSemana Int? @map("dia_semana") // 1-7 (ISO, lunes=1) para semanal
 
-  hogar     Hogar  @relation(fields: [hogarId], references: [id])
-  conceptoPuntosCorte ConceptoPuntoCorte[]
+  hogar                      Hogar                      @relation(fields: [hogarId], references: [id])
+  conceptoPuntosCorte        ConceptoPuntoCorte[]
   gastosRecurrentesInstancia GastoRecurrenteInstancia[]
 
   @@unique([hogarId, orden])
@@ -117,16 +121,16 @@ model PuntoCorteHogar {
 }
 
 model InvitacionHogar {
-  id                  String    @id @default(uuid())
-  hogarId             String    @map("hogar_id")
-  codigo              String    @unique
-  usado               Boolean   @default(false)
-  creadoPorUsuarioId  String    @map("creado_por_usuario_id")
-  expiraEn            DateTime  @map("expira_en")
-  creadoEn            DateTime  @default(now()) @map("creado_en")
+  id                 String   @id @default(uuid())
+  hogarId            String   @map("hogar_id")
+  codigo             String   @unique
+  usado              Boolean  @default(false)
+  creadoPorUsuarioId String   @map("creado_por_usuario_id")
+  expiraEn           DateTime @map("expira_en")
+  creadoEn           DateTime @default(now()) @map("creado_en")
 
-  hogar               Hogar     @relation(fields: [hogarId], references: [id])
-  creadoPor           Usuario   @relation("invitacionesCreadas", fields: [creadoPorUsuarioId], references: [id])
+  hogar     Hogar   @relation(fields: [hogarId], references: [id])
+  creadoPor Usuario @relation("invitacionesCreadas", fields: [creadoPorUsuarioId], references: [id])
 
   @@index([hogarId])
   @@map("invitaciones_hogar")
@@ -143,24 +147,24 @@ model GastoPersonal {
   origen      OrigenGasto       @default(app)
   creadoEn    DateTime          @default(now()) @map("creado_en")
 
-  usuario     Usuario           @relation(fields: [usuarioId], references: [id])
+  usuario Usuario @relation(fields: [usuarioId], references: [id])
 
   @@index([usuarioId])
   @@map("gastos_personales")
 }
 
 model ConceptoRecurrentePareja {
-  id                     String            @id @default(uuid())
-  hogarId                String            @map("hogar_id")
-  nombre                 String
-  activo                 Boolean           @default(true)
-  tipoMonto              TipoMontoConcepto @map("tipo_monto")
-  montoDefault           Int?              @map("monto_default")
-  pagadorDefaultUsuarioId String?          @map("pagador_default_usuario_id")
-  creadoEn               DateTime          @default(now()) @map("creado_en")
+  id                      String            @id @default(uuid())
+  hogarId                 String            @map("hogar_id")
+  nombre                  String
+  activo                  Boolean           @default(true)
+  tipoMonto               TipoMontoConcepto @map("tipo_monto")
+  montoDefault            Int?              @map("monto_default")
+  pagadorDefaultUsuarioId String?           @map("pagador_default_usuario_id")
+  creadoEn                DateTime          @default(now()) @map("creado_en")
 
-  hogar          Hogar                @relation(fields: [hogarId], references: [id])
-  pagadorDefault Usuario?             @relation(fields: [pagadorDefaultUsuarioId], references: [id])
+  hogar          Hogar                      @relation(fields: [hogarId], references: [id])
+  pagadorDefault Usuario?                   @relation(fields: [pagadorDefaultUsuarioId], references: [id])
   puntosCorte    ConceptoPuntoCorte[]
   instancias     GastoRecurrenteInstancia[]
 
@@ -173,8 +177,8 @@ model ConceptoPuntoCorte {
   conceptoId   String @map("concepto_id")
   puntoCorteId String @map("punto_corte_id")
 
-  concepto     ConceptoRecurrentePareja @relation(fields: [conceptoId], references: [id])
-  puntoCorte   PuntoCorteHogar          @relation(fields: [puntoCorteId], references: [id])
+  concepto   ConceptoRecurrentePareja @relation(fields: [conceptoId], references: [id])
+  puntoCorte PuntoCorteHogar          @relation(fields: [puntoCorteId], references: [id])
 
   @@unique([conceptoId, puntoCorteId])
   @@index([conceptoId])
@@ -190,8 +194,8 @@ model SplitPorcentajeMiembro {
   periodoInicio DateTime      @map("periodo_inicio")
   creadoEn      DateTime      @default(now()) @map("creado_en")
 
-  hogar         Hogar    @relation(fields: [hogarId], references: [id])
-  usuario       Usuario  @relation(fields: [usuarioId], references: [id])
+  hogar   Hogar   @relation(fields: [hogarId], references: [id])
+  usuario Usuario @relation(fields: [usuarioId], references: [id])
 
   @@unique([hogarId, usuarioId, periodoInicio, contexto])
   @@index([hogarId])
@@ -205,9 +209,9 @@ model LogTransferenciaAdmin {
   usuarioNuevoId    String   @map("usuario_nuevo_id")
   fecha             DateTime @default(now())
 
-  hogar             Hogar    @relation(fields: [hogarId], references: [id])
-  usuarioAnterior   Usuario  @relation("transferenciaAnterior", fields: [usuarioAnteriorId], references: [id])
-  usuarioNuevo      Usuario  @relation("transferenciaNueva", fields: [usuarioNuevoId], references: [id])
+  hogar           Hogar   @relation(fields: [hogarId], references: [id])
+  usuarioAnterior Usuario @relation("transferenciaAnterior", fields: [usuarioAnteriorId], references: [id])
+  usuarioNuevo    Usuario @relation("transferenciaNueva", fields: [usuarioNuevoId], references: [id])
 
   @@index([hogarId])
   @@map("log_transferencia_admin")
@@ -224,9 +228,9 @@ model GastoRecurrenteInstancia {
   estado        EstadoGastoPareja @default(pendiente)
   creadoEn      DateTime          @default(now()) @map("creado_en")
 
-  concepto   ConceptoRecurrentePareja @relation(fields: [conceptoId], references: [id])
-  puntoCorte PuntoCorteHogar          @relation(fields: [puntoCorteId], references: [id])
-  pagador    Usuario?                 @relation("gastoRecurrentePagador", fields: [pagoUsuarioId], references: [id])
+  concepto   ConceptoRecurrentePareja          @relation(fields: [conceptoId], references: [id])
+  puntoCorte PuntoCorteHogar                   @relation(fields: [puntoCorteId], references: [id])
+  pagador    Usuario?                          @relation("gastoRecurrentePagador", fields: [pagoUsuarioId], references: [id])
   repartos   GastoRecurrenteInstanciaReparto[]
 
   @@unique([conceptoId, periodoInicio, puntoCorteId])
@@ -259,8 +263,8 @@ model GastoVariablePareja {
   fechaPagoReal DateTime?         @map("fecha_pago_real")
   creadoEn      DateTime          @default(now()) @map("creado_en")
 
-  hogar    Hogar   @relation(fields: [hogarId], references: [id])
-  pagador  Usuario @relation("gastoVariablePagador", fields: [pagoUsuarioId], references: [id])
+  hogar    Hogar                        @relation(fields: [hogarId], references: [id])
+  pagador  Usuario                      @relation("gastoVariablePagador", fields: [pagoUsuarioId], references: [id])
   repartos GastoVariableParejaReparto[]
 
   @@index([hogarId])
@@ -327,4 +331,110 @@ model CorteBalanceMiembro {
   @@unique([corteId, usuarioId])
   @@index([corteId])
   @@map("corte_balance_miembro")
+}
+
+// --- Recurrentes personales: mismo patrón que los de pareja (concepto +
+// instancia por período + mini-corte de revisión), pero a nivel de una sola
+// persona — sin pagador ni reparto (nadie más con quien liquidar) y sin
+// balance al confirmar. Frecuencia y puntos de corte propios por usuario,
+// independientes de los del hogar. Al confirmar un CortePersonal, cada ítem
+// incluido se materializa como un GastoPersonal real (ver cortesPersonales.service.js).
+
+model PuntoCortePersonal {
+  id         String @id @default(uuid())
+  usuarioId  String @map("usuario_id")
+  orden      Int
+  referencia String
+
+  diaMes    Int? @map("dia_mes")
+  diaSemana Int? @map("dia_semana")
+
+  usuario             Usuario                            @relation(fields: [usuarioId], references: [id])
+  conceptoPuntosCorte ConceptoPuntoCortePersonal[]
+  instancias          GastoRecurrentePersonalInstancia[]
+
+  @@unique([usuarioId, orden])
+  @@index([usuarioId])
+  @@map("puntos_corte_personal")
+}
+
+model ConceptoRecurrentePersonal {
+  id           String            @id @default(uuid())
+  usuarioId    String            @map("usuario_id")
+  nombre       String
+  categoria    String?
+  activo       Boolean           @default(true)
+  tipoMonto    TipoMontoConcepto @map("tipo_monto")
+  montoDefault Int?              @map("monto_default")
+  creadoEn     DateTime          @default(now()) @map("creado_en")
+
+  usuario     Usuario                            @relation(fields: [usuarioId], references: [id])
+  puntosCorte ConceptoPuntoCortePersonal[]
+  instancias  GastoRecurrentePersonalInstancia[]
+
+  @@index([usuarioId])
+  @@map("conceptos_recurrentes_personal")
+}
+
+model ConceptoPuntoCortePersonal {
+  id           String @id @default(uuid())
+  conceptoId   String @map("concepto_id")
+  puntoCorteId String @map("punto_corte_id")
+
+  concepto   ConceptoRecurrentePersonal @relation(fields: [conceptoId], references: [id])
+  puntoCorte PuntoCortePersonal         @relation(fields: [puntoCorteId], references: [id])
+
+  @@unique([conceptoId, puntoCorteId])
+  @@index([conceptoId])
+  @@map("concepto_puntos_corte_personal")
+}
+
+model GastoRecurrentePersonalInstancia {
+  id            String            @id @default(uuid())
+  conceptoId    String            @map("concepto_id")
+  periodoInicio DateTime          @map("periodo_inicio")
+  puntoCorteId  String            @map("punto_corte_id")
+  fechaNominal  DateTime          @map("fecha_nominal")
+  monto         Int?
+  estado        EstadoGastoPareja @default(pendiente)
+  creadoEn      DateTime          @default(now()) @map("creado_en")
+
+  concepto   ConceptoRecurrentePersonal @relation(fields: [conceptoId], references: [id])
+  puntoCorte PuntoCortePersonal         @relation(fields: [puntoCorteId], references: [id])
+  items      CorteItemPersonal[]
+
+  @@unique([conceptoId, periodoInicio, puntoCorteId])
+  @@index([puntoCorteId])
+  @@map("gastos_recurrentes_personal_instancia")
+}
+
+model CortePersonal {
+  id             String      @id @default(uuid())
+  usuarioId      String      @map("usuario_id")
+  fechaNominal   DateTime    @map("fecha_nominal")
+  fechaEjecucion DateTime?   @map("fecha_ejecucion")
+  estado         EstadoCorte @default(abierto)
+  creadoEn       DateTime    @default(now()) @map("creado_en")
+
+  usuario Usuario             @relation(fields: [usuarioId], references: [id])
+  items   CorteItemPersonal[]
+
+  @@unique([usuarioId, fechaNominal])
+  @@index([usuarioId])
+  @@map("cortes_personal")
+}
+
+model CorteItemPersonal {
+  id              String  @id @default(uuid())
+  cortePersonalId String  @map("corte_personal_id")
+  instanciaId     String  @map("instancia_id")
+  incluido        Boolean @default(true)
+  monto           Int?
+
+  cortePersonal CortePersonal                    @relation(fields: [cortePersonalId], references: [id])
+  instancia     GastoRecurrentePersonalInstancia @relation(fields: [instanciaId], references: [id])
+
+  @@unique([cortePersonalId, instanciaId])
+  @@index([cortePersonalId])
+  @@map("corte_items_personal")
 }

@@ -6,6 +6,11 @@ import { formatCurrency, formatDate } from '../utils/format.js';
 import AppHeader from '../components/AppHeader.vue';
 import FormField from '../components/FormField.vue';
 import AlertError from '../components/AlertError.vue';
+import AppModal from '../components/AppModal.vue';
+import CortePersonalSection from '../components/personal/CortePersonalSection.vue';
+import RecurrentesPersonalesSection from '../components/personal/RecurrentesPersonalesSection.vue';
+
+const mostrarConfigRecurrentes = ref(false);
 
 const gastos = ref([]);
 const loading = ref(true);
@@ -133,6 +138,22 @@ onMounted(cargarGastos);
           </li>
         </ul>
       </section>
+
+      <section class="card p-6 sm:p-8">
+        <div class="flex flex-wrap items-center justify-between gap-3 mb-5">
+          <h2 class="text-base font-semibold text-ink-primary">Recurrentes personales</h2>
+          <button class="btn-secondary" @click="mostrarConfigRecurrentes = true">Configurar</button>
+        </div>
+        <CortePersonalSection @confirmado="cargarGastos" />
+      </section>
     </main>
+
+    <AppModal
+      v-if="mostrarConfigRecurrentes"
+      title="Recurrentes personales"
+      @close="mostrarConfigRecurrentes = false"
+    >
+      <RecurrentesPersonalesSection />
+    </AppModal>
   </div>
 </template>

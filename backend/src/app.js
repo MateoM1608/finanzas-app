@@ -10,6 +10,9 @@ import { gastosRecurrentesRouter } from './modules/gastosRecurrentes/gastosRecur
 import { gastosVariablesRouter } from './modules/gastosVariables/gastosVariables.routes.js';
 import { cortesRouter } from './modules/cortes/cortes.routes.js';
 import { dashboardRouter } from './modules/dashboard/dashboard.routes.js';
+import { configuracionPersonalRouter } from './modules/configuracionPersonal/configuracionPersonal.routes.js';
+import { conceptosRecurrentesPersonalesRouter } from './modules/conceptosRecurrentesPersonales/conceptosRecurrentesPersonales.routes.js';
+import { cortesPersonalesRouter } from './modules/cortesPersonales/cortesPersonales.routes.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 
 export const app = express();
@@ -28,6 +31,9 @@ app.use('/api/gastos-recurrentes', gastosRecurrentesRouter);
 app.use('/api/gastos-variables', gastosVariablesRouter);
 app.use('/api/cortes', cortesRouter);
 app.use('/api/dashboard', dashboardRouter);
+app.use('/api/configuracion-personal', configuracionPersonalRouter);
+app.use('/api/conceptos-recurrentes-personales', conceptosRecurrentesPersonalesRouter);
+app.use('/api/cortes-personales', cortesPersonalesRouter);
 
 app.use(notFoundHandler);
 app.use(errorHandler);

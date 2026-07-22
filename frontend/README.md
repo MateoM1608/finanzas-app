@@ -1,6 +1,6 @@
 # Finanzas — Frontend
 
-Vue 3 + Vite + Tailwind CSS. Fase 2: login, registro, onboarding de hogar y panel personal básico. Fase 3: settings del hogar (frecuencia/puntos de corte, miembros y permisos, conceptos recurrentes, split de gastos). Fase 4: panel del hogar (gastos recurrentes del período + gastos variables puntuales, con reparto personalizable por gasto). Fase 5: motor de cortes (revisar pendientes, confirmar, historial con balances). Fase 6: dashboard con gráficos (Chart.js) como landing tras el login.
+Vue 3 + Vite + Tailwind CSS. Fase 2: login, registro, onboarding de hogar y panel personal básico. Fase 3: settings del hogar (frecuencia/puntos de corte, miembros y permisos, conceptos recurrentes, split de gastos). Fase 4: panel del hogar (gastos recurrentes del período + gastos variables puntuales, con reparto personalizable por gasto). Fase 5: motor de cortes (revisar pendientes, confirmar, historial con balances). Fase 6: dashboard con gráficos (Chart.js) como landing tras el login. Fase 7 (en curso): gastos recurrentes personales con su propio mini-corte, dentro de Panel personal.
 
 ## Setup
 
@@ -18,8 +18,8 @@ Paleta clara minimalista tipo fintech premium: fondo blanco/gris muy claro (`can
 
 - `src/stores/auth.js` — Pinia: usuario autenticado, se hidrata con `GET /api/auth/me` al cargar la app
 - `src/router/index.js` — guards: redirige a `/login` si no hay sesión, a `/onboarding` si hay sesión pero no hogar, y de vuelta a `/` (el dashboard) si ya tiene hogar. El panel personal vive en `/personal`.
-- `src/api/` — clientes por recurso (`auth` vive en el store, `hogares`, `gastosPersonales`, `conceptosRecurrentes`, `splitPorcentaje`, `gastosRecurrentes`, `gastosVariables`, `cortes`, `dashboard`)
-- `src/views/` — `LoginView`, `RegisterView`, `OnboardingView` (crear/unirse a hogar), `DashboardView` (landing tras login: gráficos personales y de hogar), `PersonalPanelView` (listar/crear/eliminar gastos personales, en `/personal`), `SettingsView` (tabs de configuración del hogar), `PanelHogarView` (gastos variables puntuales + botón para ver los recurrentes del período en un modal de solo lectura), `CortesView` (iniciar/revisar/confirmar corte + historial con balances)
+- `src/api/` — clientes por recurso (`auth` vive en el store, `hogares`, `gastosPersonales`, `conceptosRecurrentes`, `splitPorcentaje`, `gastosRecurrentes`, `gastosVariables`, `cortes`, `dashboard`, `configuracionPersonal`, `conceptosRecurrentesPersonales`, `cortesPersonales`)
+- `src/views/` — `LoginView`, `RegisterView`, `OnboardingView` (crear/unirse a hogar), `DashboardView` (landing tras login: gráficos personales y de hogar), `PersonalPanelView` (gastos personales + recurrentes personales, en `/personal`), `SettingsView` (tabs de configuración del hogar), `PanelHogarView` (gastos variables puntuales + botón para ver los recurrentes del período en un modal de solo lectura), `CortesView` (iniciar/revisar/confirmar corte + historial con balances)
 - `src/components/AppModal.vue` — modal genérico reutilizable (overlay + tarjeta + botón cerrar), usado para el detalle de recurrentes en Panel del hogar y para el formulario de alta de gastos variables.
 - `src/components/settings/` — una sección por tab de Settings: `SettingsHogarSection` (nombre/frecuencia/puntos de corte), `SettingsMiembrosSection` (invitar, permisos, transferir admin), `SettingsConceptosSection` (conceptos recurrentes fijos/variables, pagador por defecto y a qué puntos de corte aplican), `SettingsSplitSection` (split por miembro con pestañas General / Gastos variables puntuales, valida que sume 100%)
 - `src/components/hogar/` — `PanelRecurrentesSection` (solo lectura: instancias del período actual con su monto/pagador si ya están definidos, o "Por definir en el corte"; se muestra dentro de un `AppModal` desde Panel del hogar — el monto/pagador de estos conceptos ya no se edita ahí, se define en Cortes) y `PanelVariablesSection` (listado de gastos puntuales en la página, con un botón "Agregar gasto variable" que abre el formulario de alta en un `AppModal`; el reparto es automático desde el split vigente por defecto, pero se puede personalizar al crear el gasto o editarlo después con "Editar reparto"). Cada gasto variable muestra su estado (`Pendiente` sin badge, `En corte abierto` o `Liquidado`) — solo los `pendiente` se pueden editar/eliminar; el resto se ve en gris, sin controles, hasta que se desmarquen del corte que los incluye.
@@ -30,6 +30,13 @@ El Panel Personal (gastos privados de un usuario) nunca tiene concepto de repart
 Las acciones de edición en Settings se ocultan/deshabilitan en el frontend según `esAdmin`/`puedeEditarGastos` del usuario, pero el backend es quien realmente aplica el permiso — el frontend solo mejora la UX.
 
 - `formatReparto` (`src/utils/format.js`) centraliza el formateo "nombre monto · nombre monto" de un array de repartos, usado por `PanelRecurrentesSection`, `PanelVariablesSection` y `CortesView` — antes cada uno lo reimplementaba por su lado.
+
+## Recurrentes personales (Fase 7)
+
+Viven dentro de `PersonalPanelView.vue` (no un ítem de navegación separado), en `src/components/personal/`:
+
+- `RecurrentesPersonalesSection.vue` — se abre en un `AppModal` desde el botón "Configurar": frecuencia de corte personal (independiente de la del hogar) y sus puntos de corte, más el CRUD de conceptos recurrentes (nombre, categoría, monto fijo/variable, a qué puntos de corte aplica). Mismo patrón que `SettingsHogarSection`/`SettingsConceptosSection`, pero sin pagador ni chequeos de permisos — siempre es el mismo usuario.
+- `CortePersonalSection.vue` — inline en la página (no modal): iniciar/revisar el corte personal abierto (desmarcar lo no pagado, completar monto si el concepto es variable), confirmar, e historial expandible de cortes cerrados. Igual mecánica que `CortesView.vue` pero sin selector de pagador ni balance — al confirmar, emite `confirmado` para que `PersonalPanelView` refresque el listado de gastos, ya que cada ítem confirmado crea un `GastoPersonal` real.
 
 ## Dashboard (Fase 6)
 
