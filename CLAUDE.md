@@ -64,9 +64,8 @@ Detalle de endpoints y decisiones de diseño de cada fase: `backend/README.md` y
 
 ## Mejoras técnicas pendientes (backlog)
 
-- ~~**N+1 en el motor de cortes**~~ — resuelto en Fase 6: `obtenerOrigenesDetalladosPorLote` (`backend/src/utils/corteItemOrigen.js`) resuelve el origen de todos los `CorteItem` de un corte (o de todo el historial) en dos queries por lote en vez de una por ítem. La usan `cortes.service.js` y `dashboard.service.js`.
 - **Índices de base de datos:** revisar que los campos usados en filtros frecuentes de `iniciarCorte`/`buscarPendientes` (`hogarId`, `estado`, `fechaNominal`, `fechaLimite`) tengan índice explícito en `prisma/schema.prisma`, no solo los que Prisma crea automáticamente por relaciones/unique constraints.
-- ~~**Refactor de componentes visuales del hogar**~~ — parcialmente resuelto en Fase 6: se extrajo `formatReparto` (`frontend/src/utils/format.js`) para el formateo de reparto, usado por `PanelRecurrentesSection.vue`, `PanelVariablesSection.vue` y `CortesView.vue`. Sigue pendiente unificar badges/estado si aparecen más vistas con ese patrón.
+- **Badges/estado repetidos:** más allá del formateo de reparto (ya unificado en `formatReparto`), `PanelVariablesSection.vue` y `CortesView.vue` siguen resolviendo por su lado el badge de estado (pendiente/en corte/liquidado) — extraer si aparece una tercera vista con el mismo patrón.
 - **Cálculo de balances duplicado:** la lógica de `previewBalances` en `CortesView.vue` (balance en vivo del corte abierto) sigue reimplementando en el cliente lo mismo que `confirmarCorte` calcula en el backend — mantenerlos sincronizados a mano es frágil; considerar exponer un endpoint de preview o extraer la función a un util compartible.
 - **Revisión de diseño visual:** sigue pendiente una pasada de consistencia visual entre las vistas (Panel personal, Settings, Panel del hogar, Cortes, Dashboard) — quedaron implementadas en momentos distintos y no ha habido un pulido final de UI/UX sobre el conjunto.
 
