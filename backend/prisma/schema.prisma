@@ -306,7 +306,7 @@ model CorteItem {
   tipoOrigen TipoOrigenCorteItem @map("tipo_origen")
   origenId   String              @map("origen_id")
   incluido   Boolean             @default(true)
-  monto      Int
+  monto      Int?
 
   corte Corte @relation(fields: [corteId], references: [id])
 

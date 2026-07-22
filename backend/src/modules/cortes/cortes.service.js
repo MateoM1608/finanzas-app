@@ -131,11 +131,15 @@ export async function obtenerCorte(usuarioActual, corteId) {
 }
 
 async function buscarPendientes(hogarId, fechaObjetivo) {
+  // OJO: ya no se filtra por `monto: { not: null }` — un concepto recurrente
+  // de monto variable (ej. Mercado, Gasolina) se genera con monto null, y si
+  // se excluyera aquí nunca podría entrar a un corte para que alguien le
+  // defina el precio ahí mismo (quedaría atrapado para siempre). Ahora entra
+  // sin precio y `confirmarCorte` exige completarlo antes de cerrar.
   const instancias = await prisma.gastoRecurrenteInstancia.findMany({
     where: {
       concepto: { hogarId },
       estado: 'pendiente',
-      monto: { not: null },
       fechaNominal: { lte: fechaObjetivo },
     },
   });
@@ -145,14 +149,62 @@ async function buscarPendientes(hogarId, fechaObjetivo) {
   return { instancias, variables };
 }
 
+/**
+ * Junta los pendientes (recurrentes + variables) con fecha ≤ `fechaNominal`
+ * que todavía no tienen un CorteItem en este corte, y los agrega. Se usa
+ * tanto al crear un corte nuevo como al reabrir uno ya `abierto` — así un
+ * corte que quedó abierto antes de que existiera un concepto recurrente (o
+ * de que se generara su instancia) lo recoge en la siguiente visita, en vez
+ * de quedarse pegado para siempre con lo que tenía al crearse.
+ */
+async function agregarPendientesAlCorte(hogarId, corteId, fechaNominal) {
+  const existentes = await prisma.corteItem.findMany({
+    where: { corteId },
+    select: { tipoOrigen: true, origenId: true },
+  });
+  const yaIncluido = new Set(existentes.map((e) => `${e.tipoOrigen}:${e.origenId}`));
+
+  const { instancias, variables } = await buscarPendientes(hogarId, fechaNominal);
+  const nuevasInstancias = instancias.filter((i) => !yaIncluido.has(`recurrente:${i.id}`));
+  const nuevasVariables = variables.filter((v) => !yaIncluido.has(`variable:${v.id}`));
+  if (!nuevasInstancias.length && !nuevasVariables.length) return;
+
+  await prisma.$transaction(async (tx) => {
+    const items = [
+      ...nuevasInstancias.map((i) => ({
+        corteId,
+        tipoOrigen: 'recurrente',
+        origenId: i.id,
+        monto: i.monto,
+      })),
+      ...nuevasVariables.map((v) => ({
+        corteId,
+        tipoOrigen: 'variable',
+        origenId: v.id,
+        monto: v.valorTotal,
+      })),
+    ];
+
+    await tx.corteItem.createMany({ data: items });
+
+    for (const i of nuevasInstancias) {
+      await tx.gastoRecurrenteInstancia.update({
+        where: { id: i.id },
+        data: { estado: 'incluido_en_corte' },
+      });
+    }
+    for (const v of nuevasVariables) {
+      await tx.gastoVariablePareja.update({
+        where: { id: v.id },
+        data: { estado: 'incluido_en_corte' },
+      });
+    }
+  });
+}
+
 export async function iniciarCorte(usuarioActual) {
   const hogarId = requireHogarId(usuarioActual);
   requirePermisoEdicion(usuarioActual);
-
-  const abierto = await prisma.corte.findFirst({ where: { hogarId, estado: 'abierto' } });
-  if (abierto) {
-    return { corte: await obtenerCorte(usuarioActual, abierto.id), motivo: null };
-  }
 
   const hogar = await prisma.hogar.findUnique({ where: { id: hogarId } });
   const puntosCorte = await prisma.puntoCorteHogar.findMany({ where: { hogarId } });
@@ -175,6 +227,12 @@ export async function iniciarCorte(usuarioActual) {
     await asegurarInstanciasRecurrentes(hogarId, p.puntoCorte, p.periodoInicio, p.fechaNominal);
   }
 
+  const abierto = await prisma.corte.findFirst({ where: { hogarId, estado: 'abierto' } });
+  if (abierto) {
+    await agregarPendientesAlCorte(hogarId, abierto.id, abierto.fechaNominal);
+    return { corte: await obtenerCorte(usuarioActual, abierto.id), motivo: null };
+  }
+
   // Primero probamos con cualquier atraso acumulado (períodos ya terminados y sin cerrar).
   // Si ahí no hay nada pendiente de verdad, caemos al período ACTUAL — aunque su fecha
   // nominal todavía no haya llegado. Sin esto, un concepto recurrente que ya se
@@ -182,24 +240,19 @@ export async function iniciarCorte(usuarioActual) {
   // hasta que el período completo terminara, mientras que los gastos variables sí
   // podían tener cualquier fecha pasada y colarse igual.
   let fechaNominal = null;
-  let pendientes = { instancias: [], variables: [] };
 
   const candidatoAtraso = calcularProximaFechaNominalPendiente(hogar, puntosCorte, fechasCerradas);
   if (candidatoAtraso && !fechasUsadas.has(candidatoAtraso.fechaNominal.getTime())) {
     const encontrados = await buscarPendientes(hogarId, candidatoAtraso.fechaNominal);
     if (encontrados.instancias.length || encontrados.variables.length) {
       fechaNominal = candidatoAtraso.fechaNominal;
-      pendientes = encontrados;
     }
   }
 
-  if (!fechaNominal) {
-    if (!fechasUsadas.has(periodoActual.fechaNominal.getTime())) {
-      const encontrados = await buscarPendientes(hogarId, periodoActual.fechaNominal);
-      if (encontrados.instancias.length || encontrados.variables.length) {
-        fechaNominal = periodoActual.fechaNominal;
-        pendientes = encontrados;
-      }
+  if (!fechaNominal && !fechasUsadas.has(periodoActual.fechaNominal.getTime())) {
+    const encontrados = await buscarPendientes(hogarId, periodoActual.fechaNominal);
+    if (encontrados.instancias.length || encontrados.variables.length) {
+      fechaNominal = periodoActual.fechaNominal;
     }
   }
 
@@ -207,51 +260,16 @@ export async function iniciarCorte(usuarioActual) {
     return { corte: null, motivo: 'No hay ningún gasto pendiente para incluir en un corte todavía' };
   }
 
-  const { instancias: instanciasPendientes, variables: variablesPendientes } = pendientes;
-
-  const corte = await prisma.$transaction(async (tx) => {
-    const nuevoCorte = await tx.corte.create({
-      data: {
-        hogarId,
-        fechaNominal,
-        creadoPorUsuarioId: usuarioActual.id,
-      },
-    });
-
-    const items = [
-      ...instanciasPendientes.map((i) => ({
-        corteId: nuevoCorte.id,
-        tipoOrigen: 'recurrente',
-        origenId: i.id,
-        monto: i.monto,
-      })),
-      ...variablesPendientes.map((v) => ({
-        corteId: nuevoCorte.id,
-        tipoOrigen: 'variable',
-        origenId: v.id,
-        monto: v.valorTotal,
-      })),
-    ];
-
-    await tx.corteItem.createMany({ data: items });
-
-    for (const i of instanciasPendientes) {
-      await tx.gastoRecurrenteInstancia.update({
-        where: { id: i.id },
-        data: { estado: 'incluido_en_corte' },
-      });
-    }
-    for (const v of variablesPendientes) {
-      await tx.gastoVariablePareja.update({
-        where: { id: v.id },
-        data: { estado: 'incluido_en_corte' },
-      });
-    }
-
-    return nuevoCorte;
+  const nuevoCorte = await prisma.corte.create({
+    data: {
+      hogarId,
+      fechaNominal,
+      creadoPorUsuarioId: usuarioActual.id,
+    },
   });
+  await agregarPendientesAlCorte(hogarId, nuevoCorte.id, fechaNominal);
 
-  return { corte: await obtenerCorte(usuarioActual, corte.id), motivo: null };
+  return { corte: await obtenerCorte(usuarioActual, nuevoCorte.id), motivo: null };
 }
 
 export async function togglearItem(usuarioActual, corteId, itemId, incluido) {
@@ -336,7 +354,7 @@ export async function actualizarItemCorte(usuarioActual, corteId, itemId, data) 
       });
     }
 
-    if (data.monto !== undefined && item.incluido) {
+    if (data.monto !== undefined) {
       await tx.corteItem.update({ where: { id: itemId }, data: { monto: data.monto } });
     }
   });
@@ -357,6 +375,12 @@ export async function confirmarCorte(usuarioActual, corteId) {
   };
 
   for (const item of items) {
+    if (item.monto == null) {
+      throw new HttpError(
+        409,
+        'Hay un ítem incluido sin definir su monto — complétalo o desmárcalo antes de confirmar',
+      );
+    }
     const origen = await obtenerOrigen(item.tipoOrigen, item.origenId);
     const pagoUsuarioId = origen.pagoUsuarioId;
     if (!pagoUsuarioId) {

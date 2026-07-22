@@ -99,8 +99,10 @@ const previewBalances = computed(() => {
     balances.set(usuario.id, actual);
   };
 
-  for (const item of corteAbierto.value.items.filter((i) => i.incluido)) {
-    if (item.pagador) sumar(item.pagador, item.monto);
+  // Solo suma ítems ya completos (monto + pagador) — los que aún faltan se
+  // bloquean en el botón de confirmar, no tiene sentido netearlos a medias.
+  for (const item of corteAbierto.value.items.filter((i) => i.incluido && i.monto != null && i.pagador)) {
+    sumar(item.pagador, item.monto);
     for (const r of item.repartos) sumar(r.usuario, -r.monto);
   }
 
@@ -110,6 +112,31 @@ const previewBalances = computed(() => {
 const faltaPagador = computed(
   () => corteAbierto.value?.items.some((i) => i.incluido && !i.pagador) ?? false,
 );
+const faltaMonto = computed(
+  () => corteAbierto.value?.items.some((i) => i.incluido && i.monto == null) ?? false,
+);
+
+// Agrupa el corte abierto en [Gastos recurrentes] [Gastos variables] con el
+// subtotal de cada uno (solo lo que sigue incluido) — así se ve de un
+// vistazo cuánto pesa cada tipo antes de cerrar.
+const gruposCorte = computed(() => {
+  if (!corteAbierto.value) return [];
+  const grupos = [
+    { key: 'recurrente', label: 'Gastos recurrentes' },
+    { key: 'variable', label: 'Gastos variables' },
+  ]
+    .map((g) => ({ ...g, items: corteAbierto.value.items.filter((i) => i.tipoOrigen === g.key) }))
+    .filter((g) => g.items.length);
+
+  return grupos.map((g) => {
+    const incluidos = g.items.filter((i) => i.incluido);
+    return {
+      ...g,
+      subtotal: incluidos.reduce((acc, i) => acc + (i.monto ?? 0), 0),
+      faltaMonto: incluidos.some((i) => i.monto == null),
+    };
+  });
+});
 
 function sincronizarMontosLocales(corte) {
   if (!corte) return;
@@ -228,54 +255,72 @@ onMounted(cargar);
             Desmarca lo que todavía no se ha pagado en la realidad — queda pendiente y pasa solo al próximo corte.
           </p>
 
-          <ul class="divide-y divide-border">
-            <li v-for="item in corteAbierto.items" :key="item.id" class="py-4">
-              <div class="flex items-start justify-between gap-4">
-                <label class="flex items-start gap-3">
-                  <input
-                    type="checkbox"
-                    class="mt-1"
-                    :checked="item.incluido"
-                    :disabled="guardandoItemId === item.id"
-                    @change="onToggleItem(item)"
-                  />
-                  <span>
-                    <span class="text-ink-primary font-medium">{{ item.nombre }}</span>
-                    <span class="text-xs text-ink-tertiary font-normal ml-1">({{ TIPO_ORIGEN_LABEL[item.tipoOrigen] }})</span>
-                    <span class="block text-sm text-ink-tertiary mt-0.5">
-                      Reparto:
-                      {{ item.repartos.map((r) => `${r.usuario.nombre} ${formatCurrency(r.monto)}`).join(' · ') || '(sin definir)' }}
+          <div v-for="grupo in gruposCorte" :key="grupo.key" class="mb-6 last:mb-0">
+            <div class="flex items-center justify-between mb-2">
+              <h4 class="text-sm font-semibold text-ink-primary">{{ grupo.label }}</h4>
+              <span class="text-sm font-medium" :class="grupo.faltaMonto ? 'text-negative' : 'text-ink-primary'">
+                {{ grupo.faltaMonto ? 'Falta definir algún monto' : formatCurrency(grupo.subtotal) }}
+              </span>
+            </div>
+
+            <ul class="divide-y divide-border">
+              <li v-for="item in grupo.items" :key="item.id" class="py-4">
+                <div class="flex items-start justify-between gap-4">
+                  <label class="flex items-start gap-3">
+                    <input
+                      type="checkbox"
+                      class="mt-1"
+                      :checked="item.incluido"
+                      :disabled="guardandoItemId === item.id"
+                      @change="onToggleItem(item)"
+                    />
+                    <span>
+                      <span class="text-ink-primary font-medium">{{ item.nombre }}</span>
+                      <span class="block text-sm text-ink-tertiary mt-0.5">
+                        Reparto:
+                        {{ item.repartos.map((r) => `${r.usuario.nombre} ${formatCurrency(r.monto)}`).join(' · ') || '(sin definir)' }}
+                      </span>
                     </span>
-                  </span>
-                </label>
+                  </label>
 
-                <div class="flex flex-col items-end gap-2 shrink-0">
-                  <input
-                    v-if="esMontoEditable(item)"
-                    v-model="montosLocales[item.id]"
-                    type="number"
-                    class="field w-32 text-right"
-                    placeholder="Monto"
-                    :disabled="guardandoItemId === item.id"
-                    @change="onGuardarMonto(item)"
-                  />
-                  <span v-else class="text-ink-primary font-medium">{{ formatCurrency(item.monto) }}</span>
+                  <div class="flex flex-col items-end gap-2 shrink-0">
+                    <input
+                      v-if="esMontoEditable(item)"
+                      v-model="montosLocales[item.id]"
+                      type="number"
+                      class="field w-32 text-right"
+                      placeholder="Monto"
+                      :disabled="guardandoItemId === item.id"
+                      @change="onGuardarMonto(item)"
+                    />
+                    <span
+                      v-else
+                      class="font-medium"
+                      :class="item.monto == null ? 'text-negative' : 'text-ink-primary'"
+                    >
+                      {{ item.monto == null ? 'Falta el monto' : formatCurrency(item.monto) }}
+                    </span>
 
-                  <select
-                    class="field !w-auto text-sm"
-                    :value="item.pagador?.id ?? ''"
-                    :disabled="guardandoItemId === item.id"
-                    @change="onCambiarPagador(item, $event.target.value)"
-                  >
-                    <option value="" disabled>¿Quién pagó?</option>
-                    <option v-for="m in miembros" :key="m.id" :value="m.id">{{ m.nombre }}</option>
-                  </select>
+                    <select
+                      class="field !w-auto text-sm"
+                      :class="{ '!border-negative': !item.pagador }"
+                      :value="item.pagador?.id ?? ''"
+                      :disabled="guardandoItemId === item.id"
+                      @change="onCambiarPagador(item, $event.target.value)"
+                    >
+                      <option value="" disabled>¿Quién pagó?</option>
+                      <option v-for="m in miembros" :key="m.id" :value="m.id">{{ m.nombre }}</option>
+                    </select>
+                  </div>
                 </div>
-              </div>
-            </li>
-          </ul>
+              </li>
+            </ul>
+          </div>
 
           <div class="mt-5 pt-4 border-t border-border space-y-3">
+            <p v-if="faltaMonto" class="text-sm text-negative">
+              Falta definir el monto de algún ítem incluido — complétalo arriba o desmárcalo.
+            </p>
             <p v-if="faltaPagador" class="text-sm text-negative">
               Falta definir quién pagó en algún ítem incluido — complétalo arriba o desmárcalo.
             </p>
@@ -285,7 +330,7 @@ onMounted(cargar);
             </p>
             <button
               class="btn-primary"
-              :disabled="confirmando || faltaPagador"
+              :disabled="confirmando || faltaPagador || faltaMonto"
               @click="onConfirmar"
             >
               {{ confirmando ? 'Confirmando…' : 'Confirmar corte' }}
