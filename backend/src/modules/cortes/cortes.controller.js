@@ -8,6 +8,7 @@ import {
   togglearItem,
   actualizarItemCorte,
   confirmarCorte,
+  obtenerResumenHogar,
 } from './cortes.service.js';
 
 export const getCortes = asyncHandler(async (req, res) => {
@@ -42,4 +43,9 @@ export const patchCorteItem = asyncHandler(async (req, res) => {
 export const postConfirmarCorte = asyncHandler(async (req, res) => {
   const corte = await confirmarCorte(req.usuario, req.params.id);
   res.json({ corte });
+});
+
+export const getResumenHogar = asyncHandler(async (req, res) => {
+  const resumen = await obtenerResumenHogar(req.usuario);
+  res.json(resumen);
 });

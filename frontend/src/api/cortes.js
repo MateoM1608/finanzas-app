@@ -31,3 +31,7 @@ export function actualizarItemCorte(corteId, itemId, payload) {
 export function confirmarCorte(corteId) {
   return api.post(`/api/cortes/${corteId}/confirmar`).then((r) => r.data.corte);
 }
+
+export function obtenerResumenHogar() {
+  return api.get('/api/cortes/resumen').then((r) => r.data);
+}

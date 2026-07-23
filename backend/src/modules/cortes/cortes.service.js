@@ -396,3 +396,70 @@ export async function confirmarCorte(usuarioActual, corteId) {
 
   return obtenerCorte(usuarioActual, corteId);
 }
+
+const CORTES_VENTANA_RESUMEN = 6;
+
+/**
+ * Resumen de solo lectura para Panel del hogar (antes vivía en el módulo
+ * `dashboard`, ahora vive junto al resto de la lógica de cortes porque de ahí
+ * es de donde sale todo su dato). Itera los últimos `Corte` **cerrados** que
+ * existen de verdad — nunca asume períodos "fantasma" del calendario.
+ */
+export async function obtenerResumenHogar(usuarioActual) {
+  const hogarId = requireHogarId(usuarioActual);
+
+  const cortesCerrados = await prisma.corte.findMany({
+    where: { hogarId, estado: 'cerrado' },
+    orderBy: { fechaNominal: 'desc' },
+    take: CORTES_VENTANA_RESUMEN,
+    include: {
+      items: true,
+      balances: { include: { usuario: { select: { id: true, nombre: true } } } },
+    },
+  });
+  cortesCerrados.reverse();
+
+  const itemsIncluidos = cortesCerrados.flatMap((c) => c.items.filter((i) => i.incluido));
+  const mapaOrigenes = await obtenerOrigenesDetalladosPorLote(itemsIncluidos);
+
+  const totalPagadoPorMiembro = new Map();
+  const serieCortes = cortesCerrados.map((corte) => {
+    const incluidos = corte.items.filter((i) => i.incluido);
+    const totalRecurrentes = incluidos
+      .filter((i) => i.tipoOrigen === 'recurrente')
+      .reduce((acc, i) => acc + i.monto, 0);
+    const totalVariables = incluidos
+      .filter((i) => i.tipoOrigen === 'variable')
+      .reduce((acc, i) => acc + i.monto, 0);
+
+    for (const item of incluidos) {
+      const origen = mapaOrigenes.get(origenClave(item));
+      if (!origen?.pagador) continue;
+      const actual = totalPagadoPorMiembro.get(origen.pagador.id) ?? {
+        nombre: origen.pagador.nombre,
+        total: 0,
+      };
+      actual.total += item.monto;
+      totalPagadoPorMiembro.set(origen.pagador.id, actual);
+    }
+
+    return {
+      fechaNominal: corte.fechaNominal,
+      totalRecurrentes,
+      totalVariables,
+      balances: corte.balances.map((b) => ({
+        usuarioId: b.usuarioId,
+        nombre: b.usuario.nombre,
+        balance: b.balance,
+      })),
+    };
+  });
+
+  const hayCorteAbierto = (await prisma.corte.count({ where: { hogarId, estado: 'abierto' } })) > 0;
+
+  return {
+    serieCortes,
+    pagadoPorMiembro: [...totalPagadoPorMiembro.values()],
+    hayCorteAbierto,
+  };
+}

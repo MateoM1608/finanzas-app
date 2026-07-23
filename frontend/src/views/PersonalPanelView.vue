@@ -11,10 +11,12 @@ import FormField from '../components/FormField.vue';
 import AlertError from '../components/AlertError.vue';
 import AppModal from '../components/AppModal.vue';
 import ConfiguracionPersonalSection from '../components/personal/ConfiguracionPersonalSection.vue';
+import ResumenPersonalSection from '../components/personal/ResumenPersonalSection.vue';
 
 const mostrarConfig = ref(false);
 const loading = ref(true);
 const error = ref('');
+const resumenRef = ref(null);
 
 const categorias = ref([]);
 const metodos = ref([]);
@@ -33,11 +35,6 @@ const gEstado = ref('pagado');
 const guardandoGasto = ref(false);
 const eliminandoGastoId = ref(null);
 const cambiandoEstadoGastoId = ref(null);
-
-const totalGastadoPagado = computed(() =>
-  gastos.value.filter((g) => g.estado === 'pagado').reduce((sum, g) => sum + g.monto, 0),
-);
-const cantidadGastosPendientes = computed(() => gastos.value.filter((g) => g.estado === 'pendiente').length);
 
 async function cargarGastos() {
   gastos.value = await listarGastos();
@@ -63,6 +60,7 @@ async function onAgregarGasto() {
     gMetodoPagoId.value = '';
     gEsObligatorio.value = false;
     gEstado.value = 'pagado';
+    resumenRef.value?.recargar();
   } catch (e) {
     error.value = extractErrorMessage(e);
   } finally {
@@ -79,6 +77,7 @@ async function onToggleEstadoGasto(gasto) {
     });
     const idx = gastos.value.findIndex((g) => g.id === gasto.id);
     gastos.value[idx] = actualizado;
+    resumenRef.value?.recargar();
   } catch (e) {
     error.value = extractErrorMessage(e);
   } finally {
@@ -92,6 +91,7 @@ async function onEliminarGasto(id) {
   try {
     await eliminarGasto(id);
     gastos.value = gastos.value.filter((g) => g.id !== id);
+    resumenRef.value?.recargar();
   } catch (e) {
     error.value = extractErrorMessage(e);
   } finally {
@@ -109,10 +109,6 @@ const iEstado = ref('recibido');
 const guardandoIngreso = ref(false);
 const eliminandoIngresoId = ref(null);
 const cambiandoEstadoIngresoId = ref(null);
-
-const totalRecibido = computed(() =>
-  ingresos.value.filter((i) => i.estado === 'recibido').reduce((sum, i) => sum + i.monto, 0),
-);
 
 async function cargarIngresos() {
   ingresos.value = await listarIngresos();
@@ -134,6 +130,7 @@ async function onAgregarIngreso() {
     iCategoriaId.value = '';
     iMetodoPagoId.value = '';
     iEstado.value = 'recibido';
+    resumenRef.value?.recargar();
   } catch (e) {
     error.value = extractErrorMessage(e);
   } finally {
@@ -150,6 +147,7 @@ async function onToggleEstadoIngreso(ingreso) {
     });
     const idx = ingresos.value.findIndex((i) => i.id === ingreso.id);
     ingresos.value[idx] = actualizado;
+    resumenRef.value?.recargar();
   } catch (e) {
     error.value = extractErrorMessage(e);
   } finally {
@@ -163,6 +161,7 @@ async function onEliminarIngreso(id) {
   try {
     await eliminarIngreso(id);
     ingresos.value = ingresos.value.filter((i) => i.id !== id);
+    resumenRef.value?.recargar();
   } catch (e) {
     error.value = extractErrorMessage(e);
   } finally {
@@ -192,25 +191,7 @@ onMounted(cargarTodo);
     <AppHeader />
 
     <main class="max-w-3xl mx-auto px-4 sm:px-6 py-10 space-y-8">
-      <div class="flex flex-wrap items-start justify-between gap-3">
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 flex-1">
-          <section class="card p-8">
-            <p class="text-sm text-ink-secondary mb-2">Gastado (pagado)</p>
-            <p class="text-3xl font-semibold text-ink-primary tracking-tight">
-              {{ formatCurrency(totalGastadoPagado) }}
-            </p>
-            <p v-if="cantidadGastosPendientes" class="text-xs text-ink-tertiary mt-1.5">
-              {{ cantidadGastosPendientes }} gasto(s) pendiente(s), no incluidos aquí
-            </p>
-          </section>
-          <section class="card p-8">
-            <p class="text-sm text-ink-secondary mb-2">Recibido</p>
-            <p class="text-3xl font-semibold text-ink-primary tracking-tight">
-              {{ formatCurrency(totalRecibido) }}
-            </p>
-          </section>
-        </div>
-      </div>
+      <ResumenPersonalSection ref="resumenRef" />
 
       <AlertError :message="error" />
 

@@ -66,15 +66,20 @@ enum AplicaCategoriaPersonal {
 }
 
 model Usuario {
-  id                String   @id @default(uuid())
-  nombre            String
-  usuario           String   @unique
-  passwordHash      String   @map("password_hash")
-  hogarId           String?  @map("hogar_id")
-  esAdmin           Boolean  @default(false) @map("es_admin")
-  puedeEditarGastos Boolean  @default(false) @map("puede_editar_gastos")
-  puedeInvitar      Boolean  @default(false) @map("puede_invitar")
-  creadoEn          DateTime @default(now()) @map("creado_en")
+  id                      String          @id @default(uuid())
+  nombre                  String
+  usuario                 String          @unique
+  passwordHash            String          @map("password_hash")
+  hogarId                 String?         @map("hogar_id")
+  esAdmin                 Boolean         @default(false) @map("es_admin")
+  puedeEditarGastos       Boolean         @default(false) @map("puede_editar_gastos")
+  puedeInvitar            Boolean         @default(false) @map("puede_invitar")
+  // Frecuencia del ciclo del panel personal (Disponible, Ahorros, Límites) —
+  // independiente de la del hogar, sin historizar: no hay "puntos de corte"
+  // configurables, cada ciclo se calcula puramente por calendario (ver
+  // src/utils/cicloPersonal.js).
+  frecuenciaCicloPersonal FrecuenciaCorte @default(mensual) @map("frecuencia_ciclo_personal")
+  creadoEn                DateTime        @default(now()) @map("creado_en")
 
   hogar                        Hogar?                            @relation(fields: [hogarId], references: [id])
   invitacionesCreadas          InvitacionHogar[]                 @relation("invitacionesCreadas")

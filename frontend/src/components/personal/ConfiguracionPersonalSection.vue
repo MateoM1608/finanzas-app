@@ -22,18 +22,20 @@ import {
   actualizarIngresoFijo,
   eliminarIngresoFijo,
 } from '../../api/ingresosFijosConfig.js';
+import { obtenerCicloPersonal, actualizarCicloPersonal } from '../../api/cicloPersonal.js';
 import { extractErrorMessage } from '../../api/client.js';
 import { formatCurrency } from '../../utils/format.js';
 import FormField from '../FormField.vue';
 import AlertError from '../AlertError.vue';
 
 const TABS = [
+  { key: 'ciclo', label: 'Ciclo personal' },
   { key: 'metodos', label: 'Métodos de pago' },
   { key: 'categorias', label: 'Categorías' },
   { key: 'gastosFijos', label: 'Gastos fijos' },
   { key: 'ingresosFijos', label: 'Ingresos fijos' },
 ];
-const tabActiva = ref('metodos');
+const tabActiva = ref('ciclo');
 
 const loading = ref(true);
 const error = ref('');
@@ -44,20 +46,37 @@ const metodos = ref([]);
 const categorias = ref([]);
 const gastosFijos = ref([]);
 const ingresosFijos = ref([]);
+const frecuenciaCicloPersonal = ref('mensual');
+const guardandoCiclo = ref(false);
+
+async function onGuardarCiclo() {
+  error.value = '';
+  guardandoCiclo.value = true;
+  try {
+    const ciclo = await actualizarCicloPersonal(frecuenciaCicloPersonal.value);
+    frecuenciaCicloPersonal.value = ciclo.frecuenciaCicloPersonal;
+  } catch (e) {
+    error.value = extractErrorMessage(e);
+  } finally {
+    guardandoCiclo.value = false;
+  }
+}
 
 async function cargar() {
   loading.value = true;
   try {
-    const [m, c, gf, inf] = await Promise.all([
+    const [m, c, gf, inf, ciclo] = await Promise.all([
       listarMetodosPago(),
       listarCategorias(),
       listarGastosFijos(),
       listarIngresosFijos(),
+      obtenerCicloPersonal(),
     ]);
     metodos.value = m;
     categorias.value = c;
     gastosFijos.value = gf;
     ingresosFijos.value = inf;
+    frecuenciaCicloPersonal.value = ciclo.frecuenciaCicloPersonal;
   } catch (e) {
     error.value = extractErrorMessage(e);
   } finally {
@@ -290,7 +309,29 @@ const categoriasParaIngreso = computed(() => categorias.value.filter((c) => c.ap
     <p v-if="loading" class="text-sm text-ink-secondary">Cargando…</p>
 
     <template v-else>
-      <div v-if="tabActiva === 'metodos'" class="space-y-6">
+      <div v-if="tabActiva === 'ciclo'" class="space-y-6">
+        <form class="grid grid-cols-1 sm:grid-cols-2 gap-4" @submit.prevent="onGuardarCiclo">
+          <div>
+            <label class="label">Frecuencia</label>
+            <select v-model="frecuenciaCicloPersonal" class="field">
+              <option value="semanal">Semanal</option>
+              <option value="quincenal">Quincenal</option>
+              <option value="mensual">Mensual</option>
+            </select>
+          </div>
+          <div class="sm:col-span-2">
+            <button type="submit" class="btn-primary" :disabled="guardandoCiclo">
+              {{ guardandoCiclo ? 'Guardando…' : 'Guardar frecuencia' }}
+            </button>
+          </div>
+        </form>
+        <p class="text-xs text-ink-tertiary">
+          Define los períodos que usan "Disponible" y el resto del panel personal (ej. quincenal =
+          del 1 al 15 y del 16 a fin de mes) — independiente de la frecuencia de corte del hogar.
+        </p>
+      </div>
+
+      <div v-else-if="tabActiva === 'metodos'" class="space-y-6">
         <form class="flex gap-3" @submit.prevent="onCrearMetodo">
           <FormField v-model="nuevoMetodoNombre" label="Nuevo método" placeholder="Nequi, Efectivo…" required />
           <button type="submit" class="btn-primary self-end" :disabled="creandoMetodo">

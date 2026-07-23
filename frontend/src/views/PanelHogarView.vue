@@ -4,6 +4,7 @@ import AppHeader from '../components/AppHeader.vue';
 import AppModal from '../components/AppModal.vue';
 import PanelRecurrentesSection from '../components/hogar/PanelRecurrentesSection.vue';
 import PanelVariablesSection from '../components/hogar/PanelVariablesSection.vue';
+import ResumenHogarSection from '../components/hogar/ResumenHogarSection.vue';
 
 const mostrarRecurrentes = ref(false);
 </script>
@@ -23,6 +24,7 @@ const mostrarRecurrentes = ref(false);
         </button>
       </div>
 
+      <ResumenHogarSection />
       <PanelVariablesSection />
     </main>
 
