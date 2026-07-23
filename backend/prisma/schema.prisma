@@ -13,11 +13,6 @@ enum FrecuenciaCorte {
   mensual
 }
 
-enum TipoGastoPersonal {
-  recurrente
-  puntual
-}
-
 enum OrigenGasto {
   app
   bot
@@ -49,34 +44,56 @@ enum TipoOrigenCorteItem {
   variable
 }
 
-model Usuario {
-  id                      String          @id @default(uuid())
-  nombre                  String
-  usuario                 String          @unique
-  passwordHash            String          @map("password_hash")
-  hogarId                 String?         @map("hogar_id")
-  esAdmin                 Boolean         @default(false) @map("es_admin")
-  puedeEditarGastos       Boolean         @default(false) @map("puede_editar_gastos")
-  puedeInvitar            Boolean         @default(false) @map("puede_invitar")
-  frecuenciaCortePersonal FrecuenciaCorte @default(mensual) @map("frecuencia_corte_personal")
-  creadoEn                DateTime        @default(now()) @map("creado_en")
+enum ModoFijoPersonal {
+  automatico
+  manual
+}
 
-  hogar                          Hogar?                            @relation(fields: [hogarId], references: [id])
-  invitacionesCreadas            InvitacionHogar[]                 @relation("invitacionesCreadas")
-  gastosPersonales               GastoPersonal[]
-  splitPorcentajes               SplitPorcentajeMiembro[]
-  transferenciasComoAnterior     LogTransferenciaAdmin[]           @relation("transferenciaAnterior")
-  transferenciasComoNuevo        LogTransferenciaAdmin[]           @relation("transferenciaNueva")
-  conceptosComoPagadorDefault    ConceptoRecurrentePareja[]
-  gastosRecurrentesComoPagador   GastoRecurrenteInstancia[]        @relation("gastoRecurrentePagador")
-  repartosGastoRecurrente        GastoRecurrenteInstanciaReparto[] @relation("repartoGastoRecurrente")
-  gastosVariablesComoPagador     GastoVariablePareja[]             @relation("gastoVariablePagador")
-  repartosGastoVariable          GastoVariableParejaReparto[]      @relation("repartoGastoVariable")
-  cortesCreados                  Corte[]                           @relation("corteCreadoPor")
-  balancesCorte                  CorteBalanceMiembro[]
-  puntosCortePersonales          PuntoCortePersonal[]
-  conceptosRecurrentesPersonales ConceptoRecurrentePersonal[]
-  cortesPersonales               CortePersonal[]
+enum EstadoPagoPersonal {
+  pagado
+  pendiente
+}
+
+enum EstadoIngresoPersonal {
+  recibido
+  pendiente
+}
+
+enum AplicaCategoriaPersonal {
+  gasto
+  ingreso
+  ahorro
+}
+
+model Usuario {
+  id                String   @id @default(uuid())
+  nombre            String
+  usuario           String   @unique
+  passwordHash      String   @map("password_hash")
+  hogarId           String?  @map("hogar_id")
+  esAdmin           Boolean  @default(false) @map("es_admin")
+  puedeEditarGastos Boolean  @default(false) @map("puede_editar_gastos")
+  puedeInvitar      Boolean  @default(false) @map("puede_invitar")
+  creadoEn          DateTime @default(now()) @map("creado_en")
+
+  hogar                        Hogar?                            @relation(fields: [hogarId], references: [id])
+  invitacionesCreadas          InvitacionHogar[]                 @relation("invitacionesCreadas")
+  gastosPersonales             GastoPersonal[]
+  ingresosPersonales           IngresoPersonal[]
+  metodosPagoPersonales        MetodoPagoPersonal[]
+  categoriasPersonales         CategoriaPersonal[]
+  gastosFijosConfig            GastoFijoConfig[]
+  ingresosFijosConfig          IngresoFijoConfig[]
+  splitPorcentajes             SplitPorcentajeMiembro[]
+  transferenciasComoAnterior   LogTransferenciaAdmin[]           @relation("transferenciaAnterior")
+  transferenciasComoNuevo      LogTransferenciaAdmin[]           @relation("transferenciaNueva")
+  conceptosComoPagadorDefault  ConceptoRecurrentePareja[]
+  gastosRecurrentesComoPagador GastoRecurrenteInstancia[]        @relation("gastoRecurrentePagador")
+  repartosGastoRecurrente      GastoRecurrenteInstanciaReparto[] @relation("repartoGastoRecurrente")
+  gastosVariablesComoPagador   GastoVariablePareja[]             @relation("gastoVariablePagador")
+  repartosGastoVariable        GastoVariableParejaReparto[]      @relation("repartoGastoVariable")
+  cortesCreados                Corte[]                           @relation("corteCreadoPor")
+  balancesCorte                CorteBalanceMiembro[]
 
   @@index([hogarId])
   @@map("usuarios")
@@ -136,21 +153,132 @@ model InvitacionHogar {
   @@map("invitaciones_hogar")
 }
 
-model GastoPersonal {
-  id          String            @id @default(uuid())
-  usuarioId   String            @map("usuario_id")
-  categoria   String?
-  monto       Int
-  fecha       DateTime
-  descripcion String?
-  tipo        TipoGastoPersonal @default(puntual)
-  origen      OrigenGasto       @default(app)
-  creadoEn    DateTime          @default(now()) @map("creado_en")
+// --- Panel personal: catálogos + gastos/ingresos fijos-o-esporádicos ---
+// Un gasto/ingreso "fijo" (con origenConfigId) y uno esporádico (sin él) viven
+// en la misma tabla — no hay evento de "corte"/cierre: la fila generada por un
+// fijo YA ES el gasto/ingreso real desde que existe (`estado` decide si ya
+// afecta el disponible o sigue pendiente). Ver Modulo_Panel_Personal_Ajustes.md.
 
-  usuario Usuario @relation(fields: [usuarioId], references: [id])
+model MetodoPagoPersonal {
+  id        String @id @default(uuid())
+  usuarioId String @map("usuario_id")
+  nombre    String
+
+  usuario           Usuario           @relation(fields: [usuarioId], references: [id])
+  gastos            GastoPersonal[]
+  gastosFijosConfig GastoFijoConfig[]
+  ingresos          IngresoPersonal[]
 
   @@index([usuarioId])
+  @@map("metodos_pago_personales")
+}
+
+model CategoriaPersonal {
+  id        String                    @id @default(uuid())
+  usuarioId String                    @map("usuario_id")
+  nombre    String
+  aplicaA   AplicaCategoriaPersonal[] @map("aplica_a")
+
+  usuario             Usuario             @relation(fields: [usuarioId], references: [id])
+  gastos              GastoPersonal[]
+  gastosFijosConfig   GastoFijoConfig[]
+  ingresos            IngresoPersonal[]
+  ingresosFijosConfig IngresoFijoConfig[]
+
+  @@index([usuarioId])
+  @@map("categorias_personales")
+}
+
+model GastoFijoConfig {
+  id                  String           @id @default(uuid())
+  usuarioId           String           @map("usuario_id")
+  nombre              String
+  monto               Int
+  frecuencia          FrecuenciaCorte
+  // Ancla la primera ocurrencia — las siguientes se calculan sumando el paso de
+  // la frecuencia (7/15/1 mes) desde acá, sin depender de "puntos de corte"
+  // compartidos como el hogar (ver asegurarInstanciasFijas en gastosPersonales.service.js).
+  fechaInicio         DateTime         @map("fecha_inicio")
+  modoCobro           ModoFijoPersonal @map("modo_cobro")
+  esObligatorio       Boolean          @default(false) @map("es_obligatorio")
+  metodoPagoIdDefault String?          @map("metodo_pago_id_default")
+  categoriaId         String?          @map("categoria_id")
+  activo              Boolean          @default(true)
+  creadoEn            DateTime         @default(now()) @map("creado_en")
+
+  usuario           Usuario             @relation(fields: [usuarioId], references: [id])
+  metodoPagoDefault MetodoPagoPersonal? @relation(fields: [metodoPagoIdDefault], references: [id])
+  categoria         CategoriaPersonal?  @relation(fields: [categoriaId], references: [id])
+  instancias        GastoPersonal[]
+
+  @@index([usuarioId])
+  @@map("gastos_fijos_config")
+}
+
+model IngresoFijoConfig {
+  id          String           @id @default(uuid())
+  usuarioId   String           @map("usuario_id")
+  nombre      String
+  monto       Int
+  frecuencia  FrecuenciaCorte
+  fechaInicio DateTime         @map("fecha_inicio")
+  modo        ModoFijoPersonal
+  categoriaId String?          @map("categoria_id")
+  activo      Boolean          @default(true)
+  creadoEn    DateTime         @default(now()) @map("creado_en")
+
+  usuario    Usuario            @relation(fields: [usuarioId], references: [id])
+  categoria  CategoriaPersonal? @relation(fields: [categoriaId], references: [id])
+  instancias IngresoPersonal[]
+
+  @@index([usuarioId])
+  @@map("ingresos_fijos_config")
+}
+
+model GastoPersonal {
+  id             String             @id @default(uuid())
+  usuarioId      String             @map("usuario_id")
+  origenConfigId String?            @map("origen_config_id")
+  monto          Int
+  fecha          DateTime
+  descripcion    String?
+  estado         EstadoPagoPersonal @default(pagado)
+  esObligatorio  Boolean            @default(false) @map("es_obligatorio")
+  metodoPagoId   String?            @map("metodo_pago_id")
+  categoriaId    String?            @map("categoria_id")
+  origen         OrigenGasto        @default(app)
+  creadoEn       DateTime           @default(now()) @map("creado_en")
+
+  usuario      Usuario             @relation(fields: [usuarioId], references: [id])
+  origenConfig GastoFijoConfig?    @relation(fields: [origenConfigId], references: [id])
+  metodoPago   MetodoPagoPersonal? @relation(fields: [metodoPagoId], references: [id])
+  categoria    CategoriaPersonal?  @relation(fields: [categoriaId], references: [id])
+
+  @@unique([origenConfigId, fecha])
+  @@index([usuarioId])
   @@map("gastos_personales")
+}
+
+model IngresoPersonal {
+  id             String                @id @default(uuid())
+  usuarioId      String                @map("usuario_id")
+  origenConfigId String?               @map("origen_config_id")
+  monto          Int
+  fecha          DateTime
+  estado         EstadoIngresoPersonal @default(recibido)
+  metodoPagoId   String?               @map("metodo_pago_id")
+  categoriaId    String?               @map("categoria_id")
+  origen         OrigenGasto           @default(app)
+  creadoEn       DateTime              @default(now()) @map("creado_en")
+
+  usuario      Usuario             @relation(fields: [usuarioId], references: [id])
+  origenConfig IngresoFijoConfig?  @relation(fields: [origenConfigId], references: [id])
+  metodoPago   MetodoPagoPersonal? @relation(fields: [metodoPagoId], references: [id])
+  categoria    CategoriaPersonal?  @relation(fields: [categoriaId], references: [id])
+
+  @@unique([origenConfigId, fecha])
+  @@index([usuarioId])
+  @@map("ingresos_personales")
 }
 
 model ConceptoRecurrentePareja {
@@ -331,110 +459,4 @@ model CorteBalanceMiembro {
   @@unique([corteId, usuarioId])
   @@index([corteId])
   @@map("corte_balance_miembro")
-}
-
-// --- Recurrentes personales: mismo patrón que los de pareja (concepto +
-// instancia por período + mini-corte de revisión), pero a nivel de una sola
-// persona — sin pagador ni reparto (nadie más con quien liquidar) y sin
-// balance al confirmar. Frecuencia y puntos de corte propios por usuario,
-// independientes de los del hogar. Al confirmar un CortePersonal, cada ítem
-// incluido se materializa como un GastoPersonal real (ver cortesPersonales.service.js).
-
-model PuntoCortePersonal {
-  id         String @id @default(uuid())
-  usuarioId  String @map("usuario_id")
-  orden      Int
-  referencia String
-
-  diaMes    Int? @map("dia_mes")
-  diaSemana Int? @map("dia_semana")
-
-  usuario             Usuario                            @relation(fields: [usuarioId], references: [id])
-  conceptoPuntosCorte ConceptoPuntoCortePersonal[]
-  instancias          GastoRecurrentePersonalInstancia[]
-
-  @@unique([usuarioId, orden])
-  @@index([usuarioId])
-  @@map("puntos_corte_personal")
-}
-
-model ConceptoRecurrentePersonal {
-  id           String            @id @default(uuid())
-  usuarioId    String            @map("usuario_id")
-  nombre       String
-  categoria    String?
-  activo       Boolean           @default(true)
-  tipoMonto    TipoMontoConcepto @map("tipo_monto")
-  montoDefault Int?              @map("monto_default")
-  creadoEn     DateTime          @default(now()) @map("creado_en")
-
-  usuario     Usuario                            @relation(fields: [usuarioId], references: [id])
-  puntosCorte ConceptoPuntoCortePersonal[]
-  instancias  GastoRecurrentePersonalInstancia[]
-
-  @@index([usuarioId])
-  @@map("conceptos_recurrentes_personal")
-}
-
-model ConceptoPuntoCortePersonal {
-  id           String @id @default(uuid())
-  conceptoId   String @map("concepto_id")
-  puntoCorteId String @map("punto_corte_id")
-
-  concepto   ConceptoRecurrentePersonal @relation(fields: [conceptoId], references: [id])
-  puntoCorte PuntoCortePersonal         @relation(fields: [puntoCorteId], references: [id])
-
-  @@unique([conceptoId, puntoCorteId])
-  @@index([conceptoId])
-  @@map("concepto_puntos_corte_personal")
-}
-
-model GastoRecurrentePersonalInstancia {
-  id            String            @id @default(uuid())
-  conceptoId    String            @map("concepto_id")
-  periodoInicio DateTime          @map("periodo_inicio")
-  puntoCorteId  String            @map("punto_corte_id")
-  fechaNominal  DateTime          @map("fecha_nominal")
-  monto         Int?
-  estado        EstadoGastoPareja @default(pendiente)
-  creadoEn      DateTime          @default(now()) @map("creado_en")
-
-  concepto   ConceptoRecurrentePersonal @relation(fields: [conceptoId], references: [id])
-  puntoCorte PuntoCortePersonal         @relation(fields: [puntoCorteId], references: [id])
-  items      CorteItemPersonal[]
-
-  @@unique([conceptoId, periodoInicio, puntoCorteId])
-  @@index([puntoCorteId])
-  @@map("gastos_recurrentes_personal_instancia")
-}
-
-model CortePersonal {
-  id             String      @id @default(uuid())
-  usuarioId      String      @map("usuario_id")
-  fechaNominal   DateTime    @map("fecha_nominal")
-  fechaEjecucion DateTime?   @map("fecha_ejecucion")
-  estado         EstadoCorte @default(abierto)
-  creadoEn       DateTime    @default(now()) @map("creado_en")
-
-  usuario Usuario             @relation(fields: [usuarioId], references: [id])
-  items   CorteItemPersonal[]
-
-  @@unique([usuarioId, fechaNominal])
-  @@index([usuarioId])
-  @@map("cortes_personal")
-}
-
-model CorteItemPersonal {
-  id              String  @id @default(uuid())
-  cortePersonalId String  @map("corte_personal_id")
-  instanciaId     String  @map("instancia_id")
-  incluido        Boolean @default(true)
-  monto           Int?
-
-  cortePersonal CortePersonal                    @relation(fields: [cortePersonalId], references: [id])
-  instancia     GastoRecurrentePersonalInstancia @relation(fields: [instanciaId], references: [id])
-
-  @@unique([cortePersonalId, instanciaId])
-  @@index([cortePersonalId])
-  @@map("corte_items_personal")
 }

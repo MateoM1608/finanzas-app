@@ -1,9 +1,6 @@
 import { prisma } from '../../config/prisma.js';
 import { HttpError } from '../../middleware/errorHandler.js';
 import { hashPassword, comparePassword } from '../../utils/password.js';
-import { puntosCorteDefault } from '../../utils/puntosCorteDefault.js';
-
-const FRECUENCIA_CORTE_PERSONAL_DEFAULT = 'mensual';
 
 export async function registerUsuario({ nombre, usuario, password }) {
   const existente = await prisma.usuario.findUnique({ where: { usuario } });
@@ -13,15 +10,7 @@ export async function registerUsuario({ nombre, usuario, password }) {
 
   const passwordHash = await hashPassword(password);
   return prisma.usuario.create({
-    data: {
-      nombre,
-      usuario,
-      passwordHash,
-      frecuenciaCortePersonal: FRECUENCIA_CORTE_PERSONAL_DEFAULT,
-      puntosCortePersonales: {
-        create: puntosCorteDefault(FRECUENCIA_CORTE_PERSONAL_DEFAULT),
-      },
-    },
+    data: { nombre, usuario, passwordHash },
   });
 }
 

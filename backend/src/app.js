@@ -10,9 +10,11 @@ import { gastosRecurrentesRouter } from './modules/gastosRecurrentes/gastosRecur
 import { gastosVariablesRouter } from './modules/gastosVariables/gastosVariables.routes.js';
 import { cortesRouter } from './modules/cortes/cortes.routes.js';
 import { dashboardRouter } from './modules/dashboard/dashboard.routes.js';
-import { configuracionPersonalRouter } from './modules/configuracionPersonal/configuracionPersonal.routes.js';
-import { conceptosRecurrentesPersonalesRouter } from './modules/conceptosRecurrentesPersonales/conceptosRecurrentesPersonales.routes.js';
-import { cortesPersonalesRouter } from './modules/cortesPersonales/cortesPersonales.routes.js';
+import { metodosPagoPersonalesRouter } from './modules/metodosPagoPersonales/metodosPagoPersonales.routes.js';
+import { categoriasPersonalesRouter } from './modules/categoriasPersonales/categoriasPersonales.routes.js';
+import { gastosFijosConfigRouter } from './modules/gastosFijosConfig/gastosFijosConfig.routes.js';
+import { ingresosFijosConfigRouter } from './modules/ingresosFijosConfig/ingresosFijosConfig.routes.js';
+import { ingresosPersonalesRouter } from './modules/ingresosPersonales/ingresosPersonales.routes.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 
 export const app = express();
@@ -31,9 +33,11 @@ app.use('/api/gastos-recurrentes', gastosRecurrentesRouter);
 app.use('/api/gastos-variables', gastosVariablesRouter);
 app.use('/api/cortes', cortesRouter);
 app.use('/api/dashboard', dashboardRouter);
-app.use('/api/configuracion-personal', configuracionPersonalRouter);
-app.use('/api/conceptos-recurrentes-personales', conceptosRecurrentesPersonalesRouter);
-app.use('/api/cortes-personales', cortesPersonalesRouter);
+app.use('/api/metodos-pago-personales', metodosPagoPersonalesRouter);
+app.use('/api/categorias-personales', categoriasPersonalesRouter);
+app.use('/api/gastos-fijos-config', gastosFijosConfigRouter);
+app.use('/api/ingresos-fijos-config', ingresosFijosConfigRouter);
+app.use('/api/ingresos-personales', ingresosPersonalesRouter);
 
 app.use(notFoundHandler);
 app.use(errorHandler);

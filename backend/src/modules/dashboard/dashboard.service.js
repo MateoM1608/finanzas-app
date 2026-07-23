@@ -11,8 +11,12 @@ function claveMes(fecha) {
 }
 
 export async function obtenerDashboardPersonal(usuarioId) {
+  // Solo lo ya `pagado` afecta el disponible/las series — lo `pendiente`
+  // (fijo en modo manual, o esporádico aún sin pagar) no cuenta como gasto
+  // real todavía. Ver Modulo_Panel_Personal_Ajustes.md, sección 5.
   const gastos = await prisma.gastoPersonal.findMany({
-    where: { usuarioId },
+    where: { usuarioId, estado: 'pagado' },
+    include: { categoria: true },
     orderBy: { fecha: 'asc' },
   });
 
@@ -38,7 +42,7 @@ export async function obtenerDashboardPersonal(usuarioId) {
     : gastos;
   const totalesPorCategoria = new Map();
   for (const gasto of gastosVentana) {
-    const categoria = gasto.categoria || 'Sin categoría';
+    const categoria = gasto.categoria?.nombre || 'Sin categoría';
     totalesPorCategoria.set(categoria, (totalesPorCategoria.get(categoria) ?? 0) + gasto.monto);
   }
   const porCategoria = [...totalesPorCategoria.entries()]
