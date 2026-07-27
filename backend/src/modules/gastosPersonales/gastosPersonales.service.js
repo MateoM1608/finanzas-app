@@ -1,11 +1,24 @@
 import { prisma } from '../../config/prisma.js';
 import { HttpError } from '../../middleware/errorHandler.js';
 import { calcularFechasPendientes } from '../../utils/instanciasFijas.js';
+import { evaluarPeriodoSiCorresponde } from '../../utils/evaluacionAhorro.js';
 
 const INCLUDE_GASTO = {
   metodoPago: true,
   categoria: true,
 };
+
+/**
+ * Dispara la evaluación de Ahorros del período que contiene la fecha de este
+ * gasto, cuando queda pagado y es obligatorio — ver
+ * Modulo_Panel_Personal_Ajustes.md sección 6.4. Es idempotente (no hace nada
+ * si ese período ya fue evaluado), así que no importa si se llama de más.
+ */
+async function evaluarSiObligatorioPagado(gasto) {
+  if (gasto.esObligatorio && gasto.estado === 'pagado') {
+    await evaluarPeriodoSiCorresponde(gasto.usuarioId, gasto.fecha);
+  }
+}
 
 /**
  * Genera (si no existen ya) las ocurrencias de cada concepto fijo activo
@@ -56,11 +69,13 @@ export async function listarGastosPersonales(usuarioId) {
   });
 }
 
-export function crearGastoPersonal(usuarioId, data) {
-  return prisma.gastoPersonal.create({
+export async function crearGastoPersonal(usuarioId, data) {
+  const gasto = await prisma.gastoPersonal.create({
     data: { ...data, usuarioId },
     include: INCLUDE_GASTO,
   });
+  await evaluarSiObligatorioPagado(gasto);
+  return gasto;
 }
 
 export async function actualizarGastoPersonal(usuarioId, gastoId, data) {
@@ -69,11 +84,13 @@ export async function actualizarGastoPersonal(usuarioId, gastoId, data) {
     throw new HttpError(404, 'Gasto no encontrado');
   }
 
-  return prisma.gastoPersonal.update({
+  const actualizado = await prisma.gastoPersonal.update({
     where: { id: gastoId },
     data,
     include: INCLUDE_GASTO,
   });
+  await evaluarSiObligatorioPagado(actualizado);
+  return actualizado;
 }
 
 export async function eliminarGastoPersonal(usuarioId, gastoId) {

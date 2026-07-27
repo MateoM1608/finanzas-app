@@ -12,11 +12,18 @@ import AlertError from '../components/AlertError.vue';
 import AppModal from '../components/AppModal.vue';
 import ConfiguracionPersonalSection from '../components/personal/ConfiguracionPersonalSection.vue';
 import ResumenPersonalSection from '../components/personal/ResumenPersonalSection.vue';
+import AhorrosPersonalesSection from '../components/personal/AhorrosPersonalesSection.vue';
 
 const mostrarConfig = ref(false);
 const loading = ref(true);
 const error = ref('');
 const resumenRef = ref(null);
+const ahorrosRef = ref(null);
+
+function recargarResumenes() {
+  resumenRef.value?.recargar();
+  ahorrosRef.value?.recargar();
+}
 
 const categorias = ref([]);
 const metodos = ref([]);
@@ -60,7 +67,7 @@ async function onAgregarGasto() {
     gMetodoPagoId.value = '';
     gEsObligatorio.value = false;
     gEstado.value = 'pagado';
-    resumenRef.value?.recargar();
+    recargarResumenes();
   } catch (e) {
     error.value = extractErrorMessage(e);
   } finally {
@@ -77,7 +84,7 @@ async function onToggleEstadoGasto(gasto) {
     });
     const idx = gastos.value.findIndex((g) => g.id === gasto.id);
     gastos.value[idx] = actualizado;
-    resumenRef.value?.recargar();
+    recargarResumenes();
   } catch (e) {
     error.value = extractErrorMessage(e);
   } finally {
@@ -91,7 +98,7 @@ async function onEliminarGasto(id) {
   try {
     await eliminarGasto(id);
     gastos.value = gastos.value.filter((g) => g.id !== id);
-    resumenRef.value?.recargar();
+    recargarResumenes();
   } catch (e) {
     error.value = extractErrorMessage(e);
   } finally {
@@ -130,7 +137,7 @@ async function onAgregarIngreso() {
     iCategoriaId.value = '';
     iMetodoPagoId.value = '';
     iEstado.value = 'recibido';
-    resumenRef.value?.recargar();
+    recargarResumenes();
   } catch (e) {
     error.value = extractErrorMessage(e);
   } finally {
@@ -147,7 +154,7 @@ async function onToggleEstadoIngreso(ingreso) {
     });
     const idx = ingresos.value.findIndex((i) => i.id === ingreso.id);
     ingresos.value[idx] = actualizado;
-    resumenRef.value?.recargar();
+    recargarResumenes();
   } catch (e) {
     error.value = extractErrorMessage(e);
   } finally {
@@ -161,7 +168,7 @@ async function onEliminarIngreso(id) {
   try {
     await eliminarIngreso(id);
     ingresos.value = ingresos.value.filter((i) => i.id !== id);
-    resumenRef.value?.recargar();
+    recargarResumenes();
   } catch (e) {
     error.value = extractErrorMessage(e);
   } finally {
@@ -192,6 +199,11 @@ onMounted(cargarTodo);
 
     <main class="max-w-3xl mx-auto px-4 sm:px-6 py-10 space-y-8">
       <ResumenPersonalSection ref="resumenRef" />
+
+      <section class="card p-6 sm:p-8">
+        <h2 class="text-base font-semibold text-ink-primary mb-5">Ahorros</h2>
+        <AhorrosPersonalesSection ref="ahorrosRef" />
+      </section>
 
       <AlertError :message="error" />
 

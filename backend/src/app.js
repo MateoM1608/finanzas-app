@@ -16,6 +16,7 @@ import { ingresosFijosConfigRouter } from './modules/ingresosFijosConfig/ingreso
 import { ingresosPersonalesRouter } from './modules/ingresosPersonales/ingresosPersonales.routes.js';
 import { cicloPersonalRouter } from './modules/cicloPersonal/cicloPersonal.routes.js';
 import { resumenPersonalRouter } from './modules/resumenPersonal/resumenPersonal.routes.js';
+import { ahorrosPersonalesRouter } from './modules/ahorrosPersonales/ahorrosPersonales.routes.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 
 export const app = express();
@@ -40,6 +41,7 @@ app.use('/api/ingresos-fijos-config', ingresosFijosConfigRouter);
 app.use('/api/ingresos-personales', ingresosPersonalesRouter);
 app.use('/api/ciclo-personal', cicloPersonalRouter);
 app.use('/api/resumen-personal', resumenPersonalRouter);
+app.use('/api/ahorros-personales', ahorrosPersonalesRouter);
 
 app.use(notFoundHandler);
 app.use(errorHandler);

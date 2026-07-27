@@ -89,6 +89,8 @@ model Usuario {
   categoriasPersonales         CategoriaPersonal[]
   gastosFijosConfig            GastoFijoConfig[]
   ingresosFijosConfig          IngresoFijoConfig[]
+  ahorrosPersonales            AhorroPersonal[]
+  periodosAhorroEvaluados      PeriodoAhorroEvaluado[]
   splitPorcentajes             SplitPorcentajeMiembro[]
   transferenciasComoAnterior   LogTransferenciaAdmin[]           @relation("transferenciaAnterior")
   transferenciasComoNuevo      LogTransferenciaAdmin[]           @relation("transferenciaNueva")
@@ -189,6 +191,7 @@ model CategoriaPersonal {
   gastosFijosConfig   GastoFijoConfig[]
   ingresos            IngresoPersonal[]
   ingresosFijosConfig IngresoFijoConfig[]
+  ahorros             AhorroPersonal[]
 
   @@index([usuarioId])
   @@map("categorias_personales")
@@ -464,4 +467,97 @@ model CorteBalanceMiembro {
   @@unique([corteId, usuarioId])
   @@index([corteId])
   @@map("corte_balance_miembro")
+}
+
+// --- Panel personal: Ahorros con ciclos (Fase 7, Etapa 3) ---
+// regla_tipo/regla_valor solo generan la sugerencia (AhorroPronostico), nunca
+// mueven plata directamente; modo_transaccion=automatico es lo único que sí
+// crea una AhorroTransaccion real, y usa el propio monto sugerido (no un
+// monto aparte). monto_ahorrado_real y el color del semáforo NO se guardan
+// como columna — se calculan en vivo sumando AhorroTransaccion dentro del
+// rango del periodo ya evaluado (ver ahorrosPersonales.service.js).
+
+enum ReglaAhorroTipo {
+  porcentaje
+  monto_fijo
+}
+
+enum BaseCalculoAhorro {
+  ingreso_menos_obligatorios
+  disponible_total
+}
+
+enum OrigenAhorroTransaccion {
+  manual
+  automatico
+  bot
+}
+
+model AhorroPersonal {
+  id              String            @id @default(uuid())
+  usuarioId       String            @map("usuario_id")
+  nombre          String
+  montoMetaTotal  Int?              @map("monto_meta_total")
+  reglaTipo       ReglaAhorroTipo   @map("regla_tipo")
+  reglaValor      Int               @map("regla_valor")
+  baseCalculo     BaseCalculoAhorro @default(ingreso_menos_obligatorios) @map("base_calculo")
+  modoTransaccion ModoFijoPersonal  @map("modo_transaccion")
+  categoriaId     String?           @map("categoria_id")
+  activo          Boolean           @default(true)
+  creadoEn        DateTime          @default(now()) @map("creado_en")
+
+  usuario       Usuario             @relation(fields: [usuarioId], references: [id])
+  categoria     CategoriaPersonal?  @relation(fields: [categoriaId], references: [id])
+  transacciones AhorroTransaccion[]
+  pronosticos   AhorroPronostico[]
+
+  @@index([usuarioId])
+  @@map("ahorros_personales")
+}
+
+model AhorroTransaccion {
+  id       String                  @id @default(uuid())
+  ahorroId String                  @map("ahorro_id")
+  monto    Int
+  fecha    DateTime
+  origen   OrigenAhorroTransaccion @default(manual)
+  creadoEn DateTime                @default(now()) @map("creado_en")
+
+  ahorro AhorroPersonal @relation(fields: [ahorroId], references: [id])
+
+  @@index([ahorroId])
+  @@map("ahorro_transacciones")
+}
+
+model PeriodoAhorroEvaluado {
+  id                          String   @id @default(uuid())
+  usuarioId                   String   @map("usuario_id")
+  periodoInicio               DateTime @map("periodo_inicio")
+  periodoFin                  DateTime @map("periodo_fin")
+  ingresoPeriodo              Int      @map("ingreso_periodo")
+  gastosObligatoriosPeriodo   Int      @map("gastos_obligatorios_periodo")
+  gastosNoObligatoriosPeriodo Int      @map("gastos_no_obligatorios_periodo")
+  baseCalculoAhorro           Int      @map("base_calculo_ahorro")
+  evaluadoEn                  DateTime @default(now()) @map("evaluado_en")
+
+  usuario     Usuario            @relation(fields: [usuarioId], references: [id])
+  pronosticos AhorroPronostico[]
+
+  @@unique([usuarioId, periodoInicio])
+  @@index([usuarioId])
+  @@map("periodos_ahorro_evaluados")
+}
+
+model AhorroPronostico {
+  id            String @id @default(uuid())
+  ahorroId      String @map("ahorro_id")
+  periodoId     String @map("periodo_id")
+  montoSugerido Int    @map("monto_sugerido")
+
+  ahorro  AhorroPersonal        @relation(fields: [ahorroId], references: [id])
+  periodo PeriodoAhorroEvaluado @relation(fields: [periodoId], references: [id])
+
+  @@unique([ahorroId, periodoId])
+  @@index([periodoId])
+  @@map("ahorro_pronosticos")
 }

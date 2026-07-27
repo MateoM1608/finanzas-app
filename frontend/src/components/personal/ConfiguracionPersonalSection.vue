@@ -23,6 +23,12 @@ import {
   eliminarIngresoFijo,
 } from '../../api/ingresosFijosConfig.js';
 import { obtenerCicloPersonal, actualizarCicloPersonal } from '../../api/cicloPersonal.js';
+import {
+  listarAhorros,
+  crearAhorro,
+  actualizarAhorro,
+  eliminarAhorro,
+} from '../../api/ahorrosPersonales.js';
 import { extractErrorMessage } from '../../api/client.js';
 import { formatCurrency } from '../../utils/format.js';
 import FormField from '../FormField.vue';
@@ -34,6 +40,7 @@ const TABS = [
   { key: 'categorias', label: 'Categorías' },
   { key: 'gastosFijos', label: 'Gastos fijos' },
   { key: 'ingresosFijos', label: 'Ingresos fijos' },
+  { key: 'ahorros', label: 'Metas de ahorro' },
 ];
 const tabActiva = ref('ciclo');
 
@@ -46,6 +53,7 @@ const metodos = ref([]);
 const categorias = ref([]);
 const gastosFijos = ref([]);
 const ingresosFijos = ref([]);
+const ahorros = ref([]);
 const frecuenciaCicloPersonal = ref('mensual');
 const guardandoCiclo = ref(false);
 
@@ -65,18 +73,20 @@ async function onGuardarCiclo() {
 async function cargar() {
   loading.value = true;
   try {
-    const [m, c, gf, inf, ciclo] = await Promise.all([
+    const [m, c, gf, inf, ciclo, ah] = await Promise.all([
       listarMetodosPago(),
       listarCategorias(),
       listarGastosFijos(),
       listarIngresosFijos(),
       obtenerCicloPersonal(),
+      listarAhorros(),
     ]);
     metodos.value = m;
     categorias.value = c;
     gastosFijos.value = gf;
     ingresosFijos.value = inf;
     frecuenciaCicloPersonal.value = ciclo.frecuenciaCicloPersonal;
+    ahorros.value = ah;
   } catch (e) {
     error.value = extractErrorMessage(e);
   } finally {
@@ -286,8 +296,74 @@ async function onEliminarIngresoFijo(config) {
   }
 }
 
+// --- Metas de ahorro ---
+const ah = reactive({
+  nombre: '',
+  montoMetaTotal: '',
+  reglaTipo: 'porcentaje',
+  reglaValor: '',
+  baseCalculo: 'ingreso_menos_obligatorios',
+  modoTransaccion: 'manual',
+  categoriaId: '',
+});
+const creandoAhorro = ref(false);
+
+async function onCrearAhorro() {
+  error.value = '';
+  creandoAhorro.value = true;
+  try {
+    const nuevo = await crearAhorro({
+      nombre: ah.nombre,
+      montoMetaTotal: ah.montoMetaTotal ? Number(ah.montoMetaTotal) : undefined,
+      reglaTipo: ah.reglaTipo,
+      reglaValor: Number(ah.reglaValor),
+      baseCalculo: ah.baseCalculo,
+      modoTransaccion: ah.modoTransaccion,
+      categoriaId: ah.categoriaId || undefined,
+    });
+    ahorros.value = [...ahorros.value, nuevo];
+    ah.nombre = '';
+    ah.montoMetaTotal = '';
+    ah.reglaValor = '';
+    ah.categoriaId = '';
+  } catch (e) {
+    error.value = extractErrorMessage(e);
+  } finally {
+    creandoAhorro.value = false;
+  }
+}
+
+async function onToggleActivoAhorro(meta) {
+  error.value = '';
+  guardandoId.value = meta.id;
+  try {
+    const actualizado = await actualizarAhorro(meta.id, { activo: !meta.activo });
+    const idx = ahorros.value.findIndex((a) => a.id === meta.id);
+    ahorros.value[idx] = actualizado;
+  } catch (e) {
+    error.value = extractErrorMessage(e);
+  } finally {
+    guardandoId.value = null;
+  }
+}
+
+async function onEliminarAhorro(meta) {
+  if (!confirm(`¿Eliminar "${meta.nombre}"? Esta acción no se puede deshacer.`)) return;
+  error.value = '';
+  eliminandoId.value = meta.id;
+  try {
+    await eliminarAhorro(meta.id);
+    ahorros.value = ahorros.value.filter((a) => a.id !== meta.id);
+  } catch (e) {
+    error.value = extractErrorMessage(e);
+  } finally {
+    eliminandoId.value = null;
+  }
+}
+
 const categoriasParaGasto = computed(() => categorias.value.filter((c) => c.aplicaA.includes('gasto')));
 const categoriasParaIngreso = computed(() => categorias.value.filter((c) => c.aplicaA.includes('ingreso')));
+const categoriasParaAhorro = computed(() => categorias.value.filter((c) => c.aplicaA.includes('ahorro')));
 </script>
 
 <template>
@@ -479,7 +555,7 @@ const categoriasParaIngreso = computed(() => categorias.value.filter((c) => c.ap
         </ul>
       </div>
 
-      <div v-else class="space-y-6">
+      <div v-else-if="tabActiva === 'ingresosFijos'" class="space-y-6">
         <form class="grid grid-cols-1 sm:grid-cols-2 gap-4" @submit.prevent="onCrearIngresoFijo">
           <FormField v-model="inf.nombre" label="Nombre" placeholder="Sueldo, Arriendo que recibo…" required />
           <FormField v-model="inf.monto" type="number" label="Monto (COP)" required />
@@ -538,6 +614,87 @@ const categoriasParaIngreso = computed(() => categorias.value.filter((c) => c.ap
                   class="text-sm text-ink-tertiary hover:text-negative"
                   :disabled="eliminandoId === c.id"
                   @click="onEliminarIngresoFijo(c)"
+                >
+                  Eliminar
+                </button>
+              </div>
+            </div>
+          </li>
+        </ul>
+      </div>
+
+      <div v-else class="space-y-6">
+        <form class="grid grid-cols-1 sm:grid-cols-2 gap-4" @submit.prevent="onCrearAhorro">
+          <FormField v-model="ah.nombre" label="Nombre" placeholder="Viaje a España…" required />
+          <FormField v-model="ah.montoMetaTotal" type="number" label="Monto meta (opcional)" />
+          <div>
+            <label class="label">Regla</label>
+            <select v-model="ah.reglaTipo" class="field">
+              <option value="porcentaje">Porcentaje</option>
+              <option value="monto_fijo">Monto fijo</option>
+            </select>
+          </div>
+          <FormField
+            v-model="ah.reglaValor"
+            type="number"
+            :label="ah.reglaTipo === 'porcentaje' ? 'Porcentaje (%)' : 'Monto (COP)'"
+            required
+          />
+          <div>
+            <label class="label">Base de cálculo</label>
+            <select v-model="ah.baseCalculo" class="field">
+              <option value="ingreso_menos_obligatorios">Ingreso menos obligatorios</option>
+              <option value="disponible_total">Disponible total</option>
+            </select>
+          </div>
+          <div>
+            <label class="label">Modo</label>
+            <select v-model="ah.modoTransaccion" class="field">
+              <option value="manual">Manual (yo registro los aportes)</option>
+              <option value="automatico">Automático (debita el sugerido cada ciclo)</option>
+            </select>
+          </div>
+          <div>
+            <label class="label">Categoría (opcional)</label>
+            <select v-model="ah.categoriaId" class="field">
+              <option value="">Sin definir</option>
+              <option v-for="c in categoriasParaAhorro" :key="c.id" :value="c.id">{{ c.nombre }}</option>
+            </select>
+          </div>
+          <div class="sm:col-span-2">
+            <button type="submit" class="btn-primary" :disabled="creandoAhorro">
+              {{ creandoAhorro ? 'Agregando…' : 'Agregar meta' }}
+            </button>
+          </div>
+        </form>
+
+        <p v-if="!ahorros.length" class="text-sm text-ink-secondary">No hay metas de ahorro todavía.</p>
+        <ul v-else class="divide-y divide-border">
+          <li v-for="meta in ahorros" :key="meta.id" class="py-3">
+            <div class="flex items-center justify-between gap-4">
+              <div>
+                <p class="text-ink-primary font-medium" :class="{ 'opacity-50': !meta.activo }">{{ meta.nombre }}</p>
+                <p class="text-sm text-ink-tertiary">
+                  {{ meta.reglaTipo === 'porcentaje' ? `${meta.reglaValor}%` : formatCurrency(meta.reglaValor) }} ·
+                  {{ meta.baseCalculo === 'disponible_total' ? 'disponible total' : 'ingreso menos obligatorios' }} ·
+                  {{ meta.modoTransaccion === 'automatico' ? 'automático' : 'manual' }}
+                  <template v-if="meta.montoMetaTotal"> · meta {{ formatCurrency(meta.montoMetaTotal) }}</template>
+                </p>
+              </div>
+              <div class="flex items-center gap-3 shrink-0">
+                <label class="inline-flex items-center gap-2 text-sm text-ink-secondary">
+                  <input
+                    type="checkbox"
+                    :checked="meta.activo"
+                    :disabled="guardandoId === meta.id"
+                    @change="onToggleActivoAhorro(meta)"
+                  />
+                  Activo
+                </label>
+                <button
+                  class="text-sm text-ink-tertiary hover:text-negative"
+                  :disabled="eliminandoId === meta.id"
+                  @click="onEliminarAhorro(meta)"
                 >
                   Eliminar
                 </button>
