@@ -13,16 +13,19 @@ import AppModal from '../components/AppModal.vue';
 import ConfiguracionPersonalSection from '../components/personal/ConfiguracionPersonalSection.vue';
 import ResumenPersonalSection from '../components/personal/ResumenPersonalSection.vue';
 import AhorrosPersonalesSection from '../components/personal/AhorrosPersonalesSection.vue';
+import LimitesPersonalesSection from '../components/personal/LimitesPersonalesSection.vue';
 
 const mostrarConfig = ref(false);
 const loading = ref(true);
 const error = ref('');
 const resumenRef = ref(null);
 const ahorrosRef = ref(null);
+const limitesRef = ref(null);
 
 function recargarResumenes() {
   resumenRef.value?.recargar();
   ahorrosRef.value?.recargar();
+  limitesRef.value?.recargar();
 }
 
 const categorias = ref([]);
@@ -201,6 +204,11 @@ onMounted(cargarTodo);
       <ResumenPersonalSection ref="resumenRef" />
 
       <section class="card p-6 sm:p-8">
+        <h2 class="text-base font-semibold text-ink-primary mb-5">Límites</h2>
+        <LimitesPersonalesSection ref="limitesRef" />
+      </section>
+
+      <section class="card p-6 sm:p-8">
         <h2 class="text-base font-semibold text-ink-primary mb-5">Ahorros</h2>
         <AhorrosPersonalesSection ref="ahorrosRef" />
       </section>
@@ -274,6 +282,7 @@ onMounted(cargarTodo);
                   </span>
                   <span v-if="gasto.esObligatorio" class="text-xs text-accent">obligatorio</span>
                   <span v-if="gasto.origenConfigId" class="text-xs text-ink-tertiary">(fijo)</span>
+                  <span v-if="gasto.origenCorteId" class="text-xs text-ink-tertiary">(hogar)</span>
                 </p>
                 <p class="text-sm text-ink-tertiary">
                   {{ formatDate(gasto.fecha) }}
@@ -291,7 +300,7 @@ onMounted(cargarTodo);
                   {{ gasto.estado === 'pagado' ? 'Marcar pendiente' : 'Marcar pagado' }}
                 </button>
                 <button
-                  v-if="!gasto.origenConfigId"
+                  v-if="!gasto.origenConfigId && !gasto.origenCorteId"
                   class="text-sm text-ink-tertiary hover:text-negative transition-colors opacity-0 group-hover:opacity-100"
                   :disabled="eliminandoGastoId === gasto.id"
                   @click="onEliminarGasto(gasto.id)"

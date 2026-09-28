@@ -4,6 +4,7 @@ import { calcularPeriodoActual, calcularProximaFechaNominalPendiente } from '../
 import { asegurarInstanciasRecurrentes } from '../gastosRecurrentes/gastosRecurrentes.service.js';
 import { obtenerSplitVigente, calcularReparto } from '../../utils/reparto.js';
 import { obtenerOrigenesDetalladosPorLote, origenClave } from '../../utils/corteItemOrigen.js';
+import { evaluarPeriodoSiCorresponde } from '../../utils/evaluacionAhorro.js';
 
 const INCLUDE_CORTE = {
   items: true,
@@ -354,6 +355,14 @@ export async function confirmarCorte(usuarioActual, corteId) {
     balancePorMiembro.set(usuarioId, (balancePorMiembro.get(usuarioId) ?? 0) + delta);
   };
 
+  // Independiente del balance (que solo salda cuentas entre quien puso la
+  // plata y quien no): esto es lo que a cada miembro le tocó pagar de verdad
+  // de su bolsillo, sin importar quién pagó el ítem — ver Fase 7, Etapa 5.
+  const repartoPorMiembro = new Map();
+  const sumarReparto = (usuarioId, monto) => {
+    repartoPorMiembro.set(usuarioId, (repartoPorMiembro.get(usuarioId) ?? 0) + monto);
+  };
+
   for (const item of items) {
     if (item.monto == null) {
       throw new HttpError(
@@ -372,6 +381,7 @@ export async function confirmarCorte(usuarioActual, corteId) {
     sumar(pagoUsuarioId, item.monto);
     for (const reparto of origen.repartos) {
       sumar(reparto.usuarioId, -reparto.monto);
+      sumarReparto(reparto.usuarioId, reparto.monto);
     }
   }
 
@@ -388,11 +398,31 @@ export async function confirmarCorte(usuarioActual, corteId) {
       })),
     });
 
+    const gastosPersonales = [...repartoPorMiembro.entries()].filter(([, monto]) => monto > 0);
+    if (gastosPersonales.length) {
+      await tx.gastoPersonal.createMany({
+        data: gastosPersonales.map(([usuarioId, monto]) => ({
+          usuarioId,
+          monto,
+          fecha: corte.fechaNominal,
+          descripcion: `Corte de hogar del ${corte.fechaNominal.toISOString().slice(0, 10)}`,
+          estado: 'pagado',
+          esObligatorio: true,
+          origen: 'corte_hogar',
+          origenCorteId: corteId,
+        })),
+      });
+    }
+
     await tx.corte.update({
       where: { id: corteId },
       data: { estado: 'cerrado', fechaEjecucion: new Date() },
     });
   });
+
+  for (const usuarioId of repartoPorMiembro.keys()) {
+    await evaluarPeriodoSiCorresponde(usuarioId, corte.fechaNominal);
+  }
 
   return obtenerCorte(usuarioActual, corteId);
 }

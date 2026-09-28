@@ -104,6 +104,9 @@ export async function eliminarGastoPersonal(usuarioId, gastoId) {
       'Este gasto viene de un concepto fijo — desactiva el concepto en vez de eliminar esta ocurrencia (si no, volvería a generarse)',
     );
   }
+  if (gasto.origenCorteId) {
+    throw new HttpError(409, 'Este gasto viene de un corte del hogar ya cerrado — no se puede eliminar');
+  }
 
   await prisma.gastoPersonal.delete({ where: { id: gastoId } });
 }

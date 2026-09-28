@@ -29,6 +29,12 @@ import {
   actualizarAhorro,
   eliminarAhorro,
 } from '../../api/ahorrosPersonales.js';
+import {
+  listarLimites,
+  crearLimite,
+  actualizarLimite,
+  eliminarLimite,
+} from '../../api/limitesPersonales.js';
 import { extractErrorMessage } from '../../api/client.js';
 import { formatCurrency } from '../../utils/format.js';
 import FormField from '../FormField.vue';
@@ -41,6 +47,7 @@ const TABS = [
   { key: 'gastosFijos', label: 'Gastos fijos' },
   { key: 'ingresosFijos', label: 'Ingresos fijos' },
   { key: 'ahorros', label: 'Metas de ahorro' },
+  { key: 'limites', label: 'Límites' },
 ];
 const tabActiva = ref('ciclo');
 
@@ -54,6 +61,7 @@ const categorias = ref([]);
 const gastosFijos = ref([]);
 const ingresosFijos = ref([]);
 const ahorros = ref([]);
+const limites = ref([]);
 const frecuenciaCicloPersonal = ref('mensual');
 const guardandoCiclo = ref(false);
 
@@ -73,13 +81,14 @@ async function onGuardarCiclo() {
 async function cargar() {
   loading.value = true;
   try {
-    const [m, c, gf, inf, ciclo, ah] = await Promise.all([
+    const [m, c, gf, inf, ciclo, ah, lim] = await Promise.all([
       listarMetodosPago(),
       listarCategorias(),
       listarGastosFijos(),
       listarIngresosFijos(),
       obtenerCicloPersonal(),
       listarAhorros(),
+      listarLimites(),
     ]);
     metodos.value = m;
     categorias.value = c;
@@ -87,6 +96,7 @@ async function cargar() {
     ingresosFijos.value = inf;
     frecuenciaCicloPersonal.value = ciclo.frecuenciaCicloPersonal;
     ahorros.value = ah;
+    limites.value = lim;
   } catch (e) {
     error.value = extractErrorMessage(e);
   } finally {
@@ -361,6 +371,73 @@ async function onEliminarAhorro(meta) {
   }
 }
 
+// --- Límites y alertas ---
+const li = reactive({
+  nombre: '',
+  tipoObjetivo: 'categoria',
+  categoriaId: '',
+  reglaTipo: 'porcentaje',
+  reglaValor: '',
+});
+const creandoLimite = ref(false);
+
+async function onCrearLimite() {
+  error.value = '';
+  creandoLimite.value = true;
+  try {
+    const nuevo = await crearLimite({
+      nombre: li.nombre,
+      tipoObjetivo: li.tipoObjetivo,
+      categoriaId: li.tipoObjetivo === 'categoria' ? li.categoriaId || undefined : undefined,
+      reglaTipo: li.reglaTipo,
+      reglaValor: Number(li.reglaValor),
+    });
+    limites.value = [...limites.value, nuevo];
+    li.nombre = '';
+    li.categoriaId = '';
+    li.reglaValor = '';
+  } catch (e) {
+    error.value = extractErrorMessage(e);
+  } finally {
+    creandoLimite.value = false;
+  }
+}
+
+async function onToggleActivoLimite(limite) {
+  error.value = '';
+  guardandoId.value = limite.id;
+  try {
+    const actualizado = await actualizarLimite(limite.id, { activo: !limite.activo });
+    const idx = limites.value.findIndex((l) => l.id === limite.id);
+    limites.value[idx] = actualizado;
+  } catch (e) {
+    error.value = extractErrorMessage(e);
+  } finally {
+    guardandoId.value = null;
+  }
+}
+
+async function onEliminarLimite(limite) {
+  if (!confirm(`¿Eliminar "${limite.nombre}"?`)) return;
+  error.value = '';
+  eliminandoId.value = limite.id;
+  try {
+    await eliminarLimite(limite.id);
+    limites.value = limites.value.filter((l) => l.id !== limite.id);
+  } catch (e) {
+    error.value = extractErrorMessage(e);
+  } finally {
+    eliminandoId.value = null;
+  }
+}
+
+const TIPO_OBJETIVO_LABEL = {
+  categoria: 'Categoría',
+  obligatorios: 'Gastos obligatorios',
+  no_obligatorios: 'Gastos no obligatorios',
+  todo_gasto: 'Todo gasto',
+};
+
 const categoriasParaGasto = computed(() => categorias.value.filter((c) => c.aplicaA.includes('gasto')));
 const categoriasParaIngreso = computed(() => categorias.value.filter((c) => c.aplicaA.includes('ingreso')));
 const categoriasParaAhorro = computed(() => categorias.value.filter((c) => c.aplicaA.includes('ahorro')));
@@ -623,7 +700,7 @@ const categoriasParaAhorro = computed(() => categorias.value.filter((c) => c.apl
         </ul>
       </div>
 
-      <div v-else class="space-y-6">
+      <div v-else-if="tabActiva === 'ahorros'" class="space-y-6">
         <form class="grid grid-cols-1 sm:grid-cols-2 gap-4" @submit.prevent="onCrearAhorro">
           <FormField v-model="ah.nombre" label="Nombre" placeholder="Viaje a España…" required />
           <FormField v-model="ah.montoMetaTotal" type="number" label="Monto meta (opcional)" />
@@ -695,6 +772,83 @@ const categoriasParaAhorro = computed(() => categorias.value.filter((c) => c.apl
                   class="text-sm text-ink-tertiary hover:text-negative"
                   :disabled="eliminandoId === meta.id"
                   @click="onEliminarAhorro(meta)"
+                >
+                  Eliminar
+                </button>
+              </div>
+            </div>
+          </li>
+        </ul>
+      </div>
+
+      <div v-else class="space-y-6">
+        <form class="grid grid-cols-1 sm:grid-cols-2 gap-4" @submit.prevent="onCrearLimite">
+          <FormField v-model="li.nombre" label="Nombre" placeholder="Comida, Gastos hormiga…" required />
+          <div>
+            <label class="label">Aplica a</label>
+            <select v-model="li.tipoObjetivo" class="field">
+              <option value="categoria">Una categoría</option>
+              <option value="obligatorios">Gastos obligatorios</option>
+              <option value="no_obligatorios">Gastos no obligatorios</option>
+              <option value="todo_gasto">Todo gasto</option>
+            </select>
+          </div>
+          <div v-if="li.tipoObjetivo === 'categoria'">
+            <label class="label">Categoría</label>
+            <select v-model="li.categoriaId" class="field">
+              <option value="">Selecciona una categoría</option>
+              <option v-for="c in categoriasParaGasto" :key="c.id" :value="c.id">{{ c.nombre }}</option>
+            </select>
+          </div>
+          <div>
+            <label class="label">Regla</label>
+            <select v-model="li.reglaTipo" class="field">
+              <option value="porcentaje">Porcentaje del ingreso del período</option>
+              <option value="monto_fijo">Monto fijo</option>
+            </select>
+          </div>
+          <FormField
+            v-model="li.reglaValor"
+            type="number"
+            :label="li.reglaTipo === 'porcentaje' ? 'Porcentaje (%)' : 'Monto (COP)'"
+            required
+          />
+          <div class="sm:col-span-2">
+            <button type="submit" class="btn-primary" :disabled="creandoLimite">
+              {{ creandoLimite ? 'Agregando…' : 'Agregar límite' }}
+            </button>
+          </div>
+        </form>
+
+        <p v-if="!limites.length" class="text-sm text-ink-secondary">No hay límites configurados todavía.</p>
+        <ul v-else class="divide-y divide-border">
+          <li v-for="limite in limites" :key="limite.id" class="py-3">
+            <div class="flex items-center justify-between gap-4">
+              <div>
+                <p class="text-ink-primary font-medium" :class="{ 'opacity-50': !limite.activo }">
+                  {{ limite.nombre }}
+                </p>
+                <p class="text-sm text-ink-tertiary">
+                  {{ TIPO_OBJETIVO_LABEL[limite.tipoObjetivo] }}
+                  <template v-if="limite.categoria"> ({{ limite.categoria.nombre }})</template>
+                  ·
+                  {{ limite.reglaTipo === 'porcentaje' ? `${limite.reglaValor}%` : formatCurrency(limite.reglaValor) }}
+                </p>
+              </div>
+              <div class="flex items-center gap-3 shrink-0">
+                <label class="inline-flex items-center gap-2 text-sm text-ink-secondary">
+                  <input
+                    type="checkbox"
+                    :checked="limite.activo"
+                    :disabled="guardandoId === limite.id"
+                    @change="onToggleActivoLimite(limite)"
+                  />
+                  Activo
+                </label>
+                <button
+                  class="text-sm text-ink-tertiary hover:text-negative"
+                  :disabled="eliminandoId === limite.id"
+                  @click="onEliminarLimite(limite)"
                 >
                   Eliminar
                 </button>

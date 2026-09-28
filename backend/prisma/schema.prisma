@@ -16,6 +16,7 @@ enum FrecuenciaCorte {
 enum OrigenGasto {
   app
   bot
+  corte_hogar
 }
 
 enum TipoMontoConcepto {
@@ -91,6 +92,7 @@ model Usuario {
   ingresosFijosConfig          IngresoFijoConfig[]
   ahorrosPersonales            AhorroPersonal[]
   periodosAhorroEvaluados      PeriodoAhorroEvaluado[]
+  limitesAlertaPersonales      LimiteAlertaPersonal[]
   splitPorcentajes             SplitPorcentajeMiembro[]
   transferenciasComoAnterior   LogTransferenciaAdmin[]           @relation("transferenciaAnterior")
   transferenciasComoNuevo      LogTransferenciaAdmin[]           @relation("transferenciaNueva")
@@ -186,12 +188,13 @@ model CategoriaPersonal {
   nombre    String
   aplicaA   AplicaCategoriaPersonal[] @map("aplica_a")
 
-  usuario             Usuario             @relation(fields: [usuarioId], references: [id])
+  usuario             Usuario                @relation(fields: [usuarioId], references: [id])
   gastos              GastoPersonal[]
   gastosFijosConfig   GastoFijoConfig[]
   ingresos            IngresoPersonal[]
   ingresosFijosConfig IngresoFijoConfig[]
   ahorros             AhorroPersonal[]
+  limitesAlerta       LimiteAlertaPersonal[]
 
   @@index([usuarioId])
   @@map("categorias_personales")
@@ -247,6 +250,9 @@ model GastoPersonal {
   id             String             @id @default(uuid())
   usuarioId      String             @map("usuario_id")
   origenConfigId String?            @map("origen_config_id")
+  // Solo se llena cuando origen=corte_hogar: el corte de pareja que generó
+  // este gasto (su parte del reparto de ese corte, ver cortes.service.js).
+  origenCorteId  String?            @map("origen_corte_id")
   monto          Int
   fecha          DateTime
   descripcion    String?
@@ -259,10 +265,12 @@ model GastoPersonal {
 
   usuario      Usuario             @relation(fields: [usuarioId], references: [id])
   origenConfig GastoFijoConfig?    @relation(fields: [origenConfigId], references: [id])
+  origenCorte  Corte?              @relation(fields: [origenCorteId], references: [id])
   metodoPago   MetodoPagoPersonal? @relation(fields: [metodoPagoId], references: [id])
   categoria    CategoriaPersonal?  @relation(fields: [categoriaId], references: [id])
 
   @@unique([origenConfigId, fecha])
+  @@unique([origenCorteId, usuarioId])
   @@index([usuarioId])
   @@map("gastos_personales")
 }
@@ -430,10 +438,11 @@ model Corte {
   creadoPorUsuarioId String      @map("creado_por_usuario_id")
   creadoEn           DateTime    @default(now()) @map("creado_en")
 
-  hogar     Hogar                 @relation(fields: [hogarId], references: [id])
-  creadoPor Usuario               @relation("corteCreadoPor", fields: [creadoPorUsuarioId], references: [id])
-  items     CorteItem[]
-  balances  CorteBalanceMiembro[]
+  hogar                     Hogar                 @relation(fields: [hogarId], references: [id])
+  creadoPor                 Usuario               @relation("corteCreadoPor", fields: [creadoPorUsuarioId], references: [id])
+  items                     CorteItem[]
+  balances                  CorteBalanceMiembro[]
+  gastosPersonalesGenerados GastoPersonal[]
 
   @@unique([hogarId, fechaNominal])
   @@index([hogarId])
@@ -560,4 +569,61 @@ model AhorroPronostico {
   @@unique([ahorroId, periodoId])
   @@index([periodoId])
   @@map("ahorro_pronosticos")
+}
+
+// --- Panel personal: Límites y alertas por categoría (Fase 7, Etapa 4) ---
+// El período actual siempre se recalcula en vivo (nunca se guarda). El
+// período anterior es el único "pasado" alcanzable hoy (la navegación
+// histórica genérica es la Etapa 6) y se snapshotea la primera vez que se
+// consulta, en LimiteEvaluadoPeriodo, para no reescribir el historial si el
+// usuario cambia regla_valor más adelante (ver evaluacionLimite.js).
+
+enum TipoObjetivoLimite {
+  categoria
+  obligatorios
+  no_obligatorios
+  todo_gasto
+}
+
+enum EstadoLimite {
+  dentro
+  excedido
+}
+
+model LimiteAlertaPersonal {
+  id           String             @id @default(uuid())
+  usuarioId    String             @map("usuario_id")
+  nombre       String
+  tipoObjetivo TipoObjetivoLimite @map("tipo_objetivo")
+  categoriaId  String?            @map("categoria_id")
+  reglaTipo    ReglaAhorroTipo    @map("regla_tipo")
+  reglaValor   Int                @map("regla_valor")
+  activo       Boolean            @default(true)
+  creadoEn     DateTime           @default(now()) @map("creado_en")
+
+  usuario      Usuario                 @relation(fields: [usuarioId], references: [id])
+  categoria    CategoriaPersonal?      @relation(fields: [categoriaId], references: [id])
+  evaluaciones LimiteEvaluadoPeriodo[]
+
+  @@index([usuarioId])
+  @@map("limites_alerta_personal")
+}
+
+model LimiteEvaluadoPeriodo {
+  id                 String       @id @default(uuid())
+  limiteId           String       @map("limite_id")
+  periodoInicio      DateTime     @map("periodo_inicio")
+  periodoFin         DateTime     @map("periodo_fin")
+  reglaValorUsado    Int          @map("regla_valor_usado")
+  limiteCalculado    Int          @map("limite_calculado")
+  montoGastado       Int          @map("monto_gastado")
+  disponibleRestante Int          @map("disponible_restante")
+  estado             EstadoLimite
+  evaluadoEn         DateTime     @default(now()) @map("evaluado_en")
+
+  limite LimiteAlertaPersonal @relation(fields: [limiteId], references: [id])
+
+  @@unique([limiteId, periodoInicio])
+  @@index([limiteId])
+  @@map("limites_evaluados_periodo")
 }
