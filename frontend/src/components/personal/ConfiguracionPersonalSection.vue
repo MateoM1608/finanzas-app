@@ -3,11 +3,13 @@ import { ref, reactive, computed, onMounted } from 'vue';
 import {
   listarMetodosPago,
   crearMetodoPago,
+  actualizarMetodoPago,
   eliminarMetodoPago,
 } from '../../api/metodosPagoPersonales.js';
 import {
   listarCategorias,
   crearCategoria,
+  actualizarCategoria,
   eliminarCategoria,
 } from '../../api/categoriasPersonales.js';
 import {
@@ -137,6 +139,33 @@ async function onEliminarMetodo(metodo) {
   }
 }
 
+const editandoMetodoId = ref(null);
+const editMetodoNombre = ref('');
+
+function onEditarMetodo(metodo) {
+  editandoMetodoId.value = metodo.id;
+  editMetodoNombre.value = metodo.nombre;
+}
+
+function onCancelarEditarMetodo() {
+  editandoMetodoId.value = null;
+}
+
+async function onGuardarEditarMetodo(metodo) {
+  error.value = '';
+  guardandoId.value = metodo.id;
+  try {
+    const actualizado = await actualizarMetodoPago(metodo.id, { nombre: editMetodoNombre.value });
+    const idx = metodos.value.findIndex((m) => m.id === metodo.id);
+    metodos.value[idx] = actualizado;
+    editandoMetodoId.value = null;
+  } catch (e) {
+    error.value = extractErrorMessage(e);
+  } finally {
+    guardandoId.value = null;
+  }
+}
+
 // --- Categorías ---
 const nuevaCategoriaNombre = ref('');
 const nuevaCategoriaAplicaA = reactive({ gasto: true, ingreso: false, ahorro: false });
@@ -173,6 +202,40 @@ async function onEliminarCategoria(categoria) {
     error.value = extractErrorMessage(e);
   } finally {
     eliminandoId.value = null;
+  }
+}
+
+const editandoCategoriaId = ref(null);
+const editCategoriaNombre = ref('');
+const editCategoriaAplicaA = reactive({ gasto: false, ingreso: false, ahorro: false });
+
+function onEditarCategoria(categoria) {
+  editandoCategoriaId.value = categoria.id;
+  editCategoriaNombre.value = categoria.nombre;
+  editCategoriaAplicaA.gasto = categoria.aplicaA.includes('gasto');
+  editCategoriaAplicaA.ingreso = categoria.aplicaA.includes('ingreso');
+  editCategoriaAplicaA.ahorro = categoria.aplicaA.includes('ahorro');
+}
+
+function onCancelarEditarCategoria() {
+  editandoCategoriaId.value = null;
+}
+
+async function onGuardarEditarCategoria(categoria) {
+  error.value = '';
+  guardandoId.value = categoria.id;
+  try {
+    const aplicaA = Object.entries(editCategoriaAplicaA)
+      .filter(([, activo]) => activo)
+      .map(([tipo]) => tipo);
+    const actualizado = await actualizarCategoria(categoria.id, { nombre: editCategoriaNombre.value, aplicaA });
+    const idx = categorias.value.findIndex((c) => c.id === categoria.id);
+    categorias.value[idx] = actualizado;
+    editandoCategoriaId.value = null;
+  } catch (e) {
+    error.value = extractErrorMessage(e);
+  } finally {
+    guardandoId.value = null;
   }
 }
 
@@ -244,6 +307,55 @@ async function onEliminarGastoFijo(config) {
   }
 }
 
+const editandoGastoFijoId = ref(null);
+const editGf = reactive({
+  nombre: '',
+  monto: '',
+  frecuencia: 'mensual',
+  modoCobro: 'automatico',
+  esObligatorio: false,
+  metodoPagoIdDefault: '',
+  categoriaId: '',
+});
+
+function onEditarGastoFijo(config) {
+  editandoGastoFijoId.value = config.id;
+  editGf.nombre = config.nombre;
+  editGf.monto = config.monto;
+  editGf.frecuencia = config.frecuencia;
+  editGf.modoCobro = config.modoCobro;
+  editGf.esObligatorio = config.esObligatorio;
+  editGf.metodoPagoIdDefault = config.metodoPagoIdDefault || '';
+  editGf.categoriaId = config.categoriaId || '';
+}
+
+function onCancelarEditarGastoFijo() {
+  editandoGastoFijoId.value = null;
+}
+
+async function onGuardarEditarGastoFijo(config) {
+  error.value = '';
+  guardandoId.value = config.id;
+  try {
+    const actualizado = await actualizarGastoFijo(config.id, {
+      nombre: editGf.nombre,
+      monto: Number(editGf.monto),
+      frecuencia: editGf.frecuencia,
+      modoCobro: editGf.modoCobro,
+      esObligatorio: editGf.esObligatorio,
+      metodoPagoIdDefault: editGf.metodoPagoIdDefault || null,
+      categoriaId: editGf.categoriaId || null,
+    });
+    const idx = gastosFijos.value.findIndex((c) => c.id === config.id);
+    gastosFijos.value[idx] = actualizado;
+    editandoGastoFijoId.value = null;
+  } catch (e) {
+    error.value = extractErrorMessage(e);
+  } finally {
+    guardandoId.value = null;
+  }
+}
+
 // --- Ingresos fijos ---
 const inf = reactive({
   nombre: '',
@@ -303,6 +415,49 @@ async function onEliminarIngresoFijo(config) {
     error.value = extractErrorMessage(e);
   } finally {
     eliminandoId.value = null;
+  }
+}
+
+const editandoIngresoFijoId = ref(null);
+const editInf = reactive({
+  nombre: '',
+  monto: '',
+  frecuencia: 'mensual',
+  modo: 'automatico',
+  categoriaId: '',
+});
+
+function onEditarIngresoFijo(config) {
+  editandoIngresoFijoId.value = config.id;
+  editInf.nombre = config.nombre;
+  editInf.monto = config.monto;
+  editInf.frecuencia = config.frecuencia;
+  editInf.modo = config.modo;
+  editInf.categoriaId = config.categoriaId || '';
+}
+
+function onCancelarEditarIngresoFijo() {
+  editandoIngresoFijoId.value = null;
+}
+
+async function onGuardarEditarIngresoFijo(config) {
+  error.value = '';
+  guardandoId.value = config.id;
+  try {
+    const actualizado = await actualizarIngresoFijo(config.id, {
+      nombre: editInf.nombre,
+      monto: Number(editInf.monto),
+      frecuencia: editInf.frecuencia,
+      modo: editInf.modo,
+      categoriaId: editInf.categoriaId || null,
+    });
+    const idx = ingresosFijos.value.findIndex((c) => c.id === config.id);
+    ingresosFijos.value[idx] = actualizado;
+    editandoIngresoFijoId.value = null;
+  } catch (e) {
+    error.value = extractErrorMessage(e);
+  } finally {
+    guardandoId.value = null;
   }
 }
 
@@ -371,6 +526,55 @@ async function onEliminarAhorro(meta) {
   }
 }
 
+const editandoAhorroId = ref(null);
+const editAh = reactive({
+  nombre: '',
+  montoMetaTotal: '',
+  reglaTipo: 'porcentaje',
+  reglaValor: '',
+  baseCalculo: 'ingreso_menos_obligatorios',
+  modoTransaccion: 'manual',
+  categoriaId: '',
+});
+
+function onEditarAhorro(meta) {
+  editandoAhorroId.value = meta.id;
+  editAh.nombre = meta.nombre;
+  editAh.montoMetaTotal = meta.montoMetaTotal ?? '';
+  editAh.reglaTipo = meta.reglaTipo;
+  editAh.reglaValor = meta.reglaValor;
+  editAh.baseCalculo = meta.baseCalculo;
+  editAh.modoTransaccion = meta.modoTransaccion;
+  editAh.categoriaId = meta.categoriaId || '';
+}
+
+function onCancelarEditarAhorro() {
+  editandoAhorroId.value = null;
+}
+
+async function onGuardarEditarAhorro(meta) {
+  error.value = '';
+  guardandoId.value = meta.id;
+  try {
+    const actualizado = await actualizarAhorro(meta.id, {
+      nombre: editAh.nombre,
+      montoMetaTotal: editAh.montoMetaTotal ? Number(editAh.montoMetaTotal) : null,
+      reglaTipo: editAh.reglaTipo,
+      reglaValor: Number(editAh.reglaValor),
+      baseCalculo: editAh.baseCalculo,
+      modoTransaccion: editAh.modoTransaccion,
+      categoriaId: editAh.categoriaId || null,
+    });
+    const idx = ahorros.value.findIndex((a) => a.id === meta.id);
+    ahorros.value[idx] = actualizado;
+    editandoAhorroId.value = null;
+  } catch (e) {
+    error.value = extractErrorMessage(e);
+  } finally {
+    guardandoId.value = null;
+  }
+}
+
 // --- Límites y alertas ---
 const li = reactive({
   nombre: '',
@@ -428,6 +632,49 @@ async function onEliminarLimite(limite) {
     error.value = extractErrorMessage(e);
   } finally {
     eliminandoId.value = null;
+  }
+}
+
+const editandoLimiteId = ref(null);
+const editLi = reactive({
+  nombre: '',
+  tipoObjetivo: 'categoria',
+  categoriaId: '',
+  reglaTipo: 'porcentaje',
+  reglaValor: '',
+});
+
+function onEditarLimite(limite) {
+  editandoLimiteId.value = limite.id;
+  editLi.nombre = limite.nombre;
+  editLi.tipoObjetivo = limite.tipoObjetivo;
+  editLi.categoriaId = limite.categoriaId || '';
+  editLi.reglaTipo = limite.reglaTipo;
+  editLi.reglaValor = limite.reglaValor;
+}
+
+function onCancelarEditarLimite() {
+  editandoLimiteId.value = null;
+}
+
+async function onGuardarEditarLimite(limite) {
+  error.value = '';
+  guardandoId.value = limite.id;
+  try {
+    const actualizado = await actualizarLimite(limite.id, {
+      nombre: editLi.nombre,
+      tipoObjetivo: editLi.tipoObjetivo,
+      categoriaId: editLi.tipoObjetivo === 'categoria' ? editLi.categoriaId || null : null,
+      reglaTipo: editLi.reglaTipo,
+      reglaValor: Number(editLi.reglaValor),
+    });
+    const idx = limites.value.findIndex((l) => l.id === limite.id);
+    limites.value[idx] = actualizado;
+    editandoLimiteId.value = null;
+  } catch (e) {
+    error.value = extractErrorMessage(e);
+  } finally {
+    guardandoId.value = null;
   }
 }
 
@@ -494,15 +741,33 @@ const categoriasParaAhorro = computed(() => categorias.value.filter((c) => c.apl
 
         <p v-if="!metodos.length" class="text-sm text-ink-secondary">No hay métodos de pago todavía.</p>
         <ul v-else class="divide-y divide-border">
-          <li v-for="m in metodos" :key="m.id" class="py-3 flex items-center justify-between">
-            <span class="text-ink-primary">{{ m.nombre }}</span>
-            <button
-              class="text-sm text-ink-tertiary hover:text-negative"
-              :disabled="eliminandoId === m.id"
-              @click="onEliminarMetodo(m)"
-            >
-              Eliminar
-            </button>
+          <li v-for="m in metodos" :key="m.id" class="py-3">
+            <div v-if="editandoMetodoId === m.id" class="flex items-end gap-3">
+              <FormField v-model="editMetodoNombre" label="Nombre" required />
+              <button
+                class="btn-primary !px-3 !py-1.5 text-sm"
+                :disabled="guardandoId === m.id"
+                @click="onGuardarEditarMetodo(m)"
+              >
+                Guardar
+              </button>
+              <button class="btn-ghost !px-3 !py-1.5 text-sm" @click="onCancelarEditarMetodo">Cancelar</button>
+            </div>
+            <div v-else class="flex items-center justify-between">
+              <span class="text-ink-primary">{{ m.nombre }}</span>
+              <div class="flex items-center gap-3">
+                <button class="text-sm text-accent hover:text-accent-hover" @click="onEditarMetodo(m)">
+                  Editar
+                </button>
+                <button
+                  class="text-sm text-ink-tertiary hover:text-negative"
+                  :disabled="eliminandoId === m.id"
+                  @click="onEliminarMetodo(m)"
+                >
+                  Eliminar
+                </button>
+              </div>
+            </div>
           </li>
         </ul>
       </div>
@@ -533,18 +798,54 @@ const categoriasParaAhorro = computed(() => categorias.value.filter((c) => c.apl
 
         <p v-if="!categorias.length" class="text-sm text-ink-secondary">No hay categorías todavía.</p>
         <ul v-else class="divide-y divide-border">
-          <li v-for="c in categorias" :key="c.id" class="py-3 flex items-center justify-between">
-            <span class="text-ink-primary">
-              {{ c.nombre }}
-              <span class="text-xs text-ink-tertiary font-normal">({{ c.aplicaA.join(', ') }})</span>
-            </span>
-            <button
-              class="text-sm text-ink-tertiary hover:text-negative"
-              :disabled="eliminandoId === c.id"
-              @click="onEliminarCategoria(c)"
-            >
-              Eliminar
-            </button>
+          <li v-for="c in categorias" :key="c.id" class="py-3">
+            <div v-if="editandoCategoriaId === c.id" class="space-y-3">
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <FormField v-model="editCategoriaNombre" label="Nombre" required />
+                <div>
+                  <label class="label">Aplica a</label>
+                  <div class="flex gap-4 mt-2">
+                    <label class="inline-flex items-center gap-2 text-sm text-ink-secondary">
+                      <input v-model="editCategoriaAplicaA.gasto" type="checkbox" /> Gasto
+                    </label>
+                    <label class="inline-flex items-center gap-2 text-sm text-ink-secondary">
+                      <input v-model="editCategoriaAplicaA.ingreso" type="checkbox" /> Ingreso
+                    </label>
+                    <label class="inline-flex items-center gap-2 text-sm text-ink-secondary">
+                      <input v-model="editCategoriaAplicaA.ahorro" type="checkbox" /> Ahorro
+                    </label>
+                  </div>
+                </div>
+              </div>
+              <div class="flex items-center gap-3">
+                <button
+                  class="btn-primary !px-3 !py-1.5 text-sm"
+                  :disabled="guardandoId === c.id"
+                  @click="onGuardarEditarCategoria(c)"
+                >
+                  Guardar
+                </button>
+                <button class="btn-ghost !px-3 !py-1.5 text-sm" @click="onCancelarEditarCategoria">Cancelar</button>
+              </div>
+            </div>
+            <div v-else class="flex items-center justify-between">
+              <span class="text-ink-primary">
+                {{ c.nombre }}
+                <span class="text-xs text-ink-tertiary font-normal">({{ c.aplicaA.join(', ') }})</span>
+              </span>
+              <div class="flex items-center gap-3">
+                <button class="text-sm text-accent hover:text-accent-hover" @click="onEditarCategoria(c)">
+                  Editar
+                </button>
+                <button
+                  class="text-sm text-ink-tertiary hover:text-negative"
+                  :disabled="eliminandoId === c.id"
+                  @click="onEliminarCategoria(c)"
+                >
+                  Eliminar
+                </button>
+              </div>
+            </div>
           </li>
         </ul>
       </div>
@@ -598,7 +899,57 @@ const categoriasParaAhorro = computed(() => categorias.value.filter((c) => c.apl
         <p v-if="!gastosFijos.length" class="text-sm text-ink-secondary">No hay gastos fijos todavía.</p>
         <ul v-else class="divide-y divide-border">
           <li v-for="c in gastosFijos" :key="c.id" class="py-3">
-            <div class="flex items-center justify-between gap-4">
+            <div v-if="editandoGastoFijoId === c.id" class="space-y-3">
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <FormField v-model="editGf.nombre" label="Nombre" required />
+                <FormField v-model="editGf.monto" type="number" label="Monto (COP)" required />
+                <div>
+                  <label class="label">Frecuencia</label>
+                  <select v-model="editGf.frecuencia" class="field">
+                    <option value="semanal">Semanal</option>
+                    <option value="quincenal">Quincenal</option>
+                    <option value="mensual">Mensual</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="label">Modo de cobro</label>
+                  <select v-model="editGf.modoCobro" class="field">
+                    <option value="automatico">Automático (ya pagado)</option>
+                    <option value="manual">Manual (queda pendiente)</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="label">Método de pago (opcional)</label>
+                  <select v-model="editGf.metodoPagoIdDefault" class="field">
+                    <option value="">Sin definir</option>
+                    <option v-for="m in metodos" :key="m.id" :value="m.id">{{ m.nombre }}</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="label">Categoría (opcional)</label>
+                  <select v-model="editGf.categoriaId" class="field">
+                    <option value="">Sin definir</option>
+                    <option v-for="cat in categoriasParaGasto" :key="cat.id" :value="cat.id">{{ cat.nombre }}</option>
+                  </select>
+                </div>
+                <div class="flex items-end">
+                  <label class="inline-flex items-center gap-2 text-sm text-ink-secondary">
+                    <input v-model="editGf.esObligatorio" type="checkbox" /> Es obligatorio
+                  </label>
+                </div>
+              </div>
+              <div class="flex items-center gap-3">
+                <button
+                  class="btn-primary !px-3 !py-1.5 text-sm"
+                  :disabled="guardandoId === c.id"
+                  @click="onGuardarEditarGastoFijo(c)"
+                >
+                  Guardar
+                </button>
+                <button class="btn-ghost !px-3 !py-1.5 text-sm" @click="onCancelarEditarGastoFijo">Cancelar</button>
+              </div>
+            </div>
+            <div v-else class="flex items-center justify-between gap-4">
               <div>
                 <p class="text-ink-primary font-medium" :class="{ 'opacity-50': !c.activo }">
                   {{ c.nombre }}
@@ -619,6 +970,9 @@ const categoriasParaAhorro = computed(() => categorias.value.filter((c) => c.apl
                   />
                   Activo
                 </label>
+                <button class="text-sm text-accent hover:text-accent-hover" @click="onEditarGastoFijo(c)">
+                  Editar
+                </button>
                 <button
                   class="text-sm text-ink-tertiary hover:text-negative"
                   :disabled="eliminandoId === c.id"
@@ -669,7 +1023,45 @@ const categoriasParaAhorro = computed(() => categorias.value.filter((c) => c.apl
         <p v-if="!ingresosFijos.length" class="text-sm text-ink-secondary">No hay ingresos fijos todavía.</p>
         <ul v-else class="divide-y divide-border">
           <li v-for="c in ingresosFijos" :key="c.id" class="py-3">
-            <div class="flex items-center justify-between gap-4">
+            <div v-if="editandoIngresoFijoId === c.id" class="space-y-3">
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <FormField v-model="editInf.nombre" label="Nombre" required />
+                <FormField v-model="editInf.monto" type="number" label="Monto (COP)" required />
+                <div>
+                  <label class="label">Frecuencia</label>
+                  <select v-model="editInf.frecuencia" class="field">
+                    <option value="semanal">Semanal</option>
+                    <option value="quincenal">Quincenal</option>
+                    <option value="mensual">Mensual</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="label">Modo</label>
+                  <select v-model="editInf.modo" class="field">
+                    <option value="automatico">Automático (ya recibido)</option>
+                    <option value="manual">Manual (queda pendiente)</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="label">Categoría (opcional)</label>
+                  <select v-model="editInf.categoriaId" class="field">
+                    <option value="">Sin definir</option>
+                    <option v-for="cat in categoriasParaIngreso" :key="cat.id" :value="cat.id">{{ cat.nombre }}</option>
+                  </select>
+                </div>
+              </div>
+              <div class="flex items-center gap-3">
+                <button
+                  class="btn-primary !px-3 !py-1.5 text-sm"
+                  :disabled="guardandoId === c.id"
+                  @click="onGuardarEditarIngresoFijo(c)"
+                >
+                  Guardar
+                </button>
+                <button class="btn-ghost !px-3 !py-1.5 text-sm" @click="onCancelarEditarIngresoFijo">Cancelar</button>
+              </div>
+            </div>
+            <div v-else class="flex items-center justify-between gap-4">
               <div>
                 <p class="text-ink-primary font-medium" :class="{ 'opacity-50': !c.activo }">{{ c.nombre }}</p>
                 <p class="text-sm text-ink-tertiary">
@@ -687,6 +1079,9 @@ const categoriasParaAhorro = computed(() => categorias.value.filter((c) => c.apl
                   />
                   Activo
                 </label>
+                <button class="text-sm text-accent hover:text-accent-hover" @click="onEditarIngresoFijo(c)">
+                  Editar
+                </button>
                 <button
                   class="text-sm text-ink-tertiary hover:text-negative"
                   :disabled="eliminandoId === c.id"
@@ -748,7 +1143,57 @@ const categoriasParaAhorro = computed(() => categorias.value.filter((c) => c.apl
         <p v-if="!ahorros.length" class="text-sm text-ink-secondary">No hay metas de ahorro todavía.</p>
         <ul v-else class="divide-y divide-border">
           <li v-for="meta in ahorros" :key="meta.id" class="py-3">
-            <div class="flex items-center justify-between gap-4">
+            <div v-if="editandoAhorroId === meta.id" class="space-y-3">
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <FormField v-model="editAh.nombre" label="Nombre" required />
+                <FormField v-model="editAh.montoMetaTotal" type="number" label="Monto meta (opcional)" />
+                <div>
+                  <label class="label">Regla</label>
+                  <select v-model="editAh.reglaTipo" class="field">
+                    <option value="porcentaje">Porcentaje</option>
+                    <option value="monto_fijo">Monto fijo</option>
+                  </select>
+                </div>
+                <FormField
+                  v-model="editAh.reglaValor"
+                  type="number"
+                  :label="editAh.reglaTipo === 'porcentaje' ? 'Porcentaje (%)' : 'Monto (COP)'"
+                  required
+                />
+                <div>
+                  <label class="label">Base de cálculo</label>
+                  <select v-model="editAh.baseCalculo" class="field">
+                    <option value="ingreso_menos_obligatorios">Ingreso menos obligatorios</option>
+                    <option value="disponible_total">Disponible total</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="label">Modo</label>
+                  <select v-model="editAh.modoTransaccion" class="field">
+                    <option value="manual">Manual (yo registro los aportes)</option>
+                    <option value="automatico">Automático (debita el sugerido cada ciclo)</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="label">Categoría (opcional)</label>
+                  <select v-model="editAh.categoriaId" class="field">
+                    <option value="">Sin definir</option>
+                    <option v-for="cat in categoriasParaAhorro" :key="cat.id" :value="cat.id">{{ cat.nombre }}</option>
+                  </select>
+                </div>
+              </div>
+              <div class="flex items-center gap-3">
+                <button
+                  class="btn-primary !px-3 !py-1.5 text-sm"
+                  :disabled="guardandoId === meta.id"
+                  @click="onGuardarEditarAhorro(meta)"
+                >
+                  Guardar
+                </button>
+                <button class="btn-ghost !px-3 !py-1.5 text-sm" @click="onCancelarEditarAhorro">Cancelar</button>
+              </div>
+            </div>
+            <div v-else class="flex items-center justify-between gap-4">
               <div>
                 <p class="text-ink-primary font-medium" :class="{ 'opacity-50': !meta.activo }">{{ meta.nombre }}</p>
                 <p class="text-sm text-ink-tertiary">
@@ -768,6 +1213,9 @@ const categoriasParaAhorro = computed(() => categorias.value.filter((c) => c.apl
                   />
                   Activo
                 </label>
+                <button class="text-sm text-accent hover:text-accent-hover" @click="onEditarAhorro(meta)">
+                  Editar
+                </button>
                 <button
                   class="text-sm text-ink-tertiary hover:text-negative"
                   :disabled="eliminandoId === meta.id"
@@ -823,7 +1271,51 @@ const categoriasParaAhorro = computed(() => categorias.value.filter((c) => c.apl
         <p v-if="!limites.length" class="text-sm text-ink-secondary">No hay límites configurados todavía.</p>
         <ul v-else class="divide-y divide-border">
           <li v-for="limite in limites" :key="limite.id" class="py-3">
-            <div class="flex items-center justify-between gap-4">
+            <div v-if="editandoLimiteId === limite.id" class="space-y-3">
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <FormField v-model="editLi.nombre" label="Nombre" required />
+                <div>
+                  <label class="label">Aplica a</label>
+                  <select v-model="editLi.tipoObjetivo" class="field">
+                    <option value="categoria">Una categoría</option>
+                    <option value="obligatorios">Gastos obligatorios</option>
+                    <option value="no_obligatorios">Gastos no obligatorios</option>
+                    <option value="todo_gasto">Todo gasto</option>
+                  </select>
+                </div>
+                <div v-if="editLi.tipoObjetivo === 'categoria'">
+                  <label class="label">Categoría</label>
+                  <select v-model="editLi.categoriaId" class="field">
+                    <option value="">Selecciona una categoría</option>
+                    <option v-for="cat in categoriasParaGasto" :key="cat.id" :value="cat.id">{{ cat.nombre }}</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="label">Regla</label>
+                  <select v-model="editLi.reglaTipo" class="field">
+                    <option value="porcentaje">Porcentaje del ingreso del período</option>
+                    <option value="monto_fijo">Monto fijo</option>
+                  </select>
+                </div>
+                <FormField
+                  v-model="editLi.reglaValor"
+                  type="number"
+                  :label="editLi.reglaTipo === 'porcentaje' ? 'Porcentaje (%)' : 'Monto (COP)'"
+                  required
+                />
+              </div>
+              <div class="flex items-center gap-3">
+                <button
+                  class="btn-primary !px-3 !py-1.5 text-sm"
+                  :disabled="guardandoId === limite.id"
+                  @click="onGuardarEditarLimite(limite)"
+                >
+                  Guardar
+                </button>
+                <button class="btn-ghost !px-3 !py-1.5 text-sm" @click="onCancelarEditarLimite">Cancelar</button>
+              </div>
+            </div>
+            <div v-else class="flex items-center justify-between gap-4">
               <div>
                 <p class="text-ink-primary font-medium" :class="{ 'opacity-50': !limite.activo }">
                   {{ limite.nombre }}
@@ -845,6 +1337,9 @@ const categoriasParaAhorro = computed(() => categorias.value.filter((c) => c.apl
                   />
                   Activo
                 </label>
+                <button class="text-sm text-accent hover:text-accent-hover" @click="onEditarLimite(limite)">
+                  Editar
+                </button>
                 <button
                   class="text-sm text-ink-tertiary hover:text-negative"
                   :disabled="eliminandoId === limite.id"
