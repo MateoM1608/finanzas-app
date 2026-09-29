@@ -31,7 +31,7 @@ defineExpose({ recargar: cargar });
 
     <template v-else>
       <p v-if="!resumen.limites.length" class="text-sm text-ink-secondary">
-        Aún no tienes límites configurados — créalos en "Configuración personal".
+        Aún no tienes límites configurados — créalos con "Configurar límites".
       </p>
 
       <div v-else class="grid grid-cols-1 sm:grid-cols-2 gap-4">

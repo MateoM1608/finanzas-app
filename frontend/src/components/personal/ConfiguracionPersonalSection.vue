@@ -51,7 +51,8 @@ const TABS = [
   { key: 'ahorros', label: 'Metas de ahorro' },
   { key: 'limites', label: 'Límites' },
 ];
-const tabActiva = ref('ciclo');
+const props = defineProps({ tabInicial: { type: String, default: 'ciclo' } });
+const tabActiva = ref(props.tabInicial);
 
 const loading = ref(true);
 const error = ref('');

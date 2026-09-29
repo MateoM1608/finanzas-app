@@ -74,7 +74,7 @@ async function onRegistrarAporte(meta) {
       </p>
 
       <p v-if="!resumen.metas.length" class="text-sm text-ink-secondary">
-        Aún no tienes metas de ahorro — créalas en "Configuración personal".
+        Aún no tienes metas de ahorro — créalas con "Configurar metas".
       </p>
 
       <ul v-else class="divide-y divide-border">

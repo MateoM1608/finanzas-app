@@ -16,6 +16,22 @@ import AhorrosPersonalesSection from '../components/personal/AhorrosPersonalesSe
 import LimitesPersonalesSection from '../components/personal/LimitesPersonalesSection.vue';
 
 const mostrarConfig = ref(false);
+const configTab = ref('ciclo');
+
+function abrirConfig(tab = 'ciclo') {
+  configTab.value = tab;
+  mostrarConfig.value = true;
+}
+
+// Lo que se crea o edita en la configuración (límites, metas, fijos) cambia
+// los resúmenes de arriba: sin recargar, un límite nuevo no aparecía hasta
+// refrescar la página.
+function cerrarConfig() {
+  mostrarConfig.value = false;
+  recargarResumenes();
+  cargarGastos();
+  cargarIngresos();
+}
 const loading = ref(true);
 const error = ref('');
 const resumenRef = ref(null);
@@ -207,12 +223,18 @@ onMounted(cargarTodo);
       <ResumenPersonalSection ref="resumenRef" />
 
       <section class="card p-6 sm:p-8">
-        <h2 class="text-base font-semibold text-ink-primary mb-5">Límites</h2>
+        <div class="flex flex-wrap items-center justify-between gap-3 mb-5">
+          <h2 class="text-base font-semibold text-ink-primary">Límites</h2>
+          <button class="btn-secondary" @click="abrirConfig('limites')">Configurar límites</button>
+        </div>
         <LimitesPersonalesSection ref="limitesRef" />
       </section>
 
       <section class="card p-6 sm:p-8">
-        <h2 class="text-base font-semibold text-ink-primary mb-5">Ahorros</h2>
+        <div class="flex flex-wrap items-center justify-between gap-3 mb-5">
+          <h2 class="text-base font-semibold text-ink-primary">Ahorros</h2>
+          <button class="btn-secondary" @click="abrirConfig('ahorros')">Configurar metas</button>
+        </div>
         <AhorrosPersonalesSection ref="ahorrosRef" />
       </section>
 
@@ -221,7 +243,7 @@ onMounted(cargarTodo);
       <section class="card p-6 sm:p-8">
         <div class="flex flex-wrap items-center justify-between gap-3 mb-5">
           <h2 class="text-base font-semibold text-ink-primary">Registrar gasto</h2>
-          <button class="btn-secondary" @click="mostrarConfig = true">Configuración personal</button>
+          <button class="btn-secondary" @click="abrirConfig()">Configuración personal</button>
         </div>
 
         <form class="grid grid-cols-1 sm:grid-cols-2 gap-4" @submit.prevent="onAgregarGasto">
@@ -407,8 +429,8 @@ onMounted(cargarTodo);
       </section>
     </main>
 
-    <AppModal v-if="mostrarConfig" title="Configuración personal" @close="mostrarConfig = false">
-      <ConfiguracionPersonalSection />
+    <AppModal v-if="mostrarConfig" title="Configuración personal" @close="cerrarConfig">
+      <ConfiguracionPersonalSection :tab-inicial="configTab" />
     </AppModal>
   </div>
 </template>
