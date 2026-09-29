@@ -9,7 +9,8 @@
     "start": "node src/server.js",
     "prisma:migrate": "prisma migrate dev",
     "prisma:generate": "prisma generate",
-    "prisma:studio": "prisma studio"
+    "prisma:studio": "prisma studio",
+    "recalcular-historiales": "node scripts/recalcularHistorialesPersonales.js"
   },
   "dependencies": {
     "@prisma/client": "^6.1.0",

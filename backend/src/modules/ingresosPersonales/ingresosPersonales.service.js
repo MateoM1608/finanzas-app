@@ -1,45 +1,14 @@
 import { prisma } from '../../config/prisma.js';
 import { HttpError } from '../../middleware/errorHandler.js';
-import { calcularFechasPendientes } from '../../utils/instanciasFijas.js';
+import { asegurarIngresosFijos } from '../../utils/instanciasFijasPersonales.js';
 
 const INCLUDE_INGRESO = {
   metodoPago: true,
   categoria: true,
 };
 
-/** Mismo mecanismo que gastosPersonales.service.js#asegurarInstanciasFijas. */
-async function asegurarInstanciasFijas(usuarioId) {
-  const configs = await prisma.ingresoFijoConfig.findMany({ where: { usuarioId, activo: true } });
-  if (!configs.length) return;
-
-  const hoy = new Date();
-  for (const config of configs) {
-    const fechas = calcularFechasPendientes(config.fechaInicio, config.frecuencia, hoy);
-
-    const existentes = await prisma.ingresoPersonal.findMany({
-      where: { origenConfigId: config.id },
-      select: { fecha: true },
-    });
-    const fechasExistentes = new Set(existentes.map((i) => i.fecha.getTime()));
-    const nuevas = fechas.filter((f) => !fechasExistentes.has(f.getTime()));
-    if (!nuevas.length) continue;
-
-    await prisma.ingresoPersonal.createMany({
-      data: nuevas.map((fecha) => ({
-        usuarioId,
-        origenConfigId: config.id,
-        monto: config.monto,
-        fecha,
-        estado: config.modo === 'automatico' ? 'recibido' : 'pendiente',
-        categoriaId: config.categoriaId,
-        origen: 'app',
-      })),
-    });
-  }
-}
-
 export async function listarIngresosPersonales(usuarioId) {
-  await asegurarInstanciasFijas(usuarioId);
+  await asegurarIngresosFijos(usuarioId);
   return prisma.ingresoPersonal.findMany({
     where: { usuarioId },
     include: INCLUDE_INGRESO,

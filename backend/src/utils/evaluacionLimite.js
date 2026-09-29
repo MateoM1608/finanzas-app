@@ -1,5 +1,6 @@
 import { prisma } from '../config/prisma.js';
 import { calcularPeriodoActual, calcularPeriodoAnterior } from './cicloPersonal.js';
+import { hoyUTC } from './fechas.js';
 
 function sumarMontos(items) {
   return items.reduce((acc, i) => acc + i.monto, 0);
@@ -48,7 +49,7 @@ async function calcularEvaluacion(limite, usuarioId, rango) {
 
 /** Período actual: siempre se recalcula en vivo, nunca se guarda. */
 export async function obtenerEvaluacionActual(limite, usuarioId, frecuencia) {
-  const rango = calcularPeriodoActual(frecuencia, new Date());
+  const rango = calcularPeriodoActual(frecuencia, hoyUTC());
   return calcularEvaluacion(limite, usuarioId, rango);
 }
 
@@ -58,7 +59,7 @@ export async function obtenerEvaluacionActual(limite, usuarioId, frecuencia) {
  * no reescribir el historial si el usuario cambia reglaValor más adelante.
  */
 export async function obtenerEvaluacionAnterior(limite, usuarioId, frecuencia) {
-  const rango = calcularPeriodoAnterior(frecuencia, new Date());
+  const rango = calcularPeriodoAnterior(frecuencia, hoyUTC());
 
   const existente = await prisma.limiteEvaluadoPeriodo.findUnique({
     where: { limiteId_periodoInicio: { limiteId: limite.id, periodoInicio: rango.inicio } },
@@ -66,7 +67,15 @@ export async function obtenerEvaluacionAnterior(limite, usuarioId, frecuencia) {
   if (existente) return existente;
 
   const evaluacion = await calcularEvaluacion(limite, usuarioId, rango);
-  return prisma.limiteEvaluadoPeriodo.create({
-    data: { limiteId: limite.id, ...evaluacion },
-  });
+  try {
+    return await prisma.limiteEvaluadoPeriodo.create({
+      data: { limiteId: limite.id, ...evaluacion },
+    });
+  } catch (error) {
+    // Otra consulta en paralelo ya guardó el snapshot de este período.
+    if (error?.code !== 'P2002') throw error;
+    return prisma.limiteEvaluadoPeriodo.findUnique({
+      where: { limiteId_periodoInicio: { limiteId: limite.id, periodoInicio: rango.inicio } },
+    });
+  }
 }

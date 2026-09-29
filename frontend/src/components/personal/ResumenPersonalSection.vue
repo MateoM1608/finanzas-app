@@ -112,7 +112,9 @@ const porCategoriaChart = computed(() => {
                 {{ c.descripcion || c.categoria || (c.tipo === 'gasto' ? 'Gasto personal' : 'Ingreso personal') }}
                 <span v-if="c.esObligatorio" class="text-xs text-accent">obligatorio</span>
               </p>
-              <p class="text-sm text-ink-tertiary">{{ formatDate(c.fecha) }}</p>
+              <p class="text-sm text-ink-tertiary">
+                {{ formatDate(c.fecha) }}<template v-if="c.descripcion && c.categoria"> · {{ c.categoria }}</template>
+              </p>
             </div>
             <span class="font-medium shrink-0" :class="c.tipo === 'gasto' ? 'text-negative' : 'text-positive'">
               {{ c.tipo === 'gasto' ? '−' : '+' }}{{ formatCurrency(c.monto) }}

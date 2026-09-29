@@ -40,7 +40,7 @@ const chartOptionsApilado = {
 const serieCortesChart = computed(() => {
   const items = resumen.value?.serieCortes ?? [];
   return {
-    labels: items.map((c) => formatDate(c.fechaNominal)),
+    labels: items.map((c) => formatDate(c.fechaNominal) + (c.secuencia > 1 ? ' (compl.)' : '')),
     datasets: [
       { label: 'Recurrentes', data: items.map((c) => c.totalRecurrentes), backgroundColor: '#2F6FED', stack: 'total' },
       { label: 'Variables', data: items.map((c) => c.totalVariables), backgroundColor: '#93B4F5', stack: 'total' },
@@ -59,7 +59,7 @@ const miembrosBalance = computed(() => {
 const balancesChart = computed(() => {
   const items = resumen.value?.serieCortes ?? [];
   return {
-    labels: items.map((c) => formatDate(c.fechaNominal)),
+    labels: items.map((c) => formatDate(c.fechaNominal) + (c.secuencia > 1 ? ' (compl.)' : '')),
     datasets: miembrosBalance.value.map((m, idx) => ({
       label: m.nombre,
       data: items.map((c) => c.balances.find((b) => b.usuarioId === m.usuarioId)?.balance ?? 0),

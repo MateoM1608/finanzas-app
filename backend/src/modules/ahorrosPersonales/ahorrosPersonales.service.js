@@ -2,6 +2,7 @@ import { prisma } from '../../config/prisma.js';
 import { HttpError } from '../../middleware/errorHandler.js';
 import { calcularPeriodoActual, dentroDelRango } from '../../utils/cicloPersonal.js';
 import { evaluarPeriodoSiCorresponde } from '../../utils/evaluacionAhorro.js';
+import { hoyUTC } from '../../utils/fechas.js';
 
 const PERIODOS_VENTANA = 6;
 
@@ -59,7 +60,7 @@ export async function registrarAporte(usuarioActual, ahorroId, data) {
     data: {
       ahorroId,
       monto: data.monto,
-      fecha: data.fecha ?? new Date(),
+      fecha: data.fecha ?? hoyUTC(),
       origen: 'manual',
     },
   });
@@ -76,7 +77,7 @@ export async function registrarAporte(usuarioActual, ahorroId, data) {
  */
 export async function obtenerResumenAhorros(usuarioActual) {
   const usuarioId = usuarioActual.id;
-  await evaluarPeriodoSiCorresponde(usuarioId, new Date());
+  await evaluarPeriodoSiCorresponde(usuarioId, hoyUTC());
 
   const ahorros = await prisma.ahorroPersonal.findMany({
     where: { usuarioId },
@@ -131,7 +132,7 @@ export async function obtenerResumenAhorros(usuarioActual) {
   );
 
   const frecuencia = usuarioActual.frecuenciaCicloPersonal;
-  const periodoActualRango = calcularPeriodoActual(frecuencia, new Date());
+  const periodoActualRango = calcularPeriodoActual(frecuencia, hoyUTC());
   const periodoActualEvaluado = await prisma.periodoAhorroEvaluado.findUnique({
     where: { usuarioId_periodoInicio: { usuarioId, periodoInicio: periodoActualRango.inicio } },
   });

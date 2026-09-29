@@ -1,3 +1,5 @@
+import { hoyUTC } from './fechas.js';
+
 function ultimoDiaMes(anio, mesIndex0) {
   return new Date(Date.UTC(anio, mesIndex0 + 1, 0)).getUTCDate();
 }
@@ -77,7 +79,7 @@ function construirPeriodos(hogar, puntosCorte, hoy, offsets) {
  * de cuándo se ejecute realmente un corte — eso lo decide quien lo inicia (fase 5),
  * esto solo determina en qué ciclo calendario estamos parados ahora mismo.
  */
-export function calcularPeriodoActual(hogar, puntosCorte, fechaRef = new Date()) {
+export function calcularPeriodoActual(hogar, puntosCorte, fechaRef = hoyUTC()) {
   if (!puntosCorte.length) {
     throw new Error('El hogar no tiene puntos de corte configurados');
   }
@@ -102,7 +104,7 @@ export function calcularPeriodoActual(hogar, puntosCorte, fechaRef = new Date())
  * dentro de la ventana — así un concepto no se pierde si nadie generó su
  * instancia a tiempo (ver `cortes.service.js#iniciarCorte`).
  */
-export function calcularPeriodosPendientes(hogar, puntosCorte, fechasNominalesCerradas, fechaRef = new Date()) {
+export function calcularPeriodosPendientes(hogar, puntosCorte, fechasNominalesCerradas, fechaRef = hoyUTC()) {
   if (!puntosCorte.length) {
     throw new Error('El hogar no tiene puntos de corte configurados');
   }
@@ -132,7 +134,7 @@ export function calcularProximaFechaNominalPendiente(
   hogar,
   puntosCorte,
   fechasNominalesCerradas,
-  fechaRef = new Date(),
+  fechaRef = hoyUTC(),
 ) {
   const pendientes = calcularPeriodosPendientes(hogar, puntosCorte, fechasNominalesCerradas, fechaRef);
   if (!pendientes.length) return null;

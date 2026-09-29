@@ -1,8 +1,9 @@
 import { prisma } from '../config/prisma.js';
+import { hoyUTC } from './fechas.js';
 
 export async function obtenerSplitVigente(hogarId, contexto = 'general', client = prisma) {
   const ultimo = await client.splitPorcentajeMiembro.findFirst({
-    where: { hogarId, contexto, periodoInicio: { lte: new Date() } },
+    where: { hogarId, contexto, periodoInicio: { lte: hoyUTC() } },
     orderBy: { periodoInicio: 'desc' },
   });
   if (!ultimo) return [];

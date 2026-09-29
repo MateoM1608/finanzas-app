@@ -38,7 +38,7 @@ import {
   eliminarLimite,
 } from '../../api/limitesPersonales.js';
 import { extractErrorMessage } from '../../api/client.js';
-import { formatCurrency } from '../../utils/format.js';
+import { formatCurrency, hoyISO } from '../../utils/format.js';
 import FormField from '../FormField.vue';
 import AlertError from '../AlertError.vue';
 
@@ -244,7 +244,7 @@ const gf = reactive({
   nombre: '',
   monto: '',
   frecuencia: 'mensual',
-  fechaInicio: new Date().toISOString().slice(0, 10),
+  fechaInicio: hoyISO(),
   modoCobro: 'automatico',
   esObligatorio: false,
   metodoPagoIdDefault: '',
@@ -361,7 +361,7 @@ const inf = reactive({
   nombre: '',
   monto: '',
   frecuencia: 'mensual',
-  fechaInicio: new Date().toISOString().slice(0, 10),
+  fechaInicio: hoyISO(),
   modo: 'automatico',
   categoriaId: '',
 });

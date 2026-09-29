@@ -1,6 +1,6 @@
 import { prisma } from '../../config/prisma.js';
 import { HttpError } from '../../middleware/errorHandler.js';
-import { calcularFechasPendientes } from '../../utils/instanciasFijas.js';
+import { asegurarGastosFijos } from '../../utils/instanciasFijasPersonales.js';
 import { evaluarPeriodoSiCorresponde } from '../../utils/evaluacionAhorro.js';
 
 const INCLUDE_GASTO = {
@@ -20,48 +20,8 @@ async function evaluarSiObligatorioPagado(gasto) {
   }
 }
 
-/**
- * Genera (si no existen ya) las ocurrencias de cada concepto fijo activo
- * entre su `fechaInicio` y hoy — directamente como filas reales de
- * GastoPersonal, no como una tabla de "instancia" aparte: acá no hay corte
- * que las convierta en gasto real, la fila generada YA ES el gasto (en
- * estado `pagado` si el cobro es automático, `pendiente` si es manual).
- */
-async function asegurarInstanciasFijas(usuarioId) {
-  const configs = await prisma.gastoFijoConfig.findMany({ where: { usuarioId, activo: true } });
-  if (!configs.length) return;
-
-  const hoy = new Date();
-  for (const config of configs) {
-    const fechas = calcularFechasPendientes(config.fechaInicio, config.frecuencia, hoy);
-
-    const existentes = await prisma.gastoPersonal.findMany({
-      where: { origenConfigId: config.id },
-      select: { fecha: true },
-    });
-    const fechasExistentes = new Set(existentes.map((g) => g.fecha.getTime()));
-    const nuevas = fechas.filter((f) => !fechasExistentes.has(f.getTime()));
-    if (!nuevas.length) continue;
-
-    await prisma.gastoPersonal.createMany({
-      data: nuevas.map((fecha) => ({
-        usuarioId,
-        origenConfigId: config.id,
-        monto: config.monto,
-        fecha,
-        descripcion: config.nombre,
-        estado: config.modoCobro === 'automatico' ? 'pagado' : 'pendiente',
-        esObligatorio: config.esObligatorio,
-        metodoPagoId: config.metodoPagoIdDefault,
-        categoriaId: config.categoriaId,
-        origen: 'app',
-      })),
-    });
-  }
-}
-
 export async function listarGastosPersonales(usuarioId) {
-  await asegurarInstanciasFijas(usuarioId);
+  await asegurarGastosFijos(usuarioId);
   return prisma.gastoPersonal.findMany({
     where: { usuarioId },
     include: INCLUDE_GASTO,

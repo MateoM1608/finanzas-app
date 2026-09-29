@@ -5,7 +5,7 @@ import { listarIngresos, crearIngreso, actualizarIngreso, eliminarIngreso } from
 import { listarCategorias } from '../api/categoriasPersonales.js';
 import { listarMetodosPago } from '../api/metodosPagoPersonales.js';
 import { extractErrorMessage } from '../api/client.js';
-import { formatCurrency, formatDate } from '../utils/format.js';
+import { formatCurrency, formatDate, hoyISO } from '../utils/format.js';
 import AppHeader from '../components/AppHeader.vue';
 import FormField from '../components/FormField.vue';
 import AlertError from '../components/AlertError.vue';
@@ -36,7 +36,7 @@ const categoriasParaIngreso = computed(() => categorias.value.filter((c) => c.ap
 // --- Gastos ---
 const gastos = ref([]);
 const gMonto = ref('');
-const gFecha = ref(new Date().toISOString().slice(0, 10));
+const gFecha = ref(hoyISO());
 const gDescripcion = ref('');
 const gCategoriaId = ref('');
 const gMetodoPagoId = ref('');
@@ -112,7 +112,8 @@ async function onEliminarGasto(id) {
 // --- Ingresos ---
 const ingresos = ref([]);
 const iMonto = ref('');
-const iFecha = ref(new Date().toISOString().slice(0, 10));
+const iFecha = ref(hoyISO());
+const iDescripcion = ref('');
 const iCategoriaId = ref('');
 const iMetodoPagoId = ref('');
 const iEstado = ref('recibido');
@@ -131,12 +132,14 @@ async function onAgregarIngreso() {
     const nuevo = await crearIngreso({
       monto: Number(iMonto.value),
       fecha: iFecha.value,
+      descripcion: iDescripcion.value || undefined,
       categoriaId: iCategoriaId.value || undefined,
       metodoPagoId: iMetodoPagoId.value || undefined,
       estado: iEstado.value,
     });
     ingresos.value = [nuevo, ...ingresos.value];
     iMonto.value = '';
+    iDescripcion.value = '';
     iCategoriaId.value = '';
     iMetodoPagoId.value = '';
     iEstado.value = 'recibido';
@@ -273,7 +276,7 @@ onMounted(cargarTodo);
             <div class="flex items-center justify-between gap-4">
               <div>
                 <p class="text-ink-primary font-medium flex items-center gap-2 flex-wrap">
-                  {{ gasto.categoria?.nombre || gasto.descripcion || 'Gasto personal' }}
+                  {{ gasto.descripcion || gasto.categoria?.nombre || 'Gasto personal' }}
                   <span
                     v-if="gasto.estado === 'pendiente'"
                     class="text-xs font-semibold uppercase px-2 py-0.5 rounded-full bg-negative/10 text-negative"
@@ -286,6 +289,7 @@ onMounted(cargarTodo);
                 </p>
                 <p class="text-sm text-ink-tertiary">
                   {{ formatDate(gasto.fecha) }}
+                  <template v-if="gasto.descripcion && gasto.categoria"> · {{ gasto.categoria.nombre }}</template>
                   <template v-if="gasto.metodoPago"> · {{ gasto.metodoPago.nombre }}</template>
                 </p>
               </div>
@@ -319,6 +323,7 @@ onMounted(cargarTodo);
         <form class="grid grid-cols-1 sm:grid-cols-2 gap-4" @submit.prevent="onAgregarIngreso">
           <FormField v-model="iMonto" type="number" label="Monto (COP)" required placeholder="3000000" />
           <FormField v-model="iFecha" type="date" label="Fecha" required />
+          <FormField v-model="iDescripcion" label="Descripción (opcional)" placeholder="Ej. Salario, freelance" />
           <div>
             <label class="label">Categoría (opcional)</label>
             <select v-model="iCategoriaId" class="field">
@@ -362,7 +367,7 @@ onMounted(cargarTodo);
             <div class="flex items-center justify-between gap-4">
               <div>
                 <p class="text-ink-primary font-medium flex items-center gap-2 flex-wrap">
-                  {{ ingreso.categoria?.nombre || 'Ingreso personal' }}
+                  {{ ingreso.descripcion || ingreso.categoria?.nombre || 'Ingreso personal' }}
                   <span
                     v-if="ingreso.estado === 'pendiente'"
                     class="text-xs font-semibold uppercase px-2 py-0.5 rounded-full bg-negative/10 text-negative"
@@ -373,6 +378,7 @@ onMounted(cargarTodo);
                 </p>
                 <p class="text-sm text-ink-tertiary">
                   {{ formatDate(ingreso.fecha) }}
+                  <template v-if="ingreso.descripcion && ingreso.categoria"> · {{ ingreso.categoria.nombre }}</template>
                   <template v-if="ingreso.metodoPago"> · {{ ingreso.metodoPago.nombre }}</template>
                 </p>
               </div>

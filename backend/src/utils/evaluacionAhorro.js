@@ -1,8 +1,34 @@
 import { prisma } from '../config/prisma.js';
 import { calcularPeriodoActual } from './cicloPersonal.js';
+import { calcularFechasPendientes } from './instanciasFijas.js';
+import { asegurarInstanciasFijasPersonales } from './instanciasFijasPersonales.js';
+import { hoyUTC } from './fechas.js';
 
 function sumarMontos(items) {
   return items.reduce((acc, i) => acc + i.monto, 0);
+}
+
+/**
+ * ¿Algún gasto fijo obligatorio activo tiene todavía una ocurrencia dentro
+ * del período que aún no se generó (fecha posterior a hoy)? Las ocurrencias
+ * fijas se generan perezosamente solo hasta hoy, así que sin esto un período
+ * recién empezado "no tenía obligatorios pendientes" y se evaluaba antes de
+ * tiempo — con el ingreso del mes todavía sin recibir.
+ */
+async function hayObligatoriosFijosPorVenir(usuarioId, periodo, hoy) {
+  if (periodo.fin <= hoy) return false;
+  const configs = await prisma.gastoFijoConfig.findMany({
+    where: { usuarioId, activo: true, esObligatorio: true },
+  });
+  return configs.some((config) =>
+    calcularFechasPendientes(config.fechaInicio, config.frecuencia, periodo.fin).some(
+      (f) => f > hoy && f >= periodo.inicio,
+    ),
+  );
+}
+
+function esViolacionDeUnico(error) {
+  return error?.code === 'P2002';
 }
 
 function calcularMontoSugerido(ahorro, baseCalculoAhorro, gastosNoObligatoriosPeriodo) {
@@ -29,11 +55,16 @@ function calcularMontoSugerido(ahorro, baseCalculoAhorro, gastosNoObligatoriosPe
 export async function evaluarPeriodoSiCorresponde(usuarioId, fecha) {
   const usuario = await prisma.usuario.findUnique({ where: { id: usuarioId } });
   const periodo = calcularPeriodoActual(usuario.frecuenciaCicloPersonal, fecha);
+  const hoy = hoyUTC();
 
   const yaEvaluado = await prisma.periodoAhorroEvaluado.findUnique({
     where: { usuarioId_periodoInicio: { usuarioId, periodoInicio: periodo.inicio } },
   });
   if (yaEvaluado) return null;
+
+  // Los fijos tienen que existir antes de contar pendientes y sumar montos.
+  await asegurarInstanciasFijasPersonales(usuarioId);
+  if (await hayObligatoriosFijosPorVenir(usuarioId, periodo, hoy)) return null;
 
   const rango = { gte: periodo.inicio, lte: periodo.fin };
 
@@ -55,33 +86,45 @@ export async function evaluarPeriodoSiCorresponde(usuarioId, fecha) {
 
   const ahorrosActivos = await prisma.ahorroPersonal.findMany({ where: { usuarioId, activo: true } });
 
-  return prisma.$transaction(async (tx) => {
-    const periodoEvaluado = await tx.periodoAhorroEvaluado.create({
-      data: {
-        usuarioId,
-        periodoInicio: periodo.inicio,
-        periodoFin: periodo.fin,
-        ingresoPeriodo,
-        gastosObligatoriosPeriodo,
-        gastosNoObligatoriosPeriodo,
-        baseCalculoAhorro,
-      },
-    });
+  // El débito automático pertenece al período evaluado: si se evalúa uno ya
+  // terminado (ej. se pagó tarde un obligatorio del mes pasado), cae en su
+  // último día y no en el período en curso.
+  const fechaDebito = periodo.fin < hoy ? periodo.fin : hoy;
 
-    for (const ahorro of ahorrosActivos) {
-      const montoSugerido = calcularMontoSugerido(ahorro, baseCalculoAhorro, gastosNoObligatoriosPeriodo);
-
-      await tx.ahorroPronostico.create({
-        data: { ahorroId: ahorro.id, periodoId: periodoEvaluado.id, montoSugerido },
+  try {
+    return await prisma.$transaction(async (tx) => {
+      const periodoEvaluado = await tx.periodoAhorroEvaluado.create({
+        data: {
+          usuarioId,
+          periodoInicio: periodo.inicio,
+          periodoFin: periodo.fin,
+          ingresoPeriodo,
+          gastosObligatoriosPeriodo,
+          gastosNoObligatoriosPeriodo,
+          baseCalculoAhorro,
+        },
       });
 
-      if (ahorro.modoTransaccion === 'automatico' && montoSugerido > 0) {
-        await tx.ahorroTransaccion.create({
-          data: { ahorroId: ahorro.id, monto: montoSugerido, fecha: new Date(), origen: 'automatico' },
-        });
-      }
-    }
+      for (const ahorro of ahorrosActivos) {
+        const montoSugerido = calcularMontoSugerido(ahorro, baseCalculoAhorro, gastosNoObligatoriosPeriodo);
 
-    return periodoEvaluado;
-  });
+        await tx.ahorroPronostico.create({
+          data: { ahorroId: ahorro.id, periodoId: periodoEvaluado.id, montoSugerido },
+        });
+
+        if (ahorro.modoTransaccion === 'automatico' && montoSugerido > 0) {
+          await tx.ahorroTransaccion.create({
+            data: { ahorroId: ahorro.id, monto: montoSugerido, fecha: fechaDebito, origen: 'automatico' },
+          });
+        }
+      }
+
+      return periodoEvaluado;
+    });
+  } catch (error) {
+    // Dos consultas en paralelo evaluando el mismo período: la segunda choca
+    // con el único (usuarioId, periodoInicio) y no tiene nada que hacer.
+    if (esViolacionDeUnico(error)) return null;
+    throw error;
+  }
 }

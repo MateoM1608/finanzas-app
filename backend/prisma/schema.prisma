@@ -281,6 +281,7 @@ model IngresoPersonal {
   origenConfigId String?               @map("origen_config_id")
   monto          Int
   fecha          DateTime
+  descripcion    String?
   estado         EstadoIngresoPersonal @default(recibido)
   metodoPagoId   String?               @map("metodo_pago_id")
   categoriaId    String?               @map("categoria_id")
@@ -433,6 +434,10 @@ model Corte {
   id                 String      @id @default(uuid())
   hogarId            String      @map("hogar_id")
   fechaNominal       DateTime    @map("fecha_nominal")
+  // 1 = el corte normal de esa fecha nominal. >1 = corte complementario: se
+  // abre cuando ya se cerró el de esa fecha y aparece un pendiente con fecha
+  // ≤ la nominal, para liquidarlo en el día en vez de esperar al siguiente.
+  secuencia          Int         @default(1)
   fechaEjecucion     DateTime?   @map("fecha_ejecucion")
   estado             EstadoCorte @default(abierto)
   creadoPorUsuarioId String      @map("creado_por_usuario_id")
@@ -444,7 +449,7 @@ model Corte {
   balances                  CorteBalanceMiembro[]
   gastosPersonalesGenerados GastoPersonal[]
 
-  @@unique([hogarId, fechaNominal])
+  @@unique([hogarId, fechaNominal, secuencia])
   @@index([hogarId])
   @@map("cortes")
 }

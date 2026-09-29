@@ -1,6 +1,7 @@
 import { prisma } from '../../config/prisma.js';
 import { HttpError } from '../../middleware/errorHandler.js';
 import { obtenerEvaluacionActual, obtenerEvaluacionAnterior } from '../../utils/evaluacionLimite.js';
+import { asegurarInstanciasFijasPersonales } from '../../utils/instanciasFijasPersonales.js';
 
 function validarConsistenciaObjetivo(tipoObjetivo, categoriaId) {
   if (tipoObjetivo === 'categoria' && !categoriaId) {
@@ -71,6 +72,9 @@ export async function eliminarLimite(usuarioActual, id) {
 export async function obtenerResumenLimites(usuarioActual) {
   const usuarioId = usuarioActual.id;
   const frecuencia = usuarioActual.frecuenciaCicloPersonal;
+  // Antes de medir cualquier período: si no, en la primera carga del panel
+  // el snapshot del período anterior se guardaba sin los fijos generados.
+  await asegurarInstanciasFijasPersonales(usuarioId);
 
   const limites = await prisma.limiteAlertaPersonal.findMany({
     where: { usuarioId, activo: true },

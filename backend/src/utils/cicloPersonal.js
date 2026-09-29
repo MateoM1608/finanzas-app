@@ -1,3 +1,5 @@
+import { hoyUTC } from './fechas.js';
+
 function inicioDeDiaUTC(fecha) {
   return new Date(Date.UTC(fecha.getUTCFullYear(), fecha.getUTCMonth(), fecha.getUTCDate()));
 }
@@ -46,11 +48,11 @@ function calcularPeriodo(frecuencia, fechaRef) {
   };
 }
 
-export function calcularPeriodoActual(frecuencia, fechaRef = new Date()) {
+export function calcularPeriodoActual(frecuencia, fechaRef = hoyUTC()) {
   return calcularPeriodo(frecuencia, fechaRef);
 }
 
-export function calcularPeriodoAnterior(frecuencia, fechaRef = new Date()) {
+export function calcularPeriodoAnterior(frecuencia, fechaRef = hoyUTC()) {
   const actual = calcularPeriodo(frecuencia, fechaRef);
   // Un día antes del inicio del período actual cae, por construcción, dentro
   // del período inmediatamente anterior — sirve como referencia para

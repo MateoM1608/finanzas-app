@@ -1,5 +1,6 @@
 import { prisma } from '../../config/prisma.js';
 import { calcularPeriodoActual, calcularPeriodoAnterior, dentroDelRango } from '../../utils/cicloPersonal.js';
+import { asegurarInstanciasFijasPersonales } from '../../utils/instanciasFijasPersonales.js';
 
 const MESES_VENTANA = 6;
 
@@ -21,6 +22,7 @@ function sumarMontos(items) {
  */
 export async function obtenerResumenPersonal(usuarioActual) {
   const usuarioId = usuarioActual.id;
+  await asegurarInstanciasFijasPersonales(usuarioId);
 
   const [gastosPagados, ingresosRecibidos, gastosPendientes, ingresosPendientes] = await Promise.all([
     prisma.gastoPersonal.findMany({
@@ -36,7 +38,7 @@ export async function obtenerResumenPersonal(usuarioActual) {
       where: { usuarioId, estado: 'pendiente' },
       include: { categoria: true },
     }),
-    prisma.ingresoPersonal.findMany({ where: { usuarioId, estado: 'pendiente' } }),
+    prisma.ingresoPersonal.findMany({ where: { usuarioId, estado: 'pendiente' }, include: { categoria: true } }),
   ]);
 
   const disponible = sumarMontos(ingresosRecibidos) - sumarMontos(gastosPagados);
@@ -71,6 +73,8 @@ export async function obtenerResumenPersonal(usuarioActual) {
       id: i.id,
       monto: i.monto,
       fecha: i.fecha,
+      descripcion: i.descripcion,
+      categoria: i.categoria?.nombre ?? null,
     })),
   ].sort((a, b) => new Date(a.fecha) - new Date(b.fecha));
 

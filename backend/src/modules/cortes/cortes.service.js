@@ -5,6 +5,7 @@ import { asegurarInstanciasRecurrentes } from '../gastosRecurrentes/gastosRecurr
 import { obtenerSplitVigente, calcularReparto } from '../../utils/reparto.js';
 import { obtenerOrigenesDetalladosPorLote, origenClave } from '../../utils/corteItemOrigen.js';
 import { evaluarPeriodoSiCorresponde } from '../../utils/evaluacionAhorro.js';
+import { hoyUTC } from '../../utils/fechas.js';
 
 const INCLUDE_CORTE = {
   items: true,
@@ -75,7 +76,7 @@ export async function listarCortes(usuarioActual) {
   const hogarId = requireHogarId(usuarioActual);
   const cortes = await prisma.corte.findMany({
     where: { hogarId },
-    orderBy: { fechaNominal: 'desc' },
+    orderBy: [{ fechaNominal: 'desc' }, { secuencia: 'desc' }],
     include: INCLUDE_CORTE,
   });
   const mapa = await obtenerOrigenesDetalladosPorLote(cortes.flatMap((c) => c.items));
@@ -120,8 +121,34 @@ async function buscarPendientes(hogarId, fechaObjetivo) {
 }
 
 /**
+ * Orígenes que ya pasaron por un corte CERRADO de esta misma fecha nominal
+ * (liquidados o pospuestos ahí). Un corte complementario de esa fecha solo
+ * toma lo nuevo: lo que se desmarcó a propósito en el corte original sigue
+ * esperando al siguiente corte normal, como siempre.
+ */
+async function origenesYaCerradosEnFecha(hogarId, fechaNominal) {
+  const items = await prisma.corteItem.findMany({
+    where: { corte: { hogarId, fechaNominal, estado: 'cerrado' } },
+    select: { tipoOrigen: true, origenId: true },
+  });
+  return new Set(items.map((i) => `${i.tipoOrigen}:${i.origenId}`));
+}
+
+async function buscarPendientesNuevos(hogarId, fechaNominal) {
+  const [{ instancias, variables }, yaCerrados] = await Promise.all([
+    buscarPendientes(hogarId, fechaNominal),
+    origenesYaCerradosEnFecha(hogarId, fechaNominal),
+  ]);
+  return {
+    instancias: instancias.filter((i) => !yaCerrados.has(`recurrente:${i.id}`)),
+    variables: variables.filter((v) => !yaCerrados.has(`variable:${v.id}`)),
+  };
+}
+
+/**
  * Junta los pendientes (recurrentes + variables) con fecha ≤ `fechaNominal`
- * que todavía no tienen un CorteItem en este corte, y los agrega. Se usa
+ * que todavía no tienen un CorteItem en este corte (ni en un corte cerrado
+ * de la misma fecha nominal, ver `origenesYaCerradosEnFecha`), y los agrega. Se usa
  * tanto al crear un corte nuevo como al reabrir uno ya `abierto` — así un
  * corte que quedó abierto antes de que existiera un concepto recurrente (o
  * de que se generara su instancia) lo recoge en la siguiente visita, en vez
@@ -134,7 +161,7 @@ async function agregarPendientesAlCorte(hogarId, corteId, fechaNominal) {
   });
   const yaIncluido = new Set(existentes.map((e) => `${e.tipoOrigen}:${e.origenId}`));
 
-  const { instancias, variables } = await buscarPendientes(hogarId, fechaNominal);
+  const { instancias, variables } = await buscarPendientesNuevos(hogarId, fechaNominal);
   const nuevasInstancias = instancias.filter((i) => !yaIncluido.has(`recurrente:${i.id}`));
   const nuevasVariables = variables.filter((v) => !yaIncluido.has(`variable:${v.id}`));
   if (!nuevasInstancias.length && !nuevasVariables.length) return;
@@ -211,6 +238,31 @@ export async function iniciarCorte(usuarioActual) {
   if (abierto) {
     await agregarPendientesAlCorte(hogarId, abierto.id, abierto.fechaNominal);
     return { corte: await obtenerCorte(usuarioActual, abierto.id), motivo: null };
+  }
+
+  // Corte complementario: si el último corte cerrado ya pasó pero después
+  // apareció un pendiente con fecha ≤ su fecha nominal (ej. un gasto del mes
+  // que alguien registró tarde), se abre un segundo corte de esa MISMA fecha
+  // solo con lo nuevo — para liquidarlo en el día, en vez de dejar que espere
+  // hasta el corte del período siguiente.
+  const ultimoCerrado = await prisma.corte.findFirst({
+    where: { hogarId, estado: 'cerrado' },
+    orderBy: [{ fechaNominal: 'desc' }, { secuencia: 'desc' }],
+  });
+  if (ultimoCerrado) {
+    const nuevos = await buscarPendientesNuevos(hogarId, ultimoCerrado.fechaNominal);
+    if (nuevos.instancias.length || nuevos.variables.length) {
+      const complementario = await prisma.corte.create({
+        data: {
+          hogarId,
+          fechaNominal: ultimoCerrado.fechaNominal,
+          secuencia: ultimoCerrado.secuencia + 1,
+          creadoPorUsuarioId: usuarioActual.id,
+        },
+      });
+      await agregarPendientesAlCorte(hogarId, complementario.id, complementario.fechaNominal);
+      return { corte: await obtenerCorte(usuarioActual, complementario.id), motivo: null };
+    }
   }
 
   // Primero probamos con cualquier atraso acumulado (períodos ya terminados y sin cerrar).
@@ -350,6 +402,16 @@ export async function confirmarCorte(usuarioActual, corteId) {
   const items = await prisma.corteItem.findMany({ where: { corteId, incluido: true } });
   const mapa = await obtenerOrigenesDetalladosPorLote(items);
 
+  // Fecha del gasto personal que genera el corte: la más temprana entre la
+  // nominal y el día real del cierre. Un cierre adelantado queda el día en
+  // que de verdad salió la plata; uno atrasado sigue cayendo en su período
+  // (nunca la fecha de ejecución a secas, ver Fase 7 Etapa 5).
+  const hoy = hoyUTC();
+  const fechaGastoPersonal = corte.fechaNominal < hoy ? corte.fechaNominal : hoy;
+  const etiquetaCorte = `Corte de hogar del ${corte.fechaNominal.toISOString().slice(0, 10)}${
+    corte.secuencia > 1 ? ' (complementario)' : ''
+  }`;
+
   const balancePorMiembro = new Map();
   const sumar = (usuarioId, delta) => {
     balancePorMiembro.set(usuarioId, (balancePorMiembro.get(usuarioId) ?? 0) + delta);
@@ -404,8 +466,8 @@ export async function confirmarCorte(usuarioActual, corteId) {
         data: gastosPersonales.map(([usuarioId, monto]) => ({
           usuarioId,
           monto,
-          fecha: corte.fechaNominal,
-          descripcion: `Corte de hogar del ${corte.fechaNominal.toISOString().slice(0, 10)}`,
+          fecha: fechaGastoPersonal,
+          descripcion: etiquetaCorte,
           estado: 'pagado',
           esObligatorio: true,
           origen: 'corte_hogar',
@@ -421,7 +483,7 @@ export async function confirmarCorte(usuarioActual, corteId) {
   });
 
   for (const usuarioId of repartoPorMiembro.keys()) {
-    await evaluarPeriodoSiCorresponde(usuarioId, corte.fechaNominal);
+    await evaluarPeriodoSiCorresponde(usuarioId, fechaGastoPersonal);
   }
 
   return obtenerCorte(usuarioActual, corteId);
@@ -440,7 +502,7 @@ export async function obtenerResumenHogar(usuarioActual) {
 
   const cortesCerrados = await prisma.corte.findMany({
     where: { hogarId, estado: 'cerrado' },
-    orderBy: { fechaNominal: 'desc' },
+    orderBy: [{ fechaNominal: 'desc' }, { secuencia: 'desc' }],
     take: CORTES_VENTANA_RESUMEN,
     include: {
       items: true,
@@ -475,6 +537,7 @@ export async function obtenerResumenHogar(usuarioActual) {
 
     return {
       fechaNominal: corte.fechaNominal,
+      secuencia: corte.secuencia,
       totalRecurrentes,
       totalVariables,
       balances: corte.balances.map((b) => ({

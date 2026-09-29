@@ -10,7 +10,7 @@ import {
 } from '../api/cortes.js';
 import { listarMiembros } from '../api/hogares.js';
 import { extractErrorMessage } from '../api/client.js';
-import { formatCurrency, formatDate, formatearBalances, formatReparto } from '../utils/format.js';
+import { formatCurrency, formatDate, formatDateLocal, formatearBalances, formatReparto } from '../utils/format.js';
 import AppHeader from '../components/AppHeader.vue';
 import AlertError from '../components/AlertError.vue';
 
@@ -249,8 +249,12 @@ onMounted(cargar);
           <div class="flex items-center justify-between mb-1">
             <h3 class="text-base font-semibold text-ink-primary">
               Corte del {{ formatDate(corteAbierto.fechaNominal) }}
+              <span v-if="corteAbierto.secuencia > 1" class="ml-2 text-xs font-semibold uppercase px-2 py-0.5 rounded-full bg-accent-muted text-accent align-middle">Complementario</span>
             </h3>
           </div>
+          <p v-if="corteAbierto.secuencia > 1" class="text-sm text-ink-secondary mb-2">
+            El corte de esta fecha ya se cerró — este solo liquida lo que apareció después, para netearlo hoy.
+          </p>
           <p class="text-sm text-ink-secondary mb-5">
             Desmarca lo que todavía no se ha pagado en la realidad — queda pendiente y pasa solo al próximo corte.
           </p>
@@ -347,9 +351,12 @@ onMounted(cargar);
           <ul v-else class="divide-y divide-border">
             <li v-for="corte in historial" :key="corte.id" class="py-4">
               <div>
-                <p class="text-ink-primary font-medium">Corte del {{ formatDate(corte.fechaNominal) }}</p>
+                <p class="text-ink-primary font-medium">
+                  Corte del {{ formatDate(corte.fechaNominal) }}
+                  <span v-if="corte.secuencia > 1" class="ml-2 text-xs font-semibold uppercase px-2 py-0.5 rounded-full bg-accent-muted text-accent align-middle">Complementario</span>
+                </p>
                 <p class="text-sm text-ink-tertiary">
-                  Ejecutado {{ formatDate(corte.fechaEjecucion) }} · {{ corte.items.filter((i) => i.incluido).length }} ítems liquidados
+                  Ejecutado {{ formatDateLocal(corte.fechaEjecucion) }} · {{ corte.items.filter((i) => i.incluido).length }} ítems liquidados
                 </p>
               </div>
 

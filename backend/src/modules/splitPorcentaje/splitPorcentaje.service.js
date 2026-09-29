@@ -1,5 +1,6 @@
 import { prisma } from '../../config/prisma.js';
 import { HttpError } from '../../middleware/errorHandler.js';
+import { hoyUTC } from '../../utils/fechas.js';
 
 function requireHogarId(usuarioActual) {
   if (!usuarioActual.hogarId) {
@@ -15,14 +16,14 @@ function requirePermisoEdicion(usuarioActual) {
 }
 
 function inicioDeHoy() {
-  return new Date(new Date().toISOString().slice(0, 10));
+  return hoyUTC();
 }
 
 export async function obtenerSplitVigente(usuarioActual, contexto = 'general') {
   const hogarId = requireHogarId(usuarioActual);
 
   const ultimo = await prisma.splitPorcentajeMiembro.findFirst({
-    where: { hogarId, contexto, periodoInicio: { lte: new Date() } },
+    where: { hogarId, contexto, periodoInicio: { lte: hoyUTC() } },
     orderBy: { periodoInicio: 'desc' },
   });
 
