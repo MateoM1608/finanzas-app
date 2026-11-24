@@ -11,6 +11,14 @@ API REST en Node.js + Express + Prisma + PostgreSQL. Fase 1: autenticación y on
 
 **Al desplegar esta versión sobre una base existente:** `npx prisma migrate deploy` y después `npm run recalcular-historiales` (sin argumentos solo muestra qué haría; con `-- --aplicar` lo hace). Ver "Estabilización post-Fase 7 Etapa 5" en Notas de diseño.
 
+## Despliegue en Vercel
+
+Proyecto de Vercel con carpeta raíz `backend`, preset "Other" (`framework: null` en `vercel.json`), región `iad1`. `api/index.js` exporta la app de Express (`src/app.js`) como función serverless y `vercel.json` reenvía todas las rutas a esa función; `src/server.js` (con `app.listen`) queda solo para correr local. `postinstall` corre `prisma generate`. Las migraciones **no** corren en el build — se aplican a mano con `npx prisma migrate deploy`.
+
+Variables de entorno: `DATABASE_URL` (con `connection_limit=3&pool_timeout=20`, por ser serverless), `JWT_SECRET`, `NODE_ENV=production` (activa la cookie `secure`), `APP_TZ=America/Bogota` y `FRONTEND_URL` (orígenes a los que CORS acepta credenciales; en el uso normal no hace falta porque el frontend llega por rewrite, mismo origen).
+
+Dentro de una transacción interactiva toda lectura debe usar `tx`, no el cliente global: con pocas conexiones por instancia, la transacción retiene una y la consulta global puede quedarse esperando hasta el timeout (por eso `obtenerOrigen` en `cortes.service.js` recibe el cliente).
+
 ## Endpoints (Fase 1)
 
 ### Auth (`/api/auth`)

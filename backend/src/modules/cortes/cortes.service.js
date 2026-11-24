@@ -37,14 +37,17 @@ async function requireCorteAbierto(hogarId, corteId) {
   return corte;
 }
 
-async function obtenerOrigen(tipoOrigen, origenId) {
+// `client` permite leer dentro de una transacción: con pocas conexiones por
+// instancia (serverless), consultar con el cliente global mientras la
+// transacción retiene la suya puede quedar esperando hasta el timeout.
+async function obtenerOrigen(tipoOrigen, origenId, client = prisma) {
   if (tipoOrigen === 'recurrente') {
-    return prisma.gastoRecurrenteInstancia.findUnique({
+    return client.gastoRecurrenteInstancia.findUnique({
       where: { id: origenId },
       include: { repartos: true },
     });
   }
-  return prisma.gastoVariablePareja.findUnique({
+  return client.gastoVariablePareja.findUnique({
     where: { id: origenId },
     include: { repartos: true },
   });
@@ -316,7 +319,7 @@ export async function togglearItem(usuarioActual, corteId, itemId, incluido) {
 
   await prisma.$transaction(async (tx) => {
     if (incluido) {
-      const origen = await obtenerOrigen(item.tipoOrigen, item.origenId);
+      const origen = await obtenerOrigen(item.tipoOrigen, item.origenId, tx);
       const monto = montoDelOrigen(item.tipoOrigen, origen);
       if (monto == null) {
         throw new HttpError(409, 'Este gasto todavía no tiene un monto definido');

@@ -10,6 +10,10 @@ Vue 3 + Vite + Tailwind CSS. Fase 2: login, registro, onboarding de hogar y pane
 
 Requiere el backend corriendo (ver `../backend/README.md`) — la autenticación usa una cookie httpOnly, así que backend y frontend deben correr en el mismo dominio raíz (en dev, `localhost` en distintos puertos funciona porque comparten "site" para efectos de `SameSite=Lax`).
 
+## Despliegue en Vercel
+
+Proyecto de Vercel con carpeta raíz `frontend`, preset Vite. `vercel.json` hace dos cosas: reenvía `/api/*` al proyecto del backend (así el navegador solo habla con el dominio del frontend y la cookie de sesión, `sameSite: lax`, se envía sin problemas de dominio cruzado), y sirve `index.html` para cualquier otra ruta (fallback SPA del modo `history` de vue-router — recargar `/personal` no da 404). El rewrite de `/api` lleva `x-vercel-enable-rewrite-caching: 0` para que el CDN nunca cachee respuestas de la API. En producción `VITE_API_URL` va vacío (rutas relativas).
+
 ## Diseño
 
 Paleta clara minimalista tipo fintech premium: fondo blanco/gris muy claro (`canvas` `#F7F8FA`), tarjetas blancas con sombra suave (`surface`), un único color de acento azul (`accent` `#2F6FED`) para las acciones principales y enlaces, y verde/rojo (`positive`/`negative`) reservados para semántica financiera. Tipografía Inter. Todo definido en `tailwind.config.js` y las clases base en `src/assets/main.css` (`.card`, `.btn-primary`, `.field`, etc.) para mantener consistencia entre vistas.
@@ -52,5 +56,4 @@ Todos los gráficos manejan estado vacío explícito ("Aún no hay gastos…", "
 ## Pendiente para próximas fases
 
 - Navegación histórica por ciclo (Etapa 6 de `Modulo_Panel_Personal_Ajustes.md`); presupuestos/deudas/metas conjuntas quedan fuera de ese documento, más adelante
-- Configuración de `try_files`/history fallback en el servidor de producción para el modo `history` de vue-router
 - Backlog técnico de UI que sigue abierto (ver CLAUDE.md): índices de BD, `previewBalances` de `CortesView.vue` sigue reimplementando en el cliente el mismo cálculo que hace `confirmarCorte` en el backend, y falta la pasada de pulido visual general entre vistas.

@@ -10,7 +10,8 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:generate": "prisma generate",
     "prisma:studio": "prisma studio",
-    "recalcular-historiales": "node scripts/recalcularHistorialesPersonales.js"
+    "recalcular-historiales": "node scripts/recalcularHistorialesPersonales.js",
+    "postinstall": "prisma generate"
   },
   "dependencies": {
     "@prisma/client": "^6.1.0",

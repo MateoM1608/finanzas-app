@@ -10,7 +10,7 @@ App web (con APK futuro) para manejar finanzas personales y de pareja: panel pri
 - **Frontend web:** Vue 3 + Vite, responsive/mobile-first (el APK con Capacitor + Ionic Vue viene en una fase posterior, reutilizando este mismo código)
 - **Auth:** JWT o cookie de sesión de larga duración (~1 año, sin expiración corta) + bcrypt
 - **Automatización:** n8n (ya instalado en el VPS, servicio aparte) — bot de Telegram con IA (Claude, vía tool calling) para registrar gastos/ingresos y responder preguntas de asesoría usando datos reales
-- **Infraestructura:** VPS Hostinger + EasyPanel (Docker). Deploy vía repos de GitHub conectados a servicios de EasyPanel (backend, frontend, Postgres son servicios separados)
+- **Infraestructura:** frontend y backend en Vercel — un solo repo, dos proyectos (carpeta raíz `frontend` y `backend`; el backend corre Express como función serverless en `iad1`, EE. UU.). El frontend reenvía `/api/*` al backend con un rewrite (`frontend/vercel.json`), así el navegador solo ve el dominio del frontend y la cookie de sesión `sameSite: lax` funciona. PostgreSQL sigue en la VPS Hostinger (n8n también vive ahí). Las migraciones NO corren en el build: se aplican a mano (`npx prisma migrate deploy`), avisando antes porque hoy solo hay una base
 
 ## Reglas de negocio clave
 
@@ -73,6 +73,11 @@ Orden re-priorizado: primero se completa la app web (ingreso personal, presupues
 Detalle de endpoints y decisiones de diseño de cada fase: `backend/README.md` y `frontend/README.md` (mantenidos al día en cada fase).
 
 ## Mejoras técnicas pendientes (backlog)
+
+- **Obligatorio antes de pasar a producción (con usuarios reales):**
+  - **SSL en Postgres:** hoy la conexión desde Vercel va con `sslmode=disable` (decisión temporal de desarrollo). Configurar certificado en el Postgres de la VPS y pasar a `sslmode=require` (o `verify-full`).
+  - **Separar una base de desarrollo** de la productiva (hoy `finanzas-db` es la única y se trata como desarrollo).
+  - **Cerrar el puerto público de Postgres** (hoy expuesto en la IP de la VPS para que Vercel llegue): restringir por firewall o usar túnel/pooler en vez de exponerlo a internet.
 
 - **Índices de base de datos:** revisar que los campos usados en filtros frecuentes de `iniciarCorte`/`buscarPendientes` (`hogarId`, `estado`, `fechaNominal`, `fechaLimite`) tengan índice explícito en `prisma/schema.prisma`, no solo los que Prisma crea automáticamente por relaciones/unique constraints.
 - **Badges/estado repetidos:** más allá del formateo de reparto (ya unificado en `formatReparto`), `PanelVariablesSection.vue` y `CortesView.vue` siguen resolviendo por su lado el badge de estado (pendiente/en corte/liquidado) — extraer si aparece una tercera vista con el mismo patrón.

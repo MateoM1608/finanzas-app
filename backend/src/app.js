@@ -22,7 +22,13 @@ import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 
 export const app = express();
 
-app.use(cors({ origin: true, credentials: true }));
+// En producción el frontend llama a /api por el rewrite de Vercel (mismo
+// origen), así que CORS solo hace falta en desarrollo. FRONTEND_URL limita a
+// qué orígenes se aceptan credenciales cuando sí se llama directo.
+const origenesPermitidos = process.env.FRONTEND_URL
+  ? process.env.FRONTEND_URL.split(',').map((o) => o.trim())
+  : true;
+app.use(cors({ origin: origenesPermitidos, credentials: true }));
 app.use(express.json());
 app.use(cookieParser());
 
