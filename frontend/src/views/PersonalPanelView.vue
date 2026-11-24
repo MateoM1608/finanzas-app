@@ -38,8 +38,12 @@ function abrirConfig(tab = 'ciclo') {
 function cerrarConfig() {
   mostrarConfig.value = false;
   recargarResumenes();
+  cargarCatalogos().catch((e) => {
+    error.value = extractErrorMessage(e);
+  });
   cargarGastos();
   cargarIngresos();
+  cargarCompras();
 }
 const loading = ref(true);
 const error = ref('');
@@ -281,12 +285,18 @@ async function onEliminarIngreso(id) {
   }
 }
 
+// Métodos de pago y categorías se crean en Configuración personal: hay que
+// volver a cargarlos al cerrarla, o no aparecen en "Registrar movimiento".
+async function cargarCatalogos() {
+  const [c, m] = await Promise.all([listarCategorias(), listarMetodosPago()]);
+  categorias.value = c;
+  metodos.value = m;
+}
+
 async function cargarTodo() {
   loading.value = true;
   try {
-    const [c, m] = await Promise.all([listarCategorias(), listarMetodosPago()]);
-    categorias.value = c;
-    metodos.value = m;
+    await cargarCatalogos();
     await Promise.all([cargarGastos(), cargarIngresos(), cargarCompras()]);
   } catch (e) {
     error.value = extractErrorMessage(e);

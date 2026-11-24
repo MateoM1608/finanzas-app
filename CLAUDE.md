@@ -88,7 +88,7 @@ Detalle de endpoints y decisiones de diseño de cada fase: `backend/README.md` y
 
 ## Notas de la base de datos de desarrollo
 
-`DATABASE_URL` apunta a la única base existente (`finanzas-db` en el VPS) — no hay una base de test separada todavía. Mientras el proyecto esté en desarrollo, esta base se trata como base de desarrollo (se puede resetear/limpiar libremente); una vez haya usuarios reales, habrá que separar una base productiva antes de seguir haciendo este tipo de limpiezas directas. Al cierre de la Fase 5 la base fue reseteada por completo (`prisma migrate reset`) — arranca vacía, sin usuarios/hogares de prueba.
+`DATABASE_URL` apunta a la única base existente (`finanzas-db` en el VPS) — no hay una base de test separada todavía. Mientras el proyecto esté en desarrollo, esta base se trata como base de desarrollo (se puede resetear/limpiar libremente); una vez haya usuarios reales, habrá que separar una base productiva antes de seguir haciendo este tipo de limpiezas directas. Al cierre de la Fase 5 la base fue reseteada por completo (`prisma migrate reset`) — arranca vacía, sin usuarios/hogares de prueba. El 2026-11-25, tras la entrega B, se volvió a vaciar (TRUNCATE de todas las tablas, conservando estructura e historial de migraciones): arranca sin ningún usuario.
 
 ## Convenciones de trabajo
 
