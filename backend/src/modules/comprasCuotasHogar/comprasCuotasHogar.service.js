@@ -90,9 +90,6 @@ export async function crearCompra(usuarioActual, data) {
   }
 
   const porcentajes = await resolverPorcentajes(hogarId, data);
-  const montos = dividirEnCuotas(data.montoTotal, data.numeroCuotas);
-  const fechas = fechasDeCuotas(data.fechaPrimeraCuota, data.numeroCuotas);
-  const estadoInicial = data.modoCobro === 'automatico' ? 'pagado' : 'por_pagar';
 
   const compra = await prisma.$transaction(async (tx) => {
     const nueva = await tx.compraCuotasHogar.create({
@@ -102,30 +99,146 @@ export async function crearCompra(usuarioActual, data) {
         montoTotal: data.montoTotal,
         numeroCuotas: data.numeroCuotas,
         fechaCompra: data.fechaCompra,
-        fechaPrimeraCuota: fechas[0],
+        fechaPrimeraCuota: data.fechaPrimeraCuota,
         modoCobro: data.modoCobro,
         pagoUsuarioId: data.pagoUsuarioId,
         metodoPagoId: data.metodoPagoId ?? null,
       },
     });
-    for (let i = 0; i < fechas.length; i += 1) {
-      const cuota = await tx.gastoVariablePareja.create({
-        data: {
-          hogarId,
-          item: data.item,
-          valorTotal: montos[i],
-          pagoUsuarioId: data.pagoUsuarioId,
-          fecha: fechas[i],
-          estado: estadoInicial,
-          compraId: nueva.id,
-          numeroCuota: i + 1,
-        },
-      });
-      await tx.gastoVariableParejaReparto.createMany({
-        data: calcularReparto(montos[i], porcentajes).map((r) => ({ gastoId: cuota.id, ...r })),
-      });
-    }
+    const primera = await generarCuotas(tx, nueva.id, hogarId, data, porcentajes);
+    await tx.compraCuotasHogar.update({ where: { id: nueva.id }, data: { fechaPrimeraCuota: primera } });
     return tx.compraCuotasHogar.findUnique({ where: { id: nueva.id }, include: INCLUDE_COMPRA });
+  });
+  return ocultarMetodoAjeno(compra, usuarioActual);
+}
+
+/** Crea las N cuotas (GastoVariablePareja + reparto) de una compra con los datos dados. */
+async function generarCuotas(tx, compraId, hogarId, datos, porcentajes) {
+  const montos = dividirEnCuotas(datos.montoTotal, datos.numeroCuotas);
+  const fechas = fechasDeCuotas(datos.fechaPrimeraCuota, datos.numeroCuotas);
+  const estadoInicial = datos.modoCobro === 'automatico' ? 'pagado' : 'por_pagar';
+  for (let i = 0; i < fechas.length; i += 1) {
+    const cuota = await tx.gastoVariablePareja.create({
+      data: {
+        hogarId,
+        item: datos.item,
+        valorTotal: montos[i],
+        pagoUsuarioId: datos.pagoUsuarioId,
+        fecha: fechas[i],
+        estado: estadoInicial,
+        compraId,
+        numeroCuota: i + 1,
+      },
+    });
+    await tx.gastoVariableParejaReparto.createMany({
+      data: calcularReparto(montos[i], porcentajes).map((r) => ({ gastoId: cuota.id, ...r })),
+    });
+  }
+  return fechas[0];
+}
+
+/** Porcentajes del reparto que ya tiene la compra (de su primera cuota), para conservarlos al recalcular. */
+async function porcentajesActuales(compraId) {
+  const primera = await prisma.gastoVariablePareja.findFirst({
+    where: { compraId },
+    orderBy: { numeroCuota: 'asc' },
+    include: { repartos: true },
+  });
+  if (!primera?.repartos.length) return null;
+  return primera.repartos.map((r) => ({ usuarioId: r.usuarioId, porcentaje: (r.monto / primera.valorTotal) * 100 }));
+}
+
+const CAMPOS_ESTRUCTURALES = ['montoTotal', 'numeroCuotas', 'fechaPrimeraCuota', 'modoCobro', 'pagoUsuarioId'];
+
+/**
+ * Edita una compra del hogar. El nombre (y el método de pago, solo su
+ * pagador) se cambian siempre. Monto, número de cuotas, primera cuota, modo
+ * de cobro, quién paga o el reparto recalculan TODAS las cuotas; no se
+ * permite si alguna cuota ya está en un cuadre (ya se liquidó) o si alguna
+ * cuota manual ya se marcó pagada. El reparto se conserva salvo que se
+ * mande uno nuevo.
+ */
+export async function actualizarCompra(usuarioActual, compraId, data) {
+  const hogarId = requireHogarId(usuarioActual);
+  requirePermisoEdicion(usuarioActual);
+  const actual = await prisma.compraCuotasHogar.findUnique({ where: { id: compraId } });
+  if (!actual || actual.hogarId !== hogarId) {
+    throw new HttpError(404, 'Compra no encontrada');
+  }
+
+  const datos = {
+    item: data.item ?? actual.item,
+    montoTotal: data.montoTotal ?? actual.montoTotal,
+    numeroCuotas: data.numeroCuotas ?? actual.numeroCuotas,
+    fechaCompra: data.fechaCompra ?? actual.fechaCompra,
+    fechaPrimeraCuota: data.fechaPrimeraCuota ?? actual.fechaPrimeraCuota,
+    modoCobro: data.modoCobro ?? actual.modoCobro,
+    pagoUsuarioId: data.pagoUsuarioId ?? actual.pagoUsuarioId,
+  };
+  if (datos.pagoUsuarioId !== actual.pagoUsuarioId) {
+    const pagador = await prisma.usuario.count({ where: { id: datos.pagoUsuarioId, hogarId } });
+    if (!pagador) {
+      throw new HttpError(400, 'Quien paga debe ser un miembro de tu hogar');
+    }
+  }
+
+  // Método de pago: privado del pagador. Solo él lo cambia; si cambia quien
+  // paga, el método anterior (de otra persona) se quita.
+  let metodoPagoId = actual.metodoPagoId;
+  if (datos.pagoUsuarioId !== actual.pagoUsuarioId) metodoPagoId = null;
+  if (data.metodoPagoId !== undefined) {
+    if (datos.pagoUsuarioId !== usuarioActual.id) {
+      throw new HttpError(400, 'Solo quien paga la compra puede asociarle su método de pago');
+    }
+    if (data.metodoPagoId) {
+      const metodo = await prisma.metodoPagoPersonal.findUnique({ where: { id: data.metodoPagoId } });
+      if (!metodo || metodo.usuarioId !== usuarioActual.id) {
+        throw new HttpError(400, 'Método de pago no encontrado');
+      }
+    }
+    metodoPagoId = data.metodoPagoId;
+  }
+
+  const cambiaEstructura =
+    data.repartos !== undefined ||
+    CAMPOS_ESTRUCTURALES.some((campo) =>
+      campo === 'fechaPrimeraCuota'
+        ? new Date(datos[campo]).getTime() !== new Date(actual[campo]).getTime()
+        : datos[campo] !== actual[campo],
+    );
+
+  let porcentajes = null;
+  if (cambiaEstructura) {
+    const bloqueadas = await prisma.gastoVariablePareja.count({
+      where: {
+        compraId,
+        OR: [
+          { estado: { in: ['en_cuadre', 'cuadrado'] } },
+          ...(actual.modoCobro === 'manual' ? [{ estado: 'pagado' }] : []),
+        ],
+      },
+    });
+    if (bloqueadas) {
+      throw new HttpError(
+        409,
+        'Esta compra ya tiene cuotas cuadradas o marcadas como pagadas: solo puedes cambiar el nombre o el método de pago',
+      );
+    }
+    porcentajes = data.repartos?.length
+      ? await resolverPorcentajes(hogarId, { ...datos, repartos: data.repartos })
+      : ((await porcentajesActuales(compraId)) ?? (await resolverPorcentajes(hogarId, datos)));
+  }
+
+  const compra = await prisma.$transaction(async (tx) => {
+    if (cambiaEstructura) {
+      await tx.gastoVariableParejaReparto.deleteMany({ where: { gasto: { compraId } } });
+      await tx.gastoVariablePareja.deleteMany({ where: { compraId } });
+      datos.fechaPrimeraCuota = await generarCuotas(tx, compraId, hogarId, datos, porcentajes);
+    } else if (datos.item !== actual.item) {
+      await tx.gastoVariablePareja.updateMany({ where: { compraId }, data: { item: datos.item } });
+    }
+    await tx.compraCuotasHogar.update({ where: { id: compraId }, data: { ...datos, metodoPagoId } });
+    return tx.compraCuotasHogar.findUnique({ where: { id: compraId }, include: INCLUDE_COMPRA });
   });
   return ocultarMetodoAjeno(compra, usuarioActual);
 }

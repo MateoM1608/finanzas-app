@@ -8,7 +8,14 @@ import {
   pagarCuotaVariable,
   deshacerPagoCuotaVariable,
 } from '../../api/gastosVariables.js';
-import { listarComprasHogar, crearCompraHogar, eliminarCompraHogar, sugerirPrimeraCuota } from '../../api/comprasCuotas.js';
+import {
+  listarComprasHogar,
+  crearCompraHogar,
+  actualizarCompraHogar,
+  eliminarCompraHogar,
+  sugerirPrimeraCuota,
+} from '../../api/comprasCuotas.js';
+import CompraCuotasForm from '../CompraCuotasForm.vue';
 import { listarMetodosPago } from '../../api/metodosPagoPersonales.js';
 import { useAuthStore } from '../../stores/auth.js';
 import { confirmar } from '../../composables/useConfirm.js';
@@ -64,6 +71,29 @@ const primeraCuota = ref('');
 const modoCobro = ref('automatico');
 const metodoPagoId = ref('');
 const eliminandoCompraId = ref(null);
+const editandoCompra = ref(null);
+const guardandoCompra = ref(false);
+const errorCompra = ref('');
+
+function abrirEdicionCompra(compra) {
+  errorCompra.value = '';
+  editandoCompra.value = compra;
+}
+
+async function onGuardarCompra(payload) {
+  errorCompra.value = '';
+  guardandoCompra.value = true;
+  try {
+    await actualizarCompraHogar(editandoCompra.value.id, payload);
+    editandoCompra.value = null;
+    await Promise.all([cargarCompras(), recargarGastos()]);
+    emit('cambio');
+  } catch (e) {
+    errorCompra.value = extractErrorMessage(e);
+  } finally {
+    guardandoCompra.value = false;
+  }
+}
 const pagandoId = ref(null);
 
 // Solo quien paga puede asociar uno de SUS métodos de pago (privados).
@@ -561,6 +591,16 @@ onMounted(cargar);
               <template v-if="compra.metodoPago"> · {{ compra.metodoPago.nombre }}</template>
             </p>
           </div>
+          <div class="flex shrink-0 items-center gap-1">
+          <button
+            type="button"
+            class="btn-icon !p-1.5"
+            :aria-label="`Editar ${compra.item}`"
+            title="Editar compra"
+            @click="abrirEdicionCompra(compra)"
+          >
+            <AppIcon name="edit" class="h-4 w-4" />
+          </button>
           <button
             v-if="!cuotasCuadradas(compra)"
             type="button"
@@ -572,8 +612,22 @@ onMounted(cargar);
           >
             <AppIcon name="trash" class="h-4 w-4" />
           </button>
+          </div>
         </li>
       </ul>
     </div>
+    <AppModal v-if="editandoCompra" :title="`Editar ${editandoCompra.item}`" size="lg" @close="editandoCompra = null">
+      <AlertError :message="errorCompra" class="mb-4" />
+      <CompraCuotasForm
+        tipo="hogar"
+        :compra="editandoCompra"
+        :metodos="misMetodos"
+        :miembros="miembros"
+        :usuario-actual-id="auth.usuario?.id ?? ''"
+        :guardando="guardandoCompra"
+        @guardar="onGuardarCompra"
+        @cancelar="editandoCompra = null"
+      />
+    </AppModal>
   </section>
 </template>

@@ -7,6 +7,7 @@ import { listarMetodosPago } from '../api/metodosPagoPersonales.js';
 import {
   listarComprasPersonales,
   crearCompraPersonal,
+  actualizarCompraPersonal,
   eliminarCompraPersonal,
   sugerirPrimeraCuota,
 } from '../api/comprasCuotas.js';
@@ -23,6 +24,7 @@ import ResumenPersonalSection from '../components/personal/ResumenPersonalSectio
 import AhorrosPersonalesSection from '../components/personal/AhorrosPersonalesSection.vue';
 import LimitesPersonalesSection from '../components/personal/LimitesPersonalesSection.vue';
 import ProximosMesesSection from '../components/personal/ProximosMesesSection.vue';
+import CompraCuotasForm from '../components/CompraCuotasForm.vue';
 
 const mostrarConfig = ref(false);
 const configTab = ref('ciclo');
@@ -84,6 +86,24 @@ const gPrimeraCuota = ref('');
 const gModoCobro = ref('automatico');
 const compras = ref([]);
 const eliminandoCompraId = ref(null);
+const editandoCompra = ref(null);
+const guardandoCompra = ref(false);
+const errorCompra = ref('');
+
+async function onGuardarCompra(payload) {
+  errorCompra.value = '';
+  guardandoCompra.value = true;
+  try {
+    await actualizarCompraPersonal(editandoCompra.value.id, payload);
+    editandoCompra.value = null;
+    await Promise.all([cargarCompras(), cargarGastos()]);
+    recargarResumenes();
+  } catch (e) {
+    errorCompra.value = extractErrorMessage(e);
+  } finally {
+    guardandoCompra.value = false;
+  }
+}
 
 // La fecha de la primera cuota se sugiere con el día de corte/pago del método.
 async function actualizarSugerenciaCuota() {
@@ -559,6 +579,15 @@ function saldoCompra(compra) {
                   <span class="block text-xs text-ink-tertiary">por pagar</span>
                 </span>
                 <button
+                  type="button"
+                  class="btn-icon !p-1.5"
+                  :aria-label="`Editar ${compra.descripcion}`"
+                  title="Editar compra"
+                  @click="(errorCompra = ''), (editandoCompra = compra)"
+                >
+                  <AppIcon name="edit" class="h-4 w-4" />
+                </button>
+                <button
                   v-if="!cuotasPagadas(compra)"
                   type="button"
                   class="btn-icon !p-1.5 hover:!text-negative sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100"
@@ -633,6 +662,20 @@ function saldoCompra(compra) {
         </div>
       </section>
     </div>
+
+    <!-- Editar compra a cuotas -->
+    <AppModal v-if="editandoCompra" :title="`Editar ${editandoCompra.descripcion}`" size="lg" @close="editandoCompra = null">
+      <AlertError :message="errorCompra" class="mb-4" />
+      <CompraCuotasForm
+        tipo="personal"
+        :compra="editandoCompra"
+        :metodos="metodos"
+        :categorias="categoriasParaGasto"
+        :guardando="guardandoCompra"
+        @guardar="onGuardarCompra"
+        @cancelar="editandoCompra = null"
+      />
+    </AppModal>
 
     <!-- Registrar movimiento -->
     <AppModal v-if="mostrarRegistro" title="Registrar movimiento" @close="mostrarRegistro = false">

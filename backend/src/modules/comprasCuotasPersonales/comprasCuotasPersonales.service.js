@@ -39,53 +39,129 @@ export async function sugerirPrimeraCuota(usuarioActual, { fechaCompra, metodoPa
   return sugerirFechaPrimeraCuota(fechaCompra ?? hoyUTC(), metodo);
 }
 
+/** Crea las N cuotas (GastoPersonal) de una compra con los datos dados. */
+async function generarCuotas(tx, compraId, usuarioId, datos) {
+  const hoy = hoyUTC();
+  const montos = dividirEnCuotas(datos.montoTotal, datos.numeroCuotas);
+  const fechas = fechasDeCuotas(datos.fechaPrimeraCuota, datos.numeroCuotas);
+  await tx.gastoPersonal.createMany({
+    data: fechas.map((fecha, i) => ({
+      usuarioId,
+      compraId,
+      numeroCuota: i + 1,
+      monto: montos[i],
+      fecha,
+      descripcion: datos.descripcion,
+      estado: datos.modoCobro === 'automatico' && fecha <= hoy ? 'pagado' : 'pendiente',
+      esObligatorio: datos.esObligatorio,
+      metodoPagoId: datos.metodoPagoId,
+      categoriaId: datos.categoriaId,
+      origen: 'app',
+    })),
+  });
+  return fechas[0];
+}
+
+/** Una cuota obligatoria ya pagada puede completar los obligatorios de un período. */
+async function evaluarCuotasPagadas(usuarioId, compra) {
+  if (!compra.esObligatorio) return;
+  for (const cuota of compra.cuotas.filter((c) => c.estado === 'pagado')) {
+    await evaluarPeriodoSiCorresponde(usuarioId, cuota.fecha);
+  }
+}
+
 export async function crearCompra(usuarioActual, data) {
   const usuarioId = usuarioActual.id;
   await requireDelUsuario('metodoPagoPersonal', usuarioId, data.metodoPagoId, 'Método de pago no encontrado');
   await requireDelUsuario('categoriaPersonal', usuarioId, data.categoriaId, 'Categoría no encontrada');
 
-  const hoy = hoyUTC();
-  const montos = dividirEnCuotas(data.montoTotal, data.numeroCuotas);
-  const fechas = fechasDeCuotas(data.fechaPrimeraCuota, data.numeroCuotas);
-
+  const datos = {
+    descripcion: data.descripcion,
+    montoTotal: data.montoTotal,
+    numeroCuotas: data.numeroCuotas,
+    fechaPrimeraCuota: data.fechaPrimeraCuota,
+    modoCobro: data.modoCobro,
+    metodoPagoId: data.metodoPagoId ?? null,
+    categoriaId: data.categoriaId ?? null,
+    esObligatorio: data.esObligatorio ?? true,
+  };
   const compra = await prisma.$transaction(async (tx) => {
-    const nueva = await tx.compraCuotasPersonal.create({
-      data: {
-        usuarioId,
-        descripcion: data.descripcion,
-        montoTotal: data.montoTotal,
-        numeroCuotas: data.numeroCuotas,
-        fechaPrimeraCuota: fechas[0],
-        modoCobro: data.modoCobro,
-        metodoPagoId: data.metodoPagoId ?? null,
-        categoriaId: data.categoriaId ?? null,
-        esObligatorio: data.esObligatorio ?? true,
-      },
-    });
-    await tx.gastoPersonal.createMany({
-      data: fechas.map((fecha, i) => ({
-        usuarioId,
-        compraId: nueva.id,
-        numeroCuota: i + 1,
-        monto: montos[i],
-        fecha,
-        descripcion: data.descripcion,
-        estado: data.modoCobro === 'automatico' && fecha <= hoy ? 'pagado' : 'pendiente',
-        esObligatorio: data.esObligatorio ?? true,
-        metodoPagoId: data.metodoPagoId ?? null,
-        categoriaId: data.categoriaId ?? null,
-        origen: 'app',
-      })),
-    });
+    const nueva = await tx.compraCuotasPersonal.create({ data: { usuarioId, ...datos } });
+    const primera = await generarCuotas(tx, nueva.id, usuarioId, datos);
+    await tx.compraCuotasPersonal.update({ where: { id: nueva.id }, data: { fechaPrimeraCuota: primera } });
     return tx.compraCuotasPersonal.findUnique({ where: { id: nueva.id }, include: INCLUDE_COMPRA });
   });
+  await evaluarCuotasPagadas(usuarioId, compra);
+  return compra;
+}
 
-  // Una cuota obligatoria ya pagada puede completar los obligatorios de un período.
-  if (compra.esObligatorio) {
-    for (const cuota of compra.cuotas.filter((c) => c.estado === 'pagado')) {
-      await evaluarPeriodoSiCorresponde(usuarioId, cuota.fecha);
+const CAMPOS_ESTRUCTURALES = ['montoTotal', 'numeroCuotas', 'fechaPrimeraCuota', 'modoCobro'];
+
+/**
+ * Edita una compra. Descripción, categoría, método y obligatorio se pueden
+ * cambiar siempre (se aplican a todas sus cuotas). Cambiar monto, número de
+ * cuotas, primera cuota o modo de cobro recalcula TODAS las cuotas; no se
+ * permite si alguna cuota manual ya se marcó pagada (perdería ese pago). Las
+ * automáticas se recalculan solas según su fecha.
+ */
+export async function actualizarCompra(usuarioActual, compraId, data) {
+  const usuarioId = usuarioActual.id;
+  const actual = await prisma.compraCuotasPersonal.findUnique({ where: { id: compraId } });
+  if (!actual || actual.usuarioId !== usuarioId) {
+    throw new HttpError(404, 'Compra no encontrada');
+  }
+  if (data.metodoPagoId !== undefined) {
+    await requireDelUsuario('metodoPagoPersonal', usuarioId, data.metodoPagoId, 'Método de pago no encontrado');
+  }
+  if (data.categoriaId !== undefined) {
+    await requireDelUsuario('categoriaPersonal', usuarioId, data.categoriaId, 'Categoría no encontrada');
+  }
+
+  const datos = {
+    descripcion: data.descripcion ?? actual.descripcion,
+    montoTotal: data.montoTotal ?? actual.montoTotal,
+    numeroCuotas: data.numeroCuotas ?? actual.numeroCuotas,
+    fechaPrimeraCuota: data.fechaPrimeraCuota ?? actual.fechaPrimeraCuota,
+    modoCobro: data.modoCobro ?? actual.modoCobro,
+    metodoPagoId: data.metodoPagoId === undefined ? actual.metodoPagoId : data.metodoPagoId,
+    categoriaId: data.categoriaId === undefined ? actual.categoriaId : data.categoriaId,
+    esObligatorio: data.esObligatorio ?? actual.esObligatorio,
+  };
+  const cambiaEstructura = CAMPOS_ESTRUCTURALES.some((campo) =>
+    campo === 'fechaPrimeraCuota'
+      ? new Date(datos[campo]).getTime() !== new Date(actual[campo]).getTime()
+      : datos[campo] !== actual[campo],
+  );
+
+  if (cambiaEstructura && actual.modoCobro === 'manual') {
+    const pagadas = await prisma.gastoPersonal.count({ where: { compraId, estado: 'pagado' } });
+    if (pagadas) {
+      throw new HttpError(
+        409,
+        'Ya marcaste cuotas de esta compra como pagadas: solo puedes cambiar la descripción, categoría, método u obligatorio',
+      );
     }
   }
+
+  const compra = await prisma.$transaction(async (tx) => {
+    if (cambiaEstructura) {
+      await tx.gastoPersonal.deleteMany({ where: { compraId } });
+      datos.fechaPrimeraCuota = await generarCuotas(tx, compraId, usuarioId, datos);
+    } else {
+      await tx.gastoPersonal.updateMany({
+        where: { compraId },
+        data: {
+          descripcion: datos.descripcion,
+          metodoPagoId: datos.metodoPagoId,
+          categoriaId: datos.categoriaId,
+          esObligatorio: datos.esObligatorio,
+        },
+      });
+    }
+    await tx.compraCuotasPersonal.update({ where: { id: compraId }, data: datos });
+    return tx.compraCuotasPersonal.findUnique({ where: { id: compraId }, include: INCLUDE_COMPRA });
+  });
+  await evaluarCuotasPagadas(usuarioId, compra);
   return compra;
 }
 

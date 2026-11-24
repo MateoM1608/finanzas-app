@@ -9,6 +9,10 @@ export function crearCompraPersonal(payload) {
   return api.post('/api/compras-cuotas-personales', payload).then((r) => r.data.compra);
 }
 
+export function actualizarCompraPersonal(id, payload) {
+  return api.patch(`/api/compras-cuotas-personales/${id}`, payload).then((r) => r.data.compra);
+}
+
 export function eliminarCompraPersonal(id) {
   return api.delete(`/api/compras-cuotas-personales/${id}`);
 }
@@ -29,6 +33,10 @@ export function listarComprasHogar() {
 
 export function crearCompraHogar(payload) {
   return api.post('/api/compras-cuotas-hogar', payload).then((r) => r.data.compra);
+}
+
+export function actualizarCompraHogar(id, payload) {
+  return api.patch(`/api/compras-cuotas-hogar/${id}`, payload).then((r) => r.data.compra);
 }
 
 export function eliminarCompraHogar(id) {
