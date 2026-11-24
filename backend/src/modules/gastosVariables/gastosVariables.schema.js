@@ -20,3 +20,8 @@ export const actualizarGastoVariableSchema = z.object({
   fecha: z.coerce.date().optional(),
   repartos: z.array(repartoItemSchema).optional(),
 });
+
+export const pagarCuotaVariableSchema = z.object({
+  pagoUsuarioId: z.string().uuid().optional(),
+  fechaPago: z.coerce.date().optional(),
+});

@@ -1,8 +1,10 @@
 import { prisma } from '../../config/prisma.js';
 import { HttpError } from '../../middleware/errorHandler.js';
 import { obtenerSplitVigenteGastosVariables, calcularReparto } from '../../utils/reparto.js';
+import { hoyUTC } from '../../utils/fechas.js';
 
 const INCLUDE_GASTO = {
+  compra: { select: { id: true, numeroCuotas: true, modoCobro: true } },
   pagador: { select: { id: true, nombre: true } },
   repartos: { include: { usuario: { select: { id: true, nombre: true } } } },
 };
@@ -96,6 +98,9 @@ export async function actualizarGastoVariable(usuarioActual, gastoId, data) {
   const hogarId = requireHogarId(usuarioActual);
   requirePermisoEdicion(usuarioActual);
   const gasto = await requireGastoDelHogar(hogarId, gastoId);
+  if (gasto.compraId) {
+    throw new HttpError(409, 'Es una cuota de una compra a cuotas — elimina la compra y vuelve a crearla para cambiarla');
+  }
   if (gasto.estado === 'cuadrado') {
     throw new HttpError(409, 'Este gasto ya se cuadró y no se puede editar');
   }
@@ -143,6 +148,9 @@ export async function eliminarGastoVariable(usuarioActual, gastoId) {
   const hogarId = requireHogarId(usuarioActual);
   requirePermisoEdicion(usuarioActual);
   const gasto = await requireGastoDelHogar(hogarId, gastoId);
+  if (gasto.compraId) {
+    throw new HttpError(409, 'Es una cuota de una compra a cuotas — elimina la compra completa');
+  }
   if (gasto.estado !== 'pagado') {
     throw new HttpError(409, 'Solo se pueden eliminar gastos que todavía no estén en un cuadre');
   }
@@ -151,4 +159,49 @@ export async function eliminarGastoVariable(usuarioActual, gastoId) {
     prisma.gastoVariableParejaReparto.deleteMany({ where: { gastoId } }),
     prisma.gastoVariablePareja.delete({ where: { id: gastoId } }),
   ]);
+}
+
+/**
+ * Marca como pagada una cuota de cobro manual (crédito de almacén) de una
+ * compra a cuotas del hogar. Desde ahí entra al saldo y a los cuadres.
+ */
+export async function pagarCuotaVariable(usuarioActual, gastoId, data) {
+  const hogarId = requireHogarId(usuarioActual);
+  requirePermisoEdicion(usuarioActual);
+  const gasto = await requireGastoDelHogar(hogarId, gastoId);
+  if (gasto.estado !== 'por_pagar') {
+    throw new HttpError(409, 'Esta cuota ya está marcada como pagada');
+  }
+  if (data.pagoUsuarioId) {
+    await validarMiembroDelHogar(hogarId, data.pagoUsuarioId);
+  }
+  return prisma.gastoVariablePareja.update({
+    where: { id: gastoId },
+    data: {
+      estado: 'pagado',
+      pagoUsuarioId: data.pagoUsuarioId ?? undefined,
+      fechaPago: data.fechaPago ?? hoyUTC(),
+    },
+    include: INCLUDE_GASTO,
+  });
+}
+
+export async function deshacerPagoCuotaVariable(usuarioActual, gastoId) {
+  const hogarId = requireHogarId(usuarioActual);
+  requirePermisoEdicion(usuarioActual);
+  const gasto = await prisma.gastoVariablePareja.findUnique({ where: { id: gastoId }, include: { compra: true } });
+  if (!gasto || gasto.hogarId !== hogarId) {
+    throw new HttpError(404, 'Gasto no encontrado');
+  }
+  if (gasto.compra?.modoCobro !== 'manual') {
+    throw new HttpError(409, 'Solo se puede deshacer el pago de una cuota de cobro manual');
+  }
+  if (gasto.estado !== 'pagado') {
+    throw new HttpError(409, 'Esta cuota no está pagada o ya está en un cuadre');
+  }
+  return prisma.gastoVariablePareja.update({
+    where: { id: gastoId },
+    data: { estado: 'por_pagar', fechaPago: null },
+    include: INCLUDE_GASTO,
+  });
 }

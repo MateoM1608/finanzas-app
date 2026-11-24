@@ -17,6 +17,9 @@ import { ingresosPersonalesRouter } from './modules/ingresosPersonales/ingresosP
 import { cicloPersonalRouter } from './modules/cicloPersonal/cicloPersonal.routes.js';
 import { resumenPersonalRouter } from './modules/resumenPersonal/resumenPersonal.routes.js';
 import { ahorrosPersonalesRouter } from './modules/ahorrosPersonales/ahorrosPersonales.routes.js';
+import { comprasCuotasPersonalesRouter } from './modules/comprasCuotasPersonales/comprasCuotasPersonales.routes.js';
+import { comprasCuotasHogarRouter } from './modules/comprasCuotasHogar/comprasCuotasHogar.routes.js';
+import { proyeccionPersonalRouter } from './modules/proyeccionPersonal/proyeccionPersonal.routes.js';
 import { limitesPersonalesRouter } from './modules/limitesPersonales/limitesPersonales.routes.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 
@@ -50,6 +53,9 @@ app.use('/api/ciclo-personal', cicloPersonalRouter);
 app.use('/api/resumen-personal', resumenPersonalRouter);
 app.use('/api/ahorros-personales', ahorrosPersonalesRouter);
 app.use('/api/limites-personales', limitesPersonalesRouter);
+app.use('/api/compras-cuotas-personales', comprasCuotasPersonalesRouter);
+app.use('/api/compras-cuotas-hogar', comprasCuotasHogarRouter);
+app.use('/api/proyeccion-personal', proyeccionPersonalRouter);
 
 app.use(notFoundHandler);
 app.use(errorHandler);

@@ -1,6 +1,8 @@
 import { asyncHandler } from '../../middleware/asyncHandler.js';
-import { crearGastoVariableSchema, actualizarGastoVariableSchema } from './gastosVariables.schema.js';
+import { crearGastoVariableSchema, actualizarGastoVariableSchema, pagarCuotaVariableSchema } from './gastosVariables.schema.js';
 import {
+  pagarCuotaVariable,
+  deshacerPagoCuotaVariable,
   listarGastosVariables,
   crearGastoVariable,
   actualizarGastoVariable,
@@ -27,4 +29,13 @@ export const patchGastoVariable = asyncHandler(async (req, res) => {
 export const deleteGastoVariable = asyncHandler(async (req, res) => {
   await eliminarGastoVariable(req.usuario, req.params.id);
   res.status(204).send();
+});
+
+export const postPagarCuota = asyncHandler(async (req, res) => {
+  const data = pagarCuotaVariableSchema.parse(req.body ?? {});
+  res.json({ gasto: await pagarCuotaVariable(req.usuario, req.params.id, data) });
+});
+
+export const postDeshacerPagoCuota = asyncHandler(async (req, res) => {
+  res.json({ gasto: await deshacerPagoCuotaVariable(req.usuario, req.params.id) });
 });

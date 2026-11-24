@@ -34,8 +34,14 @@ export async function obtenerResumenPersonal(usuarioActual) {
       where: { usuarioId, estado: 'recibido' },
       orderBy: { fecha: 'asc' },
     }),
+    // Las cuotas futuras de compras a cuotas no se listan acá hasta que
+    // entren al ciclo actual: viven en "Mis próximos meses".
     prisma.gastoPersonal.findMany({
-      where: { usuarioId, estado: 'pendiente' },
+      where: {
+        usuarioId,
+        estado: 'pendiente',
+        OR: [{ compraId: null }, { fecha: { lte: calcularPeriodoActual(usuarioActual.frecuenciaCicloPersonal).fin } }],
+      },
       include: { categoria: true },
     }),
     prisma.ingresoPersonal.findMany({ where: { usuarioId, estado: 'pendiente' }, include: { categoria: true } }),

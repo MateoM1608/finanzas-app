@@ -12,7 +12,7 @@ import {
 import { extractErrorMessage } from '../api/client.js';
 import { useAuthStore } from '../stores/auth.js';
 import { confirmar } from '../composables/useConfirm.js';
-import { formatCurrency, formatDate, formatearBalances } from '../utils/format.js';
+import { formatCurrency, formatDate, formatearBalances, hoyISO } from '../utils/format.js';
 import AppLayout from '../components/AppLayout.vue';
 import AppIcon from '../components/AppIcon.vue';
 import AppModal from '../components/AppModal.vue';
@@ -114,11 +114,21 @@ async function ejecutarConfirmacion() {
   }
 }
 
+// Lo pagado con fecha futura (cuotas automáticas, cuentas pagadas antes de
+// tiempo) llega desmarcado en "Próximos": se marca solo si se quiere adelantar.
 const grupos = computed(() => {
   const items = borrador.value?.items ?? [];
+  const hoy = hoyISO();
+  const esFuturo = (i) => String(i.fecha).slice(0, 10) > hoy;
+  const vigentes = items.filter((i) => !esFuturo(i));
   return [
-    { id: 'recurrente', titulo: 'Cuentas fijas', items: items.filter((i) => i.tipoOrigen === 'recurrente') },
-    { id: 'variable', titulo: 'Gastos variables', items: items.filter((i) => i.tipoOrigen === 'variable') },
+    { id: 'recurrente', titulo: 'Cuentas fijas', items: vigentes.filter((i) => i.tipoOrigen === 'recurrente') },
+    { id: 'variable', titulo: 'Gastos variables', items: vigentes.filter((i) => i.tipoOrigen === 'variable') },
+    {
+      id: 'proximos',
+      titulo: 'Próximos — márcalos si quieren adelantarlos',
+      items: items.filter(esFuturo),
+    },
   ].filter((g) => g.items.length);
 });
 

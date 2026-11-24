@@ -14,6 +14,7 @@ import { hoyUTC } from './fechas.js';
  * tiempo, y sin él la segunda en llegar reventaba con un P2002.
  */
 export async function asegurarGastosFijos(usuarioId) {
+  await pagarCuotasAutomaticasVencidas(usuarioId);
   const configs = await prisma.gastoFijoConfig.findMany({ where: { usuarioId, activo: true } });
   if (!configs.length) return;
 
@@ -45,6 +46,23 @@ export async function asegurarGastosFijos(usuarioId) {
       skipDuplicates: true,
     });
   }
+}
+
+/**
+ * Las cuotas de una compra a cuotas personal de cobro automático (tarjeta,
+ * débito automático) se crean `pendiente` y pasan solas a `pagado` cuando
+ * llega su fecha — mismo patrón perezoso que los fijos (no hay cron).
+ */
+async function pagarCuotasAutomaticasVencidas(usuarioId) {
+  await prisma.gastoPersonal.updateMany({
+    where: {
+      usuarioId,
+      estado: 'pendiente',
+      fecha: { lte: hoyUTC() },
+      compra: { modoCobro: 'automatico' },
+    },
+    data: { estado: 'pagado' },
+  });
 }
 
 /** Mismo mecanismo que `asegurarGastosFijos`, para ingresos fijos. */

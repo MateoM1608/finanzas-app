@@ -6,6 +6,7 @@ import { evaluarPeriodoSiCorresponde } from '../../utils/evaluacionAhorro.js';
 const INCLUDE_GASTO = {
   metodoPago: true,
   categoria: true,
+  compra: { select: { id: true, numeroCuotas: true, modoCobro: true } },
 };
 
 /**
@@ -63,6 +64,9 @@ export async function eliminarGastoPersonal(usuarioId, gastoId) {
       409,
       'Este gasto viene de un concepto fijo — desactiva el concepto en vez de eliminar esta ocurrencia (si no, volvería a generarse)',
     );
+  }
+  if (gasto.compraId) {
+    throw new HttpError(409, 'Esta es una cuota de una compra a cuotas — elimina la compra completa');
   }
   if (gasto.origenCuadreId) {
     throw new HttpError(409, 'Este gasto viene de un cuadre del hogar ya cerrado — no se puede eliminar');

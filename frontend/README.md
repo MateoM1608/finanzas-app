@@ -62,6 +62,8 @@ Gastos e ingresos muestran su **descripción** como título y la categoría como
 
 Todos los gráficos manejan estado vacío explícito ("Aún no hay gastos…", "Aún no hay gastos pagados para graficar…") en vez de renderizar un gráfico sin datos.
 
+**Entrega B (compras a cuotas y próximos meses):** `MetodoPagoForm.vue` (tipo, últimos 4, día de corte/pago, cupo) en la pestaña Métodos de pago de la configuración personal. "Registrar movimiento" tiene la opción **Es una compra a cuotas** (número de cuotas, primera cuota sugerida por `GET /sugerir-primera-cuota` al cambiar método o fecha, modo automático/manual sugerido por `modoCobroSugerido`); Movimientos tiene la pestaña **A cuotas** (pagadas/total, saldo por pagar, eliminar si no hay pagos) y oculta las cuotas con fecha futura. `ProximosMesesSection.vue` ("Mis próximos meses"): barra apilada por tipo de compromiso y tabla por mes con ingresos esperados, comprometido y "Te quedaría libre", con detalle al tocar el mes. En el hogar, `PanelVariablesSection` permite la compra a cuotas (el método de pago solo aparece si paga el usuario actual), "Lo pagué"/"Deshacer" en cuotas manuales y una lista de compras a cuotas activas. `CuadresView` agrupa lo futuro en **Próximos**, desmarcado.
+
 ## Pendiente para próximas fases
 
 - Navegación histórica por ciclo (Etapa 6 de `Modulo_Panel_Personal_Ajustes.md`); presupuestos/deudas/metas conjuntas quedan fuera de ese documento, más adelante

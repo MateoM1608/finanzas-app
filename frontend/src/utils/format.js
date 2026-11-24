@@ -83,3 +83,26 @@ export function describirCalendario(cuenta) {
   }
   return `Cada mes, ${textoDia(cuenta.diaMes)}`;
 }
+
+export const TIPOS_METODO = [
+  { valor: 'efectivo', label: 'Efectivo' },
+  { valor: 'debito', label: 'Débito o cuenta' },
+  { valor: 'tarjeta_credito', label: 'Tarjeta de crédito' },
+  { valor: 'credito_almacen', label: 'Crédito de almacén' },
+  { valor: 'otro', label: 'Otro' },
+];
+
+/** "Tarjeta de crédito ··1234 · corte 25 · pago 10" */
+export function describirMetodo(metodo) {
+  const partes = [TIPOS_METODO.find((t) => t.valor === metodo.tipo)?.label ?? 'Otro'];
+  if (metodo.ultimos4) partes[0] += ` ··${metodo.ultimos4}`;
+  if (metodo.diaCorte) partes.push(`corte ${metodo.diaCorte}`);
+  if (metodo.diaPago) partes.push(`pago ${metodo.diaPago}`);
+  if (metodo.cupo) partes.push(`cupo ${formatCurrency(metodo.cupo)}`);
+  return partes.join(' · ');
+}
+
+/** Modo de cobro sugerido para una compra a cuotas según el método. */
+export function modoCobroSugerido(metodo) {
+  return metodo && (metodo.tipo === 'credito_almacen' || metodo.tipo === 'efectivo') ? 'manual' : 'automatico';
+}

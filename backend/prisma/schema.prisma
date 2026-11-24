@@ -73,6 +73,17 @@ enum EstadoIngresoPersonal {
   pendiente
 }
 
+// Tipo de un método de pago personal. Tarjeta de crédito y crédito de
+// almacén guardan su día de corte/pago para sugerir la fecha de la primera
+// cuota de una compra a cuotas.
+enum TipoMetodoPago {
+  efectivo
+  debito
+  tarjeta_credito
+  credito_almacen
+  otro
+}
+
 enum AplicaCategoriaPersonal {
   gasto
   ingreso
@@ -95,27 +106,29 @@ model Usuario {
   frecuenciaCicloPersonal FrecuenciaCorte @default(mensual) @map("frecuencia_ciclo_personal")
   creadoEn                DateTime        @default(now()) @map("creado_en")
 
-  hogar                        Hogar?                            @relation(fields: [hogarId], references: [id])
-  invitacionesCreadas          InvitacionHogar[]                 @relation("invitacionesCreadas")
-  gastosPersonales             GastoPersonal[]
-  ingresosPersonales           IngresoPersonal[]
-  metodosPagoPersonales        MetodoPagoPersonal[]
-  categoriasPersonales         CategoriaPersonal[]
-  gastosFijosConfig            GastoFijoConfig[]
-  ingresosFijosConfig          IngresoFijoConfig[]
-  ahorrosPersonales            AhorroPersonal[]
-  periodosAhorroEvaluados      PeriodoAhorroEvaluado[]
-  limitesAlertaPersonales      LimiteAlertaPersonal[]
-  splitPorcentajes             SplitPorcentajeMiembro[]
-  transferenciasComoAnterior   LogTransferenciaAdmin[]           @relation("transferenciaAnterior")
-  transferenciasComoNuevo      LogTransferenciaAdmin[]           @relation("transferenciaNueva")
-  conceptosComoResponsable     ConceptoRecurrentePareja[]
-  gastosRecurrentesComoPagador GastoRecurrenteInstancia[]        @relation("gastoRecurrentePagador")
-  repartosGastoRecurrente      GastoRecurrenteInstanciaReparto[] @relation("repartoGastoRecurrente")
-  gastosVariablesComoPagador   GastoVariablePareja[]             @relation("gastoVariablePagador")
-  repartosGastoVariable        GastoVariableParejaReparto[]      @relation("repartoGastoVariable")
-  cuadresCreados               Cuadre[]                          @relation("cuadreCreadoPor")
-  balancesCuadre               CuadreBalanceMiembro[]
+  hogar                         Hogar?                            @relation(fields: [hogarId], references: [id])
+  invitacionesCreadas           InvitacionHogar[]                 @relation("invitacionesCreadas")
+  gastosPersonales              GastoPersonal[]
+  ingresosPersonales            IngresoPersonal[]
+  metodosPagoPersonales         MetodoPagoPersonal[]
+  categoriasPersonales          CategoriaPersonal[]
+  gastosFijosConfig             GastoFijoConfig[]
+  ingresosFijosConfig           IngresoFijoConfig[]
+  ahorrosPersonales             AhorroPersonal[]
+  periodosAhorroEvaluados       PeriodoAhorroEvaluado[]
+  limitesAlertaPersonales       LimiteAlertaPersonal[]
+  splitPorcentajes              SplitPorcentajeMiembro[]
+  transferenciasComoAnterior    LogTransferenciaAdmin[]           @relation("transferenciaAnterior")
+  transferenciasComoNuevo       LogTransferenciaAdmin[]           @relation("transferenciaNueva")
+  conceptosComoResponsable      ConceptoRecurrentePareja[]
+  gastosRecurrentesComoPagador  GastoRecurrenteInstancia[]        @relation("gastoRecurrentePagador")
+  repartosGastoRecurrente       GastoRecurrenteInstanciaReparto[] @relation("repartoGastoRecurrente")
+  gastosVariablesComoPagador    GastoVariablePareja[]             @relation("gastoVariablePagador")
+  repartosGastoVariable         GastoVariableParejaReparto[]      @relation("repartoGastoVariable")
+  cuadresCreados                Cuadre[]                          @relation("cuadreCreadoPor")
+  comprasCuotasPersonales       CompraCuotasPersonal[]
+  comprasCuotasHogarComoPagador CompraCuotasHogar[]               @relation("compraHogarPagador")
+  balancesCuadre                CuadreBalanceMiembro[]
 
   @@index([hogarId])
   @@map("usuarios")
@@ -133,6 +146,7 @@ model Hogar {
   transferenciasAdmin  LogTransferenciaAdmin[]
   gastosVariables      GastoVariablePareja[]
   cuadres              Cuadre[]
+  comprasCuotas        CompraCuotasHogar[]
 
   @@map("hogares")
 }
@@ -159,15 +173,25 @@ model InvitacionHogar {
 // fijo YA ES el gasto/ingreso real desde que existe (`estado` decide si ya
 // afecta el disponible o sigue pendiente). Ver Modulo_Panel_Personal_Ajustes.md.
 
+// Datos de tarjeta: solo los que la app necesita (nunca el número completo,
+// el código de seguridad ni la fecha de vencimiento). `ultimos4` es opcional,
+// solo para reconocer la tarjeta.
 model MetodoPagoPersonal {
-  id        String @id @default(uuid())
-  usuarioId String @map("usuario_id")
+  id        String         @id @default(uuid())
+  usuarioId String         @map("usuario_id")
   nombre    String
+  tipo      TipoMetodoPago @default(otro)
+  ultimos4  String?        @map("ultimos_4")
+  diaCorte  Int?           @map("dia_corte")
+  diaPago   Int?           @map("dia_pago")
+  cupo      Int?
 
-  usuario           Usuario           @relation(fields: [usuarioId], references: [id])
+  usuario           Usuario                @relation(fields: [usuarioId], references: [id])
   gastos            GastoPersonal[]
   gastosFijosConfig GastoFijoConfig[]
   ingresos          IngresoPersonal[]
+  comprasPersonales CompraCuotasPersonal[]
+  comprasHogar      CompraCuotasHogar[]
 
   @@index([usuarioId])
   @@map("metodos_pago_personales")
@@ -186,6 +210,7 @@ model CategoriaPersonal {
   ingresosFijosConfig IngresoFijoConfig[]
   ahorros             AhorroPersonal[]
   limitesAlerta       LimiteAlertaPersonal[]
+  comprasCuotas       CompraCuotasPersonal[]
 
   @@index([usuarioId])
   @@map("categorias_personales")
@@ -254,16 +279,21 @@ model GastoPersonal {
   metodoPagoId   String?            @map("metodo_pago_id")
   categoriaId    String?            @map("categoria_id")
   origen         OrigenGasto        @default(app)
+  // Cuota de una compra a cuotas personal (numeroCuota 1..N).
+  compraId       String?            @map("compra_id")
+  numeroCuota    Int?               @map("numero_cuota")
   creadoEn       DateTime           @default(now()) @map("creado_en")
 
-  usuario      Usuario             @relation(fields: [usuarioId], references: [id])
-  origenConfig GastoFijoConfig?    @relation(fields: [origenConfigId], references: [id])
-  origenCuadre Cuadre?             @relation(fields: [origenCuadreId], references: [id])
-  metodoPago   MetodoPagoPersonal? @relation(fields: [metodoPagoId], references: [id])
-  categoria    CategoriaPersonal?  @relation(fields: [categoriaId], references: [id])
+  usuario      Usuario               @relation(fields: [usuarioId], references: [id])
+  compra       CompraCuotasPersonal? @relation(fields: [compraId], references: [id])
+  origenConfig GastoFijoConfig?      @relation(fields: [origenConfigId], references: [id])
+  origenCuadre Cuadre?               @relation(fields: [origenCuadreId], references: [id])
+  metodoPago   MetodoPagoPersonal?   @relation(fields: [metodoPagoId], references: [id])
+  categoria    CategoriaPersonal?    @relation(fields: [categoriaId], references: [id])
 
   @@unique([origenConfigId, fecha])
   @@unique([origenCuadreId, usuarioId, fecha])
+  @@unique([compraId, numeroCuota])
   @@index([usuarioId])
   @@map("gastos_personales")
 }
@@ -396,12 +426,19 @@ model GastoVariablePareja {
   pagoUsuarioId String           @map("pago_usuario_id")
   fecha         DateTime
   estado        EstadoGastoHogar @default(pagado)
+  // Cuota de una compra a cuotas del hogar (numeroCuota 1..N). Si la compra
+  // es de cobro manual la cuota nace `por_pagar` y alguien la marca pagada.
+  compraId      String?          @map("compra_id")
+  numeroCuota   Int?             @map("numero_cuota")
+  fechaPago     DateTime?        @map("fecha_pago")
   creadoEn      DateTime         @default(now()) @map("creado_en")
 
   hogar    Hogar                        @relation(fields: [hogarId], references: [id])
   pagador  Usuario                      @relation("gastoVariablePagador", fields: [pagoUsuarioId], references: [id])
+  compra   CompraCuotasHogar?           @relation(fields: [compraId], references: [id])
   repartos GastoVariableParejaReparto[]
 
+  @@unique([compraId, numeroCuota])
   @@index([hogarId, estado])
   @@map("gastos_variables_pareja")
 }
@@ -620,4 +657,57 @@ model LimiteEvaluadoPeriodo {
   @@unique([limiteId, periodoInicio])
   @@index([limiteId])
   @@map("limites_evaluados_periodo")
+}
+
+// --- Compras a cuotas (entrega B) ---
+// Una compra a cuotas crea de una vez todas sus cuotas como gastos normales
+// (GastoPersonal / GastoVariablePareja) con `compraId` + `numeroCuota`. Monto
+// de cada cuota = total / N, el residuo va en la última. `modoCobro`:
+// automatico (tarjeta, débito automático: la cuota se da por pagada en su
+// fecha) o manual (crédito de almacén: alguien la marca pagada).
+
+model CompraCuotasPersonal {
+  id                String           @id @default(uuid())
+  usuarioId         String           @map("usuario_id")
+  descripcion       String
+  montoTotal        Int              @map("monto_total")
+  numeroCuotas      Int              @map("numero_cuotas")
+  fechaPrimeraCuota DateTime         @map("fecha_primera_cuota")
+  modoCobro         ModoFijoPersonal @map("modo_cobro")
+  metodoPagoId      String?          @map("metodo_pago_id")
+  categoriaId       String?          @map("categoria_id")
+  esObligatorio     Boolean          @default(true) @map("es_obligatorio")
+  creadoEn          DateTime         @default(now()) @map("creado_en")
+
+  usuario    Usuario             @relation(fields: [usuarioId], references: [id])
+  metodoPago MetodoPagoPersonal? @relation(fields: [metodoPagoId], references: [id])
+  categoria  CategoriaPersonal?  @relation(fields: [categoriaId], references: [id])
+  cuotas     GastoPersonal[]
+
+  @@index([usuarioId])
+  @@map("compras_cuotas_personales")
+}
+
+// El método de pago es del pagador (privado): solo se expone a quien pagó.
+// El reparto de todas las cuotas usa el split vigente el día de la compra.
+model CompraCuotasHogar {
+  id                String           @id @default(uuid())
+  hogarId           String           @map("hogar_id")
+  item              String
+  montoTotal        Int              @map("monto_total")
+  numeroCuotas      Int              @map("numero_cuotas")
+  fechaCompra       DateTime         @map("fecha_compra")
+  fechaPrimeraCuota DateTime         @map("fecha_primera_cuota")
+  modoCobro         ModoFijoPersonal @map("modo_cobro")
+  pagoUsuarioId     String           @map("pago_usuario_id")
+  metodoPagoId      String?          @map("metodo_pago_id")
+  creadoEn          DateTime         @default(now()) @map("creado_en")
+
+  hogar      Hogar                 @relation(fields: [hogarId], references: [id])
+  pagador    Usuario               @relation("compraHogarPagador", fields: [pagoUsuarioId], references: [id])
+  metodoPago MetodoPagoPersonal?   @relation(fields: [metodoPagoId], references: [id])
+  cuotas     GastoVariablePareja[]
+
+  @@index([hogarId])
+  @@map("compras_cuotas_hogar")
 }

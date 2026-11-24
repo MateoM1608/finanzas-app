@@ -1,11 +1,18 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { listarGastos, crearGasto, actualizarGasto, eliminarGasto } from '../api/gastosPersonales.js';
 import { listarIngresos, crearIngreso, actualizarIngreso, eliminarIngreso } from '../api/ingresosPersonales.js';
 import { listarCategorias } from '../api/categoriasPersonales.js';
 import { listarMetodosPago } from '../api/metodosPagoPersonales.js';
+import {
+  listarComprasPersonales,
+  crearCompraPersonal,
+  eliminarCompraPersonal,
+  sugerirPrimeraCuota,
+} from '../api/comprasCuotas.js';
+import { confirmar } from '../composables/useConfirm.js';
 import { extractErrorMessage } from '../api/client.js';
-import { formatCurrency, formatDate, hoyISO } from '../utils/format.js';
+import { formatCurrency, formatDate, hoyISO, modoCobroSugerido } from '../utils/format.js';
 import AppLayout from '../components/AppLayout.vue';
 import FormField from '../components/FormField.vue';
 import AlertError from '../components/AlertError.vue';
@@ -15,6 +22,7 @@ import ConfiguracionPersonalSection from '../components/personal/ConfiguracionPe
 import ResumenPersonalSection from '../components/personal/ResumenPersonalSection.vue';
 import AhorrosPersonalesSection from '../components/personal/AhorrosPersonalesSection.vue';
 import LimitesPersonalesSection from '../components/personal/LimitesPersonalesSection.vue';
+import ProximosMesesSection from '../components/personal/ProximosMesesSection.vue';
 
 const mostrarConfig = ref(false);
 const configTab = ref('ciclo');
@@ -38,9 +46,11 @@ const error = ref('');
 const resumenRef = ref(null);
 const ahorrosRef = ref(null);
 const limitesRef = ref(null);
+const proximosRef = ref(null);
 
 function recargarResumenes() {
   resumenRef.value?.recargar();
+  proximosRef.value?.recargar();
   ahorrosRef.value?.recargar();
   limitesRef.value?.recargar();
 }
@@ -63,14 +73,86 @@ const guardandoGasto = ref(false);
 const eliminandoGastoId = ref(null);
 const cambiandoEstadoGastoId = ref(null);
 
+// --- Compra a cuotas (opción del formulario de gasto) ---
+const gACuotas = ref(false);
+const gNumeroCuotas = ref('3');
+const gPrimeraCuota = ref('');
+const gModoCobro = ref('automatico');
+const compras = ref([]);
+const eliminandoCompraId = ref(null);
+
+// La fecha de la primera cuota se sugiere con el día de corte/pago del método.
+async function actualizarSugerenciaCuota() {
+  if (!gACuotas.value || !gFecha.value) return;
+  const metodo = metodos.value.find((m) => m.id === gMetodoPagoId.value);
+  gModoCobro.value = modoCobroSugerido(metodo);
+  try {
+    gPrimeraCuota.value = await sugerirPrimeraCuota(gFecha.value, gMetodoPagoId.value || undefined);
+  } catch {
+    // sin sugerencia: el usuario la escribe
+  }
+}
+watch([gACuotas, gMetodoPagoId, gFecha], actualizarSugerenciaCuota);
+
+const valorCuota = computed(() => {
+  const n = Number(gNumeroCuotas.value);
+  const total = Number(gMonto.value);
+  return n >= 2 && total > 0 ? Math.floor(total / n) : null;
+});
+
+async function cargarCompras() {
+  compras.value = await listarComprasPersonales();
+}
+
+async function onEliminarCompra(compra) {
+  const ok = await confirmar(`¿Eliminar la compra "${compra.descripcion}" con sus ${compra.numeroCuotas} cuotas?`, {
+    textoAceptar: 'Eliminar',
+    peligroso: true,
+  });
+  if (!ok) return;
+  error.value = '';
+  eliminandoCompraId.value = compra.id;
+  try {
+    await eliminarCompraPersonal(compra.id);
+    await Promise.all([cargarCompras(), cargarGastos()]);
+    recargarResumenes();
+  } catch (e) {
+    error.value = extractErrorMessage(e);
+  } finally {
+    eliminandoCompraId.value = null;
+  }
+}
+
 async function cargarGastos() {
   gastos.value = await listarGastos();
+}
+
+async function onAgregarCompra() {
+  await crearCompraPersonal({
+    descripcion: gDescripcion.value,
+    montoTotal: Number(gMonto.value),
+    numeroCuotas: Number(gNumeroCuotas.value),
+    fechaPrimeraCuota: gPrimeraCuota.value,
+    modoCobro: gModoCobro.value,
+    metodoPagoId: gMetodoPagoId.value || undefined,
+    categoriaId: gCategoriaId.value || undefined,
+    esObligatorio: gEsObligatorio.value,
+  });
+  await Promise.all([cargarCompras(), cargarGastos()]);
 }
 
 async function onAgregarGasto() {
   error.value = '';
   guardandoGasto.value = true;
   try {
+    if (gACuotas.value) {
+      await onAgregarCompra();
+      gMonto.value = '';
+      gDescripcion.value = '';
+      gACuotas.value = false;
+      recargarResumenes();
+      return;
+    }
     const nuevo = await crearGasto({
       monto: Number(gMonto.value),
       fecha: gFecha.value,
@@ -205,7 +287,7 @@ async function cargarTodo() {
     const [c, m] = await Promise.all([listarCategorias(), listarMetodosPago()]);
     categorias.value = c;
     metodos.value = m;
-    await Promise.all([cargarGastos(), cargarIngresos()]);
+    await Promise.all([cargarGastos(), cargarIngresos(), cargarCompras()]);
   } catch (e) {
     error.value = extractErrorMessage(e);
   } finally {
@@ -242,11 +324,27 @@ function cambiarTab(tab) {
   verTodo.value = false;
 }
 
-const listaVisible = computed(() => {
-  const lista = tabMovimientos.value === 'gastos' ? gastos.value : ingresos.value;
-  return verTodo.value ? lista : lista.slice(0, LIMITE_LISTA);
+// Las cuotas futuras de una compra no se listan hasta su fecha: se ven en
+// "Mis próximos meses" y en la pestaña A cuotas.
+const gastosALaFecha = computed(() => {
+  const hoy = hoyISO();
+  return gastos.value.filter((g) => !g.compraId || g.fecha.slice(0, 10) <= hoy);
 });
-const totalLista = computed(() => (tabMovimientos.value === 'gastos' ? gastos.value : ingresos.value).length);
+
+function listaDeTab() {
+  if (tabMovimientos.value === 'gastos') return gastosALaFecha.value;
+  if (tabMovimientos.value === 'compras') return compras.value;
+  return ingresos.value;
+}
+const listaVisible = computed(() => (verTodo.value ? listaDeTab() : listaDeTab().slice(0, LIMITE_LISTA)));
+const totalLista = computed(() => listaDeTab().length);
+
+function cuotasPagadas(compra) {
+  return compra.cuotas.filter((c) => c.estado === 'pagado').length;
+}
+function saldoCompra(compra) {
+  return compra.cuotas.filter((c) => c.estado !== 'pagado').reduce((acc, c) => acc + c.monto, 0);
+}
 </script>
 
 <template>
@@ -264,6 +362,7 @@ const totalLista = computed(() => (tabMovimientos.value === 'gastos' ? gastos.va
 
     <div class="space-y-6">
       <ResumenPersonalSection ref="resumenRef" />
+      <ProximosMesesSection ref="proximosRef" />
 
       <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
         <section class="card card-pad">
@@ -317,7 +416,7 @@ const totalLista = computed(() => (tabMovimientos.value === 'gastos' ? gastos.va
               :aria-selected="tabMovimientos === 'gastos'"
               @click="cambiarTab('gastos')"
             >
-              Gastos <span class="ml-1 text-ink-tertiary">{{ gastos.length }}</span>
+              Gastos <span class="ml-1 text-ink-tertiary">{{ gastosALaFecha.length }}</span>
             </button>
             <button
               type="button"
@@ -329,6 +428,16 @@ const totalLista = computed(() => (tabMovimientos.value === 'gastos' ? gastos.va
             >
               Ingresos <span class="ml-1 text-ink-tertiary">{{ ingresos.length }}</span>
             </button>
+            <button
+              type="button"
+              role="tab"
+              class="tab"
+              :class="{ 'tab-active': tabMovimientos === 'compras' }"
+              :aria-selected="tabMovimientos === 'compras'"
+              @click="cambiarTab('compras')"
+            >
+              A cuotas <span class="ml-1 text-ink-tertiary">{{ compras.length }}</span>
+            </button>
           </div>
         </div>
 
@@ -339,8 +448,14 @@ const totalLista = computed(() => (tabMovimientos.value === 'gastos' ? gastos.va
 
           <div v-else-if="!totalLista" class="empty py-10">
             <AppIcon name="receipt" class="mx-auto mb-2 h-6 w-6" />
-            {{ tabMovimientos === 'gastos' ? 'Aún no has registrado gastos personales.' : 'Aún no has registrado ingresos personales.' }}
-            <div class="mt-4">
+            {{
+              tabMovimientos === 'gastos'
+                ? 'Aún no has registrado gastos personales.'
+                : tabMovimientos === 'compras'
+                  ? 'No tienes compras a cuotas. Regístralas desde Registrar movimiento, marcando "Es una compra a cuotas".'
+                  : 'Aún no has registrado ingresos personales.'
+            }}
+            <div v-if="tabMovimientos !== 'compras'" class="mt-4">
               <button
                 type="button"
                 class="btn-secondary btn-sm"
@@ -366,6 +481,7 @@ const totalLista = computed(() => (tabMovimientos.value === 'gastos' ? gastos.va
                     <span v-if="gasto.esObligatorio" class="badge-accent">Obligatorio</span>
                     <span v-if="gasto.origenConfigId" class="badge-neutral">Fijo</span>
                     <span v-if="gasto.origenCuadreId" class="badge-neutral">Hogar</span>
+                    <span v-if="gasto.compra" class="badge-neutral">Cuota {{ gasto.numeroCuota }}/{{ gasto.compra.numeroCuotas }}</span>
                   </p>
                   <p class="mt-0.5 text-[13px] text-ink-tertiary">
                     {{ formatDate(gasto.fecha) }}
@@ -389,7 +505,7 @@ const totalLista = computed(() => (tabMovimientos.value === 'gastos' ? gastos.va
                     {{ gasto.estado === 'pagado' ? 'Marcar pendiente' : 'Marcar pagado' }}
                   </button>
                   <button
-                    v-if="!gasto.origenConfigId && !gasto.origenCuadreId"
+                    v-if="!gasto.origenConfigId && !gasto.origenCuadreId && !gasto.compraId"
                     type="button"
                     class="btn-icon !p-1.5 hover:!text-negative sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100"
                     :disabled="eliminandoGastoId === gasto.id"
@@ -401,6 +517,48 @@ const totalLista = computed(() => (tabMovimientos.value === 'gastos' ? gastos.va
                   </button>
                   <span v-else class="hidden sm:block w-7" aria-hidden="true" />
                 </div>
+              </div>
+            </li>
+          </ul>
+
+          <!-- Compras a cuotas -->
+          <ul v-else-if="tabMovimientos === 'compras'" class="list">
+            <li v-for="compra in listaVisible" :key="compra.id" class="list-row group">
+              <div class="flex min-w-0 items-center gap-3">
+                <span class="hidden sm:grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-surface-sunken text-ink-secondary">
+                  <AppIcon name="calendar" class="h-4 w-4" />
+                </span>
+                <div class="min-w-0">
+                  <p class="flex flex-wrap items-center gap-1.5 text-sm font-medium text-ink-primary">
+                    <span class="truncate">{{ compra.descripcion }}</span>
+                    <span class="badge-neutral">{{ cuotasPagadas(compra) }}/{{ compra.numeroCuotas }} pagadas</span>
+                    <span :class="compra.modoCobro === 'automatico' ? 'badge-accent' : 'badge-warning'">
+                      {{ compra.modoCobro === 'automatico' ? 'Automático' : 'Manual' }}
+                    </span>
+                  </p>
+                  <p class="mt-0.5 text-[13px] text-ink-tertiary">
+                    {{ formatCurrency(compra.montoTotal) }} en {{ compra.numeroCuotas }} cuotas · desde
+                    {{ formatDate(compra.fechaPrimeraCuota) }}
+                    <template v-if="compra.metodoPago"> · {{ compra.metodoPago.nombre }}</template>
+                  </p>
+                </div>
+              </div>
+              <div class="flex shrink-0 items-center gap-2">
+                <span class="text-right">
+                  <span class="block text-sm font-semibold text-ink-primary">{{ formatCurrency(saldoCompra(compra)) }}</span>
+                  <span class="block text-xs text-ink-tertiary">por pagar</span>
+                </span>
+                <button
+                  v-if="!cuotasPagadas(compra)"
+                  type="button"
+                  class="btn-icon !p-1.5 hover:!text-negative sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100"
+                  :disabled="eliminandoCompraId === compra.id"
+                  :aria-label="`Eliminar ${compra.descripcion}`"
+                  title="Eliminar compra"
+                  @click="onEliminarCompra(compra)"
+                >
+                  <AppIcon name="trash" class="h-4 w-4" />
+                </button>
               </div>
             </li>
           </ul>
@@ -525,12 +683,45 @@ const totalLista = computed(() => (tabMovimientos.value === 'gastos' ? gastos.va
           Es un gasto obligatorio
         </label>
 
+        <label class="sm:col-span-2 inline-flex items-center gap-2.5 text-sm text-ink-secondary cursor-pointer">
+          <input v-model="gACuotas" type="checkbox" class="checkbox" />
+          Es una compra a cuotas
+        </label>
+        <template v-if="gACuotas">
+          <FormField v-model="gNumeroCuotas" type="number" label="Número de cuotas" required />
+          <FormField
+            v-model="gPrimeraCuota"
+            type="date"
+            label="Primera cuota"
+            required
+            hint="Sugerida con el día de corte y pago de la tarjeta; puedes cambiarla."
+          />
+          <div>
+            <label class="label" for="g-modo-cobro">Cómo se paga cada cuota</label>
+            <select id="g-modo-cobro" v-model="gModoCobro" class="field">
+              <option value="automatico">Automático (tarjeta o débito)</option>
+              <option value="manual">Manual (la marco yo al pagar)</option>
+            </select>
+          </div>
+          <p class="self-end pb-2.5 text-[13px] text-ink-secondary">
+            <template v-if="valorCuota">≈ {{ formatCurrency(valorCuota) }} por cuota</template>
+          </p>
+          <p class="sm:col-span-2 text-[13px] text-ink-tertiary">
+            El monto es el total de la compra y la descripción es obligatoria. Se crean todas las cuotas; las
+            automáticas se dan por pagadas en su fecha.
+          </p>
+        </template>
+
         <div v-if="error" class="sm:col-span-2"><AlertError :message="error" /></div>
 
         <div class="sm:col-span-2 flex justify-end gap-2 pt-1">
           <button type="button" class="btn-ghost" @click="mostrarRegistro = false">Cancelar</button>
-          <button type="submit" class="btn-primary" :disabled="guardandoGasto">
-            {{ guardandoGasto ? 'Guardando…' : 'Agregar gasto' }}
+          <button
+            type="submit"
+            class="btn-primary"
+            :disabled="guardandoGasto || (gACuotas && (!gDescripcion || Number(gNumeroCuotas) < 2))"
+          >
+            {{ guardandoGasto ? 'Guardando…' : gACuotas ? 'Agregar compra' : 'Agregar gasto' }}
           </button>
         </div>
       </form>

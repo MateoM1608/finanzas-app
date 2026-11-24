@@ -39,8 +39,9 @@ import {
   eliminarLimite,
 } from '../../api/limitesPersonales.js';
 import { extractErrorMessage } from '../../api/client.js';
-import { formatCurrency, hoyISO } from '../../utils/format.js';
+import { formatCurrency, hoyISO, describirMetodo } from '../../utils/format.js';
 import FormField from '../FormField.vue';
+import MetodoPagoForm from './MetodoPagoForm.vue';
 import AlertError from '../AlertError.vue';
 import AppIcon from '../AppIcon.vue';
 
@@ -111,16 +112,16 @@ async function cargar() {
 onMounted(cargar);
 
 // --- Métodos de pago ---
-const nuevoMetodoNombre = ref('');
 const creandoMetodo = ref(false);
+const formMetodoKey = ref(0);
 
-async function onCrearMetodo() {
+async function onCrearMetodo(payload) {
   error.value = '';
   creandoMetodo.value = true;
   try {
-    const metodo = await crearMetodoPago({ nombre: nuevoMetodoNombre.value });
+    const metodo = await crearMetodoPago(payload);
     metodos.value = [...metodos.value, metodo];
-    nuevoMetodoNombre.value = '';
+    formMetodoKey.value += 1; // limpia el formulario
   } catch (e) {
     error.value = extractErrorMessage(e);
   } finally {
@@ -143,22 +144,12 @@ async function onEliminarMetodo(metodo) {
 }
 
 const editandoMetodoId = ref(null);
-const editMetodoNombre = ref('');
 
-function onEditarMetodo(metodo) {
-  editandoMetodoId.value = metodo.id;
-  editMetodoNombre.value = metodo.nombre;
-}
-
-function onCancelarEditarMetodo() {
-  editandoMetodoId.value = null;
-}
-
-async function onGuardarEditarMetodo(metodo) {
+async function onGuardarEditarMetodo(metodo, payload) {
   error.value = '';
   guardandoId.value = metodo.id;
   try {
-    const actualizado = await actualizarMetodoPago(metodo.id, { nombre: editMetodoNombre.value });
+    const actualizado = await actualizarMetodoPago(metodo.id, payload);
     const idx = metodos.value.findIndex((m) => m.id === metodo.id);
     metodos.value[idx] = actualizado;
     editandoMetodoId.value = null;
@@ -747,37 +738,41 @@ const categoriasParaAhorro = computed(() => categorias.value.filter((c) => c.apl
 
       <!-- Métodos de pago -->
       <div v-else-if="tabActiva === 'metodos'" class="space-y-5">
-        <form class="panel-sunken p-4 grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-4" @submit.prevent="onCrearMetodo">
-          <FormField v-model="nuevoMetodoNombre" label="Nuevo método" placeholder="Nequi, Efectivo…" required />
-          <div class="flex items-end">
-            <button type="submit" class="btn-primary w-full sm:w-auto" :disabled="creandoMetodo">
-              <AppIcon name="plus" class="h-4 w-4" />
-              {{ creandoMetodo ? 'Agregando…' : 'Agregar' }}
-            </button>
-          </div>
-        </form>
+        <div class="panel-sunken p-4">
+          <p class="mb-3 text-[13px] font-medium text-ink-secondary">Nuevo método de pago</p>
+          <MetodoPagoForm
+            :key="formMetodoKey"
+            id-base="metodo-nuevo"
+            :guardando="creandoMetodo"
+            texto-guardar="Agregar"
+            @guardar="onCrearMetodo"
+          />
+        </div>
 
         <p v-if="!metodos.length" class="empty">No hay métodos de pago todavía.</p>
         <ul v-else class="list">
           <li v-for="m in metodos" :key="m.id" :class="editandoMetodoId === m.id ? 'py-3' : 'list-row'">
-            <div v-if="editandoMetodoId === m.id" class="panel-sunken p-4 space-y-4">
-              <FormField v-model="editMetodoNombre" label="Nombre" required />
-              <div class="flex items-center justify-end gap-2">
-                <button class="btn-ghost btn-sm" @click="onCancelarEditarMetodo">Cancelar</button>
-                <button class="btn-primary btn-sm" :disabled="guardandoId === m.id" @click="onGuardarEditarMetodo(m)">
-                  Guardar
-                </button>
-              </div>
+            <div v-if="editandoMetodoId === m.id" class="panel-sunken p-4">
+              <MetodoPagoForm
+                :id-base="`metodo-${m.id}`"
+                :inicial="m"
+                :guardando="guardandoId === m.id"
+                @guardar="onGuardarEditarMetodo(m, $event)"
+                @cancelar="editandoMetodoId = null"
+              />
             </div>
             <template v-else>
               <div class="flex min-w-0 items-center gap-3">
                 <span class="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-surface-sunken text-ink-secondary">
                   <AppIcon name="wallet" class="h-4 w-4" />
                 </span>
-                <span class="truncate text-sm font-medium text-ink-primary">{{ m.nombre }}</span>
+                <span class="min-w-0">
+                  <span class="block truncate text-sm font-medium text-ink-primary">{{ m.nombre }}</span>
+                  <span class="block truncate text-[13px] text-ink-tertiary">{{ describirMetodo(m) }}</span>
+                </span>
               </div>
               <div class="flex shrink-0 items-center gap-1">
-                <button class="btn-icon" :aria-label="`Editar ${m.nombre}`" @click="onEditarMetodo(m)">
+                <button class="btn-icon" :aria-label="`Editar ${m.nombre}`" @click="editandoMetodoId = m.id">
                   <AppIcon name="edit" class="h-4 w-4" />
                 </button>
                 <button

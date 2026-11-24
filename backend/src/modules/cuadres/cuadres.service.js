@@ -83,14 +83,18 @@ async function obtenerCuadreEnriquecido(cuadreId) {
   return enriquecido;
 }
 
-/** Lo pagado y sin cuadrar con fecha ≤ `hasta`, que es lo que entra a un cuadre. */
-async function buscarPagadosSinCuadrar(hogarId, hasta) {
+/**
+ * Lo pagado y sin cuadrar: con `fecha` ≤ hoy es lo que entra a un cuadre; con
+ * fecha futura (cuotas automáticas de una compra, cuentas pagadas antes de
+ * tiempo) es lo que se puede ADELANTAR.
+ */
+async function buscarPagadosSinCuadrar(hogarId, filtroFecha) {
   const [cuotas, variables] = await Promise.all([
     prisma.gastoRecurrenteInstancia.findMany({
-      where: { concepto: { hogarId }, estado: 'pagado', fecha: { lte: hasta } },
+      where: { concepto: { hogarId }, estado: 'pagado', fecha: filtroFecha },
     }),
     prisma.gastoVariablePareja.findMany({
-      where: { hogarId, estado: 'pagado', fecha: { lte: hasta } },
+      where: { hogarId, estado: 'pagado', fecha: filtroFecha },
     }),
   ]);
   return { cuotas, variables };
@@ -107,15 +111,18 @@ async function refrescarBorrador(hogarId, cuadreId) {
   const existentes = await prisma.cuadreItem.findMany({ where: { cuadreId } });
   const yaEnCuadre = new Set(existentes.map(origenClave));
 
-  const { cuotas, variables } = await buscarPagadosSinCuadrar(hogarId, hoy);
-  const nuevos = [
+  const aItems = ({ cuotas, variables }, incluido) => [
     ...cuotas
       .filter((c) => !yaEnCuadre.has(`recurrente:${c.id}`))
-      .map((c) => ({ cuadreId, tipoOrigen: 'recurrente', origenId: c.id, monto: c.monto })),
+      .map((c) => ({ cuadreId, tipoOrigen: 'recurrente', origenId: c.id, monto: c.monto, incluido })),
     ...variables
       .filter((v) => !yaEnCuadre.has(`variable:${v.id}`))
-      .map((v) => ({ cuadreId, tipoOrigen: 'variable', origenId: v.id, monto: v.valorTotal })),
+      .map((v) => ({ cuadreId, tipoOrigen: 'variable', origenId: v.id, monto: v.valorTotal, incluido })),
   ];
+  // Hasta hoy entra preseleccionado; lo futuro llega desmarcado, para adelantarlo si se quiere.
+  const hastaHoy = aItems(await buscarPagadosSinCuadrar(hogarId, { lte: hoy }), true);
+  const proximos = aItems(await buscarPagadosSinCuadrar(hogarId, { gt: hoy }), false);
+  const nuevos = [...hastaHoy, ...proximos];
 
   const mapa = await obtenerOrigenesDetalladosPorLote(existentes);
   const desactualizados = existentes.filter((item) => {
@@ -134,7 +141,7 @@ async function refrescarBorrador(hogarId, cuadreId) {
   await prisma.$transaction(async (tx) => {
     if (nuevos.length) {
       await tx.cuadreItem.createMany({ data: nuevos });
-      await actualizarEstadoOrigenes(tx, nuevos, 'en_cuadre');
+      await actualizarEstadoOrigenes(tx, hastaHoy, 'en_cuadre');
     }
     for (const item of desactualizados) {
       await tx.cuadreItem.update({
@@ -183,7 +190,7 @@ export async function iniciarCuadre(usuarioActual) {
   const existente = await obtenerCuadreAbierto(usuarioActual);
   if (existente) return { cuadre: existente, motivo: null };
 
-  const { cuotas, variables } = await buscarPagadosSinCuadrar(hogarId, hoyUTC());
+  const { cuotas, variables } = await buscarPagadosSinCuadrar(hogarId, {});
   if (!cuotas.length && !variables.length) {
     return {
       cuadre: null,
@@ -290,9 +297,12 @@ export async function confirmarCuadre(usuarioActual, cuadreId) {
   // para que los informes personales mensuales sigan cuadrando. Cada gasto
   // va al último día de su mes, o al día del cuadre si es el mes en curso.
   const repartoPorMiembroMes = new Map();
+  const ultimaFechaDelMes = new Map();
   for (const item of items) {
     const origen = mapa.get(origenClave(item));
     const mes = claveMes(origen.fecha);
+    const f = new Date(origen.fecha);
+    if (!ultimaFechaDelMes.has(mes) || f > ultimaFechaDelMes.get(mes)) ultimaFechaDelMes.set(mes, f);
     for (const reparto of origen.repartos) {
       const clave = `${reparto.usuarioId}|${mes}`;
       repartoPorMiembroMes.set(clave, (repartoPorMiembroMes.get(clave) ?? 0) + reparto.monto);
@@ -305,10 +315,15 @@ export async function confirmarCuadre(usuarioActual, cuadreId) {
       const [usuarioId, mes] = clave.split('|');
       const finDeMes = ultimoDiaDelMes(mes);
       const [, mesNum] = mes.split('-').map(Number);
+      // Mes pasado → su último día; mes del cuadre → el día del cuadre; mes
+      // futuro (cuotas adelantadas) → la fecha de su última cuota en ese mes,
+      // para que el gasto quede en el mes al que pertenece.
+      let fecha = finDeMes < fechaCuadre ? finDeMes : fechaCuadre;
+      if (claveMes(fechaCuadre) < mes) fecha = ultimaFechaDelMes.get(mes);
       return {
         usuarioId,
         monto,
-        fecha: finDeMes < fechaCuadre ? finDeMes : fechaCuadre,
+        fecha,
         descripcion: `Hogar · ${MESES[mesNum - 1]} (cuadre del ${fechaIso})`,
         estado: 'pagado',
         esObligatorio: true,

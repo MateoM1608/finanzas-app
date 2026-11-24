@@ -1,14 +1,20 @@
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue';
+import { ref, reactive, computed, onMounted, watch } from 'vue';
 import {
   listarGastosVariables,
   crearGastoVariable,
   actualizarGastoVariable,
   eliminarGastoVariable,
+  pagarCuotaVariable,
+  deshacerPagoCuotaVariable,
 } from '../../api/gastosVariables.js';
+import { listarComprasHogar, crearCompraHogar, eliminarCompraHogar, sugerirPrimeraCuota } from '../../api/comprasCuotas.js';
+import { listarMetodosPago } from '../../api/metodosPagoPersonales.js';
+import { useAuthStore } from '../../stores/auth.js';
+import { confirmar } from '../../composables/useConfirm.js';
 import { listarMiembros } from '../../api/hogares.js';
 import { extractErrorMessage } from '../../api/client.js';
-import { formatCurrency, formatDate, formatReparto, hoyISO } from '../../utils/format.js';
+import { formatCurrency, formatDate, formatReparto, hoyISO, modoCobroSugerido } from '../../utils/format.js';
 import FormField from '../FormField.vue';
 import AlertError from '../AlertError.vue';
 import AppModal from '../AppModal.vue';
@@ -36,9 +42,114 @@ const editandoRepartoId = ref(null);
 const repartoEdicion = reactive({}); // usuarioId -> string
 const guardandoRepartoId = ref(null);
 
+const auth = useAuthStore();
 const LIMITE_LISTA = 8;
 const verTodo = ref(false);
-const visibles = computed(() => (verTodo.value ? gastos.value : gastos.value.slice(0, LIMITE_LISTA)));
+// Las cuotas futuras de una compra no se listan hasta su fecha (se ven en
+// "Compras a cuotas" y en Cuadres → Próximos).
+const gastosALaFecha = computed(() => {
+  const hoy = hoyISO();
+  return gastos.value.filter((g) => !g.compraId || g.fecha.slice(0, 10) <= hoy);
+});
+const visibles = computed(() =>
+  verTodo.value ? gastosALaFecha.value : gastosALaFecha.value.slice(0, LIMITE_LISTA),
+);
+
+// --- Compras a cuotas ---
+const compras = ref([]);
+const misMetodos = ref([]);
+const aCuotas = ref(false);
+const numeroCuotas = ref('3');
+const primeraCuota = ref('');
+const modoCobro = ref('automatico');
+const metodoPagoId = ref('');
+const eliminandoCompraId = ref(null);
+const pagandoId = ref(null);
+
+// Solo quien paga puede asociar uno de SUS métodos de pago (privados).
+const pagaYo = computed(() => pagoUsuarioId.value && pagoUsuarioId.value === auth.usuario?.id);
+
+async function actualizarSugerencia() {
+  if (!aCuotas.value || !fecha.value) return;
+  const metodo = pagaYo.value ? misMetodos.value.find((m) => m.id === metodoPagoId.value) : null;
+  modoCobro.value = modoCobroSugerido(metodo);
+  try {
+    primeraCuota.value = await sugerirPrimeraCuota(fecha.value, pagaYo.value ? metodoPagoId.value || undefined : undefined);
+  } catch {
+    // sin sugerencia
+  }
+}
+watch([aCuotas, metodoPagoId, fecha, pagoUsuarioId], actualizarSugerencia);
+
+const valorCuota = computed(() => {
+  const n = Number(numeroCuotas.value);
+  return n >= 2 && Number(valorTotal.value) > 0 ? Math.floor(Number(valorTotal.value) / n) : null;
+});
+
+const comprasActivas = computed(() => compras.value.filter((c) => c.cuotas.some((q) => q.estado !== 'cuadrado')));
+
+function cuotasCuadradas(compra) {
+  return compra.cuotas.filter((q) => q.estado === 'cuadrado').length;
+}
+
+async function cargarCompras() {
+  compras.value = await listarComprasHogar();
+}
+
+async function onEliminarCompra(compra) {
+  const ok = await confirmar(`¿Eliminar la compra "${compra.item}" con sus ${compra.numeroCuotas} cuotas?`, {
+    textoAceptar: 'Eliminar',
+    peligroso: true,
+  });
+  if (!ok) return;
+  error.value = '';
+  eliminandoCompraId.value = compra.id;
+  try {
+    await eliminarCompraHogar(compra.id);
+    await Promise.all([cargarCompras(), recargarGastos()]);
+    emit('cambio');
+  } catch (e) {
+    error.value = extractErrorMessage(e);
+  } finally {
+    eliminandoCompraId.value = null;
+  }
+}
+
+async function onPagarCuota(gasto) {
+  error.value = '';
+  pagandoId.value = gasto.id;
+  try {
+    const actualizado = await pagarCuotaVariable(gasto.id, { fechaPago: hoyISO() });
+    const idx = gastos.value.findIndex((g) => g.id === gasto.id);
+    gastos.value[idx] = actualizado;
+    await cargarCompras();
+    emit('cambio');
+  } catch (e) {
+    error.value = extractErrorMessage(e);
+  } finally {
+    pagandoId.value = null;
+  }
+}
+
+async function onDeshacerPagoCuota(gasto) {
+  error.value = '';
+  pagandoId.value = gasto.id;
+  try {
+    const actualizado = await deshacerPagoCuotaVariable(gasto.id);
+    const idx = gastos.value.findIndex((g) => g.id === gasto.id);
+    gastos.value[idx] = actualizado;
+    await cargarCompras();
+    emit('cambio');
+  } catch (e) {
+    error.value = extractErrorMessage(e);
+  } finally {
+    pagandoId.value = null;
+  }
+}
+
+async function recargarGastos() {
+  gastos.value = ordenar(await listarGastosVariables());
+}
 
 function ordenar(lista) {
   return [...lista].sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
@@ -46,6 +157,7 @@ function ordenar(lista) {
 
 // Solo presentación: insignia por estado del gasto.
 const ESTADO_INFO = {
+  por_pagar: { label: 'Por pagar', clase: 'badge-negative' },
   pagado: { label: 'Sin cuadrar', clase: 'badge-warning' },
   en_cuadre: { label: 'En cuadre', clase: 'badge-accent' },
   cuadrado: { label: 'Cuadrado', clase: 'badge-positive' },
@@ -56,7 +168,7 @@ function estadoInfo(gasto) {
 }
 
 function esEditable(gasto) {
-  return gasto.estado === 'pagado';
+  return gasto.estado === 'pagado' && !gasto.compraId;
 }
 
 function inicializarRepartoManual() {
@@ -75,12 +187,16 @@ const repartoManualValido = computed(
 async function cargar() {
   loading.value = true;
   try {
-    const [listaGastos, listaMiembros] = await Promise.all([
+    const [listaGastos, listaMiembros, listaCompras, metodos] = await Promise.all([
       listarGastosVariables(),
       listarMiembros(),
+      listarComprasHogar(),
+      listarMetodosPago(),
     ]);
     gastos.value = ordenar(listaGastos);
     miembros.value = listaMiembros;
+    compras.value = listaCompras;
+    misMetodos.value = metodos;
     inicializarRepartoManual();
   } catch (e) {
     error.value = extractErrorMessage(e);
@@ -105,8 +221,25 @@ async function onCrear() {
         monto: Number(repartoManual[m.id]) || 0,
       }));
     }
-    const nuevo = await crearGastoVariable(payload);
-    gastos.value = ordenar([...gastos.value, nuevo]);
+    if (aCuotas.value) {
+      await crearCompraHogar({
+        item: payload.item,
+        montoTotal: payload.valorTotal,
+        numeroCuotas: Number(numeroCuotas.value),
+        fechaCompra: payload.fecha,
+        fechaPrimeraCuota: primeraCuota.value,
+        modoCobro: modoCobro.value,
+        pagoUsuarioId: payload.pagoUsuarioId,
+        metodoPagoId: pagaYo.value && metodoPagoId.value ? metodoPagoId.value : undefined,
+        repartos: payload.repartos,
+      });
+      await Promise.all([cargarCompras(), recargarGastos()]);
+      aCuotas.value = false;
+      metodoPagoId.value = '';
+    } else {
+      const nuevo = await crearGastoVariable(payload);
+      gastos.value = ordenar([...gastos.value, nuevo]);
+    }
     item.value = '';
     valorTotal.value = '';
     pagoUsuarioId.value = '';
@@ -218,6 +351,36 @@ onMounted(cargar);
 
         <div class="sm:col-span-2">
           <label class="inline-flex items-center gap-2.5 text-sm text-ink-secondary cursor-pointer">
+            <input v-model="aCuotas" type="checkbox" class="checkbox" />
+            Es una compra a cuotas
+          </label>
+        </div>
+        <template v-if="aCuotas">
+          <FormField v-model="numeroCuotas" type="number" label="Número de cuotas" required />
+          <FormField v-model="primeraCuota" type="date" label="Primera cuota" required />
+          <div>
+            <label class="label" for="compra-hogar-modo">Cómo se paga cada cuota</label>
+            <select id="compra-hogar-modo" v-model="modoCobro" class="field">
+              <option value="automatico">Automático (tarjeta: entra sola en su fecha)</option>
+              <option value="manual">Manual (crédito de almacén: se marca al pagar)</option>
+            </select>
+          </div>
+          <div v-if="pagaYo">
+            <label class="label" for="compra-hogar-metodo">Tu método de pago (solo lo ves tú)</label>
+            <select id="compra-hogar-metodo" v-model="metodoPagoId" class="field">
+              <option value="">Sin definir</option>
+              <option v-for="m in misMetodos" :key="m.id" :value="m.id">{{ m.nombre }}</option>
+            </select>
+          </div>
+          <p class="sm:col-span-2 text-[13px] text-ink-tertiary">
+            <template v-if="valorCuota">≈ {{ formatCurrency(valorCuota) }} por cuota. </template>
+            El valor total es el de la compra y la fecha es el día en que compraron; el reparto acordado ese día se
+            aplica a todas las cuotas.
+          </p>
+        </template>
+
+        <div class="sm:col-span-2">
+          <label class="inline-flex items-center gap-2.5 text-sm text-ink-secondary cursor-pointer">
             <input v-model="personalizarReparto" type="checkbox" class="checkbox" />
             Personalizar el reparto de este gasto
           </label>
@@ -252,14 +415,14 @@ onMounted(cargar);
             class="btn-primary w-full sm:w-auto"
             :disabled="creando || (personalizarReparto && !repartoManualValido)"
           >
-            {{ creando ? 'Agregando…' : 'Agregar gasto' }}
+            {{ creando ? 'Agregando…' : aCuotas ? 'Agregar compra' : 'Agregar gasto' }}
           </button>
         </div>
       </form>
     </AppModal>
 
     <p v-if="loading" class="text-sm text-ink-tertiary">Cargando…</p>
-    <div v-else-if="!gastos.length" class="empty flex flex-col items-center gap-2">
+    <div v-else-if="!gastosALaFecha.length" class="empty flex flex-col items-center gap-2">
       <AppIcon name="receipt" class="h-6 w-6" />
       Aún no hay gastos variables registrados.
     </div>
@@ -273,6 +436,7 @@ onMounted(cargar);
               <span v-if="estadoInfo(gasto)" :class="estadoInfo(gasto).clase">
                 {{ estadoInfo(gasto).label }}
               </span>
+              <span v-if="gasto.compra" class="badge-neutral">Cuota {{ gasto.numeroCuota }}/{{ gasto.compra.numeroCuotas }}</span>
             </p>
             <p class="text-[13px] text-ink-tertiary mt-1">
               {{ formatDate(gasto.fecha) }} · Pagó {{ gasto.pagador.nombre }}
@@ -286,8 +450,30 @@ onMounted(cargar);
           </span>
         </div>
 
+        <div v-if="gasto.compraId" class="mt-2 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+          <p class="min-w-0 text-[13px] text-ink-tertiary">Reparto: {{ formatReparto(gasto.repartos) }}</p>
+          <button
+            v-if="gasto.estado === 'por_pagar'"
+            type="button"
+            class="btn-secondary btn-sm ml-auto"
+            :disabled="pagandoId === gasto.id"
+            @click="onPagarCuota(gasto)"
+          >
+            <AppIcon name="check" class="h-3.5 w-3.5" />
+            Lo pagué
+          </button>
+          <button
+            v-else-if="gasto.estado === 'pagado' && gasto.compra?.modoCobro === 'manual'"
+            type="button"
+            class="btn-ghost btn-sm ml-auto"
+            :disabled="pagandoId === gasto.id"
+            @click="onDeshacerPagoCuota(gasto)"
+          >
+            Deshacer
+          </button>
+        </div>
         <div
-          v-if="!esEditable(gasto) || editandoRepartoId !== gasto.id"
+          v-else-if="!esEditable(gasto) || editandoRepartoId !== gasto.id"
           class="mt-2 flex flex-wrap items-center justify-between gap-x-4 gap-y-2"
         >
           <p class="min-w-0 text-[13px] text-ink-tertiary" :class="{ 'opacity-60': !esEditable(gasto) }">
@@ -354,10 +540,40 @@ onMounted(cargar);
         </div>
       </li>
     </ul>
-    <div v-if="gastos.length > LIMITE_LISTA" class="mt-2 flex justify-center">
+    <div v-if="gastosALaFecha.length > LIMITE_LISTA" class="mt-2 flex justify-center">
       <button type="button" class="btn-ghost btn-sm" @click="verTodo = !verTodo">
-        {{ verTodo ? 'Ver menos' : `Ver los ${gastos.length}` }}
+        {{ verTodo ? 'Ver menos' : `Ver los ${gastosALaFecha.length}` }}
       </button>
+    </div>
+
+    <div v-if="comprasActivas.length" class="mt-5 border-t border-border pt-4">
+      <p class="mb-1 text-[13px] font-medium text-ink-secondary">Compras a cuotas</p>
+      <ul class="list">
+        <li v-for="compra in comprasActivas" :key="compra.id" class="list-row !py-3 group">
+          <div class="min-w-0">
+            <p class="flex flex-wrap items-center gap-1.5 text-sm font-medium text-ink-primary">
+              <span class="truncate">{{ compra.item }}</span>
+              <span class="badge-neutral">{{ cuotasCuadradas(compra) }}/{{ compra.numeroCuotas }} cuadradas</span>
+            </p>
+            <p class="truncate text-[13px] text-ink-tertiary">
+              {{ formatCurrency(compra.montoTotal) }} · paga {{ compra.pagador.nombre }} ·
+              {{ compra.modoCobro === 'automatico' ? 'automático' : 'manual' }}
+              <template v-if="compra.metodoPago"> · {{ compra.metodoPago.nombre }}</template>
+            </p>
+          </div>
+          <button
+            v-if="!cuotasCuadradas(compra)"
+            type="button"
+            class="btn-icon !p-1.5 hover:!text-negative sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100"
+            :disabled="eliminandoCompraId === compra.id"
+            :aria-label="`Eliminar ${compra.item}`"
+            title="Eliminar compra"
+            @click="onEliminarCompra(compra)"
+          >
+            <AppIcon name="trash" class="h-4 w-4" />
+          </button>
+        </li>
+      </ul>
     </div>
   </section>
 </template>
