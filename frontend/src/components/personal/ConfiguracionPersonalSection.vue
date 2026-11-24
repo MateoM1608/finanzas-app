@@ -6,6 +6,7 @@ import {
   crearMetodoPago,
   actualizarMetodoPago,
   eliminarMetodoPago,
+  registrarPagoTarjeta,
 } from '../../api/metodosPagoPersonales.js';
 import {
   listarCategorias,
@@ -144,6 +145,38 @@ async function onEliminarMetodo(metodo) {
 }
 
 const editandoMetodoId = ref(null);
+
+// --- Pago de tarjeta de crédito ---
+const pagandoTarjetaId = ref(null);
+const pagoTarjeta = reactive({ monto: '', fecha: '', desdeId: '' });
+const guardandoPagoTarjeta = ref(false);
+
+function abrirPagoTarjeta(tarjeta) {
+  error.value = '';
+  editandoMetodoId.value = null;
+  pagoTarjeta.monto = tarjeta.deuda > 0 ? tarjeta.deuda : '';
+  pagoTarjeta.fecha = hoyISO();
+  pagoTarjeta.desdeId = '';
+  pagandoTarjetaId.value = tarjeta.id;
+}
+
+async function onRegistrarPagoTarjeta(tarjeta) {
+  error.value = '';
+  guardandoPagoTarjeta.value = true;
+  try {
+    await registrarPagoTarjeta(tarjeta.id, {
+      monto: Number(pagoTarjeta.monto),
+      fecha: pagoTarjeta.fecha,
+      metodoPagoId: pagoTarjeta.desdeId || undefined,
+    });
+    metodos.value = await listarMetodosPago();
+    pagandoTarjetaId.value = null;
+  } catch (e) {
+    error.value = extractErrorMessage(e);
+  } finally {
+    guardandoPagoTarjeta.value = false;
+  }
+}
 
 async function onGuardarEditarMetodo(metodo, payload) {
   error.value = '';
@@ -751,8 +784,42 @@ const categoriasParaAhorro = computed(() => categorias.value.filter((c) => c.apl
 
         <p v-if="!metodos.length" class="empty">No hay métodos de pago todavía.</p>
         <ul v-else class="list">
-          <li v-for="m in metodos" :key="m.id" :class="editandoMetodoId === m.id ? 'py-3' : 'list-row'">
-            <div v-if="editandoMetodoId === m.id" class="panel-sunken p-4">
+          <li
+            v-for="m in metodos"
+            :key="m.id"
+            :class="editandoMetodoId === m.id || pagandoTarjetaId === m.id ? 'py-3' : 'list-row'"
+          >
+            <!-- Registrar pago de una tarjeta de crédito -->
+            <form
+              v-if="pagandoTarjetaId === m.id"
+              class="panel-sunken grid grid-cols-1 gap-4 p-4 sm:grid-cols-3"
+              @submit.prevent="onRegistrarPagoTarjeta(m)"
+            >
+              <p class="sm:col-span-3 text-[13px] font-medium text-ink-secondary">
+                Pago de {{ m.nombre }} · deuda {{ formatCurrency(m.deuda ?? 0) }}
+              </p>
+              <FormField v-model="pagoTarjeta.monto" type="number" label="Valor pagado (COP)" required />
+              <FormField v-model="pagoTarjeta.fecha" type="date" label="Fecha" required />
+              <div>
+                <label class="label" :for="`pago-${m.id}-desde`">Desde</label>
+                <select :id="`pago-${m.id}-desde`" v-model="pagoTarjeta.desdeId" class="field">
+                  <option value="">Sin definir</option>
+                  <option v-for="d in metodos.filter((x) => x.tipo !== 'tarjeta_credito')" :key="d.id" :value="d.id">
+                    {{ d.nombre }}
+                  </option>
+                </select>
+              </div>
+              <p class="sm:col-span-3 text-[13px] text-ink-tertiary">
+                El pago baja tu Disponible y la deuda de la tarjeta. Las compras ya contaron como gasto al hacerlas.
+              </p>
+              <div class="flex justify-end gap-2 sm:col-span-3">
+                <button type="button" class="btn-ghost btn-sm" @click="pagandoTarjetaId = null">Cancelar</button>
+                <button type="submit" class="btn-primary btn-sm" :disabled="guardandoPagoTarjeta">
+                  {{ guardandoPagoTarjeta ? 'Guardando…' : 'Registrar pago' }}
+                </button>
+              </div>
+            </form>
+            <div v-else-if="editandoMetodoId === m.id" class="panel-sunken p-4">
               <MetodoPagoForm
                 :id-base="`metodo-${m.id}`"
                 :inicial="m"
@@ -769,9 +836,20 @@ const categoriasParaAhorro = computed(() => categorias.value.filter((c) => c.apl
                 <span class="min-w-0">
                   <span class="block truncate text-sm font-medium text-ink-primary">{{ m.nombre }}</span>
                   <span class="block truncate text-[13px] text-ink-tertiary">{{ describirMetodo(m) }}</span>
+                  <span v-if="m.tipo === 'tarjeta_credito'" class="block text-[13px] text-ink-secondary">
+                    Deuda: <span class="font-semibold" :class="m.deuda > 0 ? 'text-warning' : ''">{{ formatCurrency(m.deuda ?? 0) }}</span>
+                  </span>
                 </span>
               </div>
               <div class="flex shrink-0 items-center gap-1">
+                <button
+                  v-if="m.tipo === 'tarjeta_credito'"
+                  type="button"
+                  class="btn-secondary btn-sm"
+                  @click="abrirPagoTarjeta(m)"
+                >
+                  Registrar pago
+                </button>
                 <button class="btn-icon" :aria-label="`Editar ${m.nombre}`" @click="editandoMetodoId = m.id">
                   <AppIcon name="edit" class="h-4 w-4" />
                 </button>

@@ -3,6 +3,8 @@ import { HttpError } from '../../middleware/errorHandler.js';
 import { asegurarCuotasHogar } from '../../utils/cuentasFijas.js';
 import { obtenerSplitVigente, calcularReparto } from '../../utils/reparto.js';
 import { hoyUTC } from '../../utils/fechas.js';
+import { sincronizarPagoCuota, sincronizarPagoGasto } from '../../utils/movimientosHogar.js';
+import { validarMetodoDelPagador, ocultarMetodoAjeno } from '../../utils/metodoPagoPrivado.js';
 
 /**
  * Cuotas de las cuentas fijas del hogar (GastoRecurrenteInstancia). Una
@@ -21,6 +23,7 @@ const INCLUDE_CUOTA = {
     },
   },
   pagador: { select: { id: true, nombre: true } },
+  metodoPago: { select: { id: true, nombre: true } },
   repartos: { include: { usuario: { select: { id: true, nombre: true } } } },
 };
 
@@ -73,7 +76,8 @@ export async function obtenerCuentasHogar(usuarioActual) {
   const pagadasSinCuadrar = [];
   const conProxima = new Set();
 
-  for (const cuota of cuotas) {
+  for (const cuotaCompleta of cuotas) {
+    const cuota = ocultarMetodoAjeno(cuotaCompleta, usuarioActual);
     if (cuota.estado !== 'por_pagar') {
       pagadasSinCuadrar.push(cuota);
     } else if (cuota.fecha <= hoy) {
@@ -101,6 +105,7 @@ export async function pagarCuota(usuarioActual, cuotaId, data) {
     throw new HttpError(400, 'Quien pagó debe ser un miembro de tu hogar');
   }
 
+  const metodoPagoId = await validarMetodoDelPagador(usuarioActual, pagoUsuarioId, data.metodoPagoId);
   const monto = cuota.concepto.tipoMonto === 'variable' ? data.monto : (data.monto ?? cuota.monto);
   if (monto == null) {
     throw new HttpError(400, 'Indica cuánto se pagó: es una cuenta de monto variable');
@@ -112,22 +117,26 @@ export async function pagarCuota(usuarioActual, cuotaId, data) {
     throw new HttpError(409, 'Configura primero el porcentaje de reparto del hogar en Configuración');
   }
 
-  return prisma.$transaction(async (tx) => {
+  const pagada = await prisma.$transaction(async (tx) => {
     await tx.gastoRecurrenteInstanciaReparto.deleteMany({ where: { instanciaId: cuotaId } });
     await tx.gastoRecurrenteInstanciaReparto.createMany({
       data: calcularReparto(monto, split).map((r) => ({ instanciaId: cuotaId, ...r })),
     });
-    return tx.gastoRecurrenteInstancia.update({
+    await tx.gastoRecurrenteInstancia.update({
       where: { id: cuotaId },
       data: {
         monto,
         pagoUsuarioId,
         fechaPago: data.fechaPago ?? hoyUTC(),
+        metodoPagoId,
         estado: 'pagado',
       },
-      include: INCLUDE_CUOTA,
     });
+    // El 100 % sale de la plata de quien pagó: queda en sus movimientos.
+    await sincronizarPagoCuota(tx, cuotaId);
+    return tx.gastoRecurrenteInstancia.findUnique({ where: { id: cuotaId }, include: INCLUDE_CUOTA });
   });
+  return ocultarMetodoAjeno(pagada, usuarioActual);
 }
 
 export async function deshacerPagoCuota(usuarioActual, cuotaId) {
@@ -146,15 +155,17 @@ export async function deshacerPagoCuota(usuarioActual, cuotaId) {
 
   return prisma.$transaction(async (tx) => {
     await tx.gastoRecurrenteInstanciaReparto.deleteMany({ where: { instanciaId: cuotaId } });
-    return tx.gastoRecurrenteInstancia.update({
+    await tx.gastoRecurrenteInstancia.update({
       where: { id: cuotaId },
       data: {
         estado: 'por_pagar',
         pagoUsuarioId: null,
         fechaPago: null,
+        metodoPagoId: null,
         monto: cuota.concepto.tipoMonto === 'fijo' ? cuota.concepto.montoDefault : null,
       },
-      include: INCLUDE_CUOTA,
     });
+    await sincronizarPagoCuota(tx, cuotaId);
+    return tx.gastoRecurrenteInstancia.findUnique({ where: { id: cuotaId }, include: INCLUDE_CUOTA });
   });
 }

@@ -2,7 +2,6 @@ import { prisma } from '../../config/prisma.js';
 import { HttpError } from '../../middleware/errorHandler.js';
 import { obtenerOrigenesDetalladosPorLote, origenClave } from '../../utils/cuadreItemOrigen.js';
 import { asegurarCuotasHogar } from '../../utils/cuentasFijas.js';
-import { evaluarPeriodoSiCorresponde } from '../../utils/evaluacionAhorro.js';
 import { hoyUTC } from '../../utils/fechas.js';
 
 /**
@@ -242,13 +241,6 @@ function claveMes(fecha) {
   return `${f.getUTCFullYear()}-${String(f.getUTCMonth() + 1).padStart(2, '0')}`;
 }
 
-function ultimoDiaDelMes(clave) {
-  const [anio, mes] = clave.split('-').map(Number);
-  return new Date(Date.UTC(anio, mes, 0));
-}
-
-const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
-
 /**
  * Calcula el neto de lo incluido: positivo = a ese miembro le deben, negativo
  * = debe. Quien pagó un ítem suma su monto; cada miembro resta su parte.
@@ -266,10 +258,28 @@ function calcularBalances(itemsIncluidos, mapa) {
   return balance;
 }
 
-export async function confirmarCuadre(usuarioActual, cuadreId) {
+/**
+ * Confirma el cuadre. Calcula el neto de cada miembro y registra la
+ * LIQUIDACIÓN en sus movimientos personales (vista de caja): a quien le
+ * deben le entra un reintegro (IngresoPersonal), quien debe paga (GastoPersonal),
+ * ambos con origen `liquidacion_hogar`. Quien confirma puede indicar con qué
+ * método pagó o recibió el suyo (privado); el de los demás queda sin método.
+ *
+ * La parte de CONSUMO de cada uno ya no se registra aquí: los informes la
+ * calculan desde el hogar en la fecha de cada gasto (utils/consumo.js), y el
+ * 100 % que pagó cada quien ya está en sus movimientos (pago_hogar).
+ */
+export async function confirmarCuadre(usuarioActual, cuadreId, { metodoPagoId } = {}) {
   const hogarId = requireHogarId(usuarioActual);
   requirePermisoEdicion(usuarioActual);
   await requireCuadreAbierto(hogarId, cuadreId);
+
+  if (metodoPagoId) {
+    const metodo = await prisma.metodoPagoPersonal.findUnique({ where: { id: metodoPagoId } });
+    if (!metodo || metodo.usuarioId !== usuarioActual.id) {
+      throw new HttpError(400, 'Método de pago no encontrado');
+    }
+  }
 
   // Sin refrescar aquí: se confirma exactamente lo que el hogar revisó. Lo
   // que se haya pagado mientras tanto entra al siguiente cuadre.
@@ -290,55 +300,43 @@ export async function confirmarCuadre(usuarioActual, cuadreId) {
 
   const fechaCuadre = hoyUTC();
   const balances = calcularBalances(items, mapa);
-
-  // Lo que a cada miembro le tocó de su bolsillo (su reparto, sin importar
-  // quién pagó el ítem) se registra en su panel personal agrupado por MES de
-  // los gastos: un cuadre que abarca marzo y abril deja un gasto en cada mes,
-  // para que los informes personales mensuales sigan cuadrando. Cada gasto
-  // va al último día de su mes, o al día del cuadre si es el mes en curso.
-  const repartoPorMiembroMes = new Map();
-  const ultimaFechaDelMes = new Map();
-  for (const item of items) {
-    const origen = mapa.get(origenClave(item));
-    const mes = claveMes(origen.fecha);
-    const f = new Date(origen.fecha);
-    if (!ultimaFechaDelMes.has(mes) || f > ultimaFechaDelMes.get(mes)) ultimaFechaDelMes.set(mes, f);
-    for (const reparto of origen.repartos) {
-      const clave = `${reparto.usuarioId}|${mes}`;
-      repartoPorMiembroMes.set(clave, (repartoPorMiembroMes.get(clave) ?? 0) + reparto.monto);
-    }
-  }
-  const fechaIso = fechaCuadre.toISOString().slice(0, 10);
-  const gastosPersonales = [...repartoPorMiembroMes.entries()]
-    .filter(([, monto]) => monto > 0)
-    .map(([clave, monto]) => {
-      const [usuarioId, mes] = clave.split('|');
-      const finDeMes = ultimoDiaDelMes(mes);
-      const [, mesNum] = mes.split('-').map(Number);
-      // Mes pasado → su último día; mes del cuadre → el día del cuadre; mes
-      // futuro (cuotas adelantadas) → la fecha de su última cuota en ese mes,
-      // para que el gasto quede en el mes al que pertenece.
-      let fecha = finDeMes < fechaCuadre ? finDeMes : fechaCuadre;
-      if (claveMes(fechaCuadre) < mes) fecha = ultimaFechaDelMes.get(mes);
-      return {
-        usuarioId,
-        monto,
-        fecha,
-        descripcion: `Hogar · ${MESES[mesNum - 1]} (cuadre del ${fechaIso})`,
-        estado: 'pagado',
-        esObligatorio: true,
-        origen: 'cuadre_hogar',
-        origenCuadreId: cuadreId,
-      };
-    });
+  const descripcion = `Cuadre del hogar del ${fechaCuadre.toISOString().slice(0, 10)}`;
+  const metodoDe = (usuarioId) => (usuarioId === usuarioActual.id ? (metodoPagoId ?? null) : null);
 
   await prisma.$transaction(async (tx) => {
     await actualizarEstadoOrigenes(tx, items, 'cuadrado');
     await tx.cuadreBalanceMiembro.createMany({
       data: [...balances.entries()].map(([usuarioId, balance]) => ({ cuadreId, usuarioId, balance })),
     });
-    if (gastosPersonales.length) {
-      await tx.gastoPersonal.createMany({ data: gastosPersonales });
+    for (const [usuarioId, balance] of balances.entries()) {
+      if (balance > 0) {
+        await tx.ingresoPersonal.create({
+          data: {
+            usuarioId,
+            monto: balance,
+            fecha: fechaCuadre,
+            descripcion: `${descripcion} (reintegro)`,
+            estado: 'recibido',
+            metodoPagoId: metodoDe(usuarioId),
+            origen: 'liquidacion_hogar',
+            origenCuadreId: cuadreId,
+          },
+        });
+      } else if (balance < 0) {
+        await tx.gastoPersonal.create({
+          data: {
+            usuarioId,
+            monto: -balance,
+            fecha: fechaCuadre,
+            descripcion,
+            estado: 'pagado',
+            esObligatorio: false,
+            metodoPagoId: metodoDe(usuarioId),
+            origen: 'liquidacion_hogar',
+            origenCuadreId: cuadreId,
+          },
+        });
+      }
     }
     // Los desmarcados no forman parte del cuadre cerrado: siguen `pagado` y
     // entran al siguiente.
@@ -348,12 +346,6 @@ export async function confirmarCuadre(usuarioActual, cuadreId) {
       data: { estado: 'cerrado', fecha: fechaCuadre, cerradoEn: new Date() },
     });
   });
-
-  // Un obligatorio del hogar puede completar los obligatorios de un período
-  // personal y disparar la evaluación de Ahorros (Fase 7, Etapa 5).
-  for (const gasto of gastosPersonales) {
-    await evaluarPeriodoSiCorresponde(gasto.usuarioId, gasto.fecha);
-  }
 
   return obtenerCuadreEnriquecido(cuadreId);
 }

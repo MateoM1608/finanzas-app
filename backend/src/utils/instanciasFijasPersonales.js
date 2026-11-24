@@ -59,7 +59,9 @@ async function pagarCuotasAutomaticasVencidas(usuarioId) {
       usuarioId,
       estado: 'pendiente',
       fecha: { lte: hoyUTC() },
-      compra: { modoCobro: 'automatico' },
+      // cuotas automáticas de compras personales y movimientos de caja de
+      // pagos del hogar con fecha futura (cuotas automáticas de compras del hogar)
+      OR: [{ compra: { modoCobro: 'automatico' } }, { origen: 'pago_hogar' }],
     },
     data: { estado: 'pagado' },
   });

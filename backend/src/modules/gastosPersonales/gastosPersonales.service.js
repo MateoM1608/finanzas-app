@@ -21,6 +21,20 @@ async function evaluarSiObligatorioPagado(gasto) {
   }
 }
 
+/**
+ * Los movimientos de caja del hogar (el pago de un gasto del hogar, el
+ * reintegro o pago de un cuadre) se manejan desde Hogar/Cuadres: editarlos
+ * aquí los desincronizaría de su origen.
+ */
+function requireNoEsDelHogar(gasto) {
+  if (gasto.origen === 'pago_hogar') {
+    throw new HttpError(409, 'Este movimiento es el pago de un gasto del hogar: cámbialo desde Hogar');
+  }
+  if (gasto.origen === 'liquidacion_hogar') {
+    throw new HttpError(409, 'Este movimiento es el pago de un cuadre del hogar y no se puede cambiar');
+  }
+}
+
 export async function listarGastosPersonales(usuarioId) {
   await asegurarGastosFijos(usuarioId);
   return prisma.gastoPersonal.findMany({
@@ -44,6 +58,7 @@ export async function actualizarGastoPersonal(usuarioId, gastoId, data) {
   if (!gasto || gasto.usuarioId !== usuarioId) {
     throw new HttpError(404, 'Gasto no encontrado');
   }
+  requireNoEsDelHogar(gasto);
 
   const actualizado = await prisma.gastoPersonal.update({
     where: { id: gastoId },
@@ -59,6 +74,7 @@ export async function eliminarGastoPersonal(usuarioId, gastoId) {
   if (!gasto || gasto.usuarioId !== usuarioId) {
     throw new HttpError(404, 'Gasto no encontrado');
   }
+  requireNoEsDelHogar(gasto);
   if (gasto.origenConfigId) {
     throw new HttpError(
       409,

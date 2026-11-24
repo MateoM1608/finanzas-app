@@ -1,5 +1,5 @@
 import { asyncHandler } from '../../middleware/asyncHandler.js';
-import { marcarItemSchema } from './cuadres.schema.js';
+import { marcarItemSchema, confirmarCuadreSchema } from './cuadres.schema.js';
 import {
   listarCuadres,
   obtenerCuadreAbierto,
@@ -40,7 +40,8 @@ export const deleteCuadre = asyncHandler(async (req, res) => {
 });
 
 export const postConfirmarCuadre = asyncHandler(async (req, res) => {
-  res.json({ cuadre: await confirmarCuadre(req.usuario, req.params.id) });
+  const { metodoPagoId } = confirmarCuadreSchema.parse(req.body ?? {});
+  res.json({ cuadre: await confirmarCuadre(req.usuario, req.params.id, { metodoPagoId }) });
 });
 
 export const getSaldo = asyncHandler(async (req, res) => {

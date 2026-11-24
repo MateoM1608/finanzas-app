@@ -13,10 +13,21 @@ enum FrecuenciaCorte {
   mensual
 }
 
+// Origen de un movimiento personal. Los de caja del hogar NO son consumo:
+// - pago_hogar: el 100 % de un gasto del hogar que pagó este usuario (sale
+//   de su plata; su parte de consumo se calcula aparte desde el hogar).
+// - liquidacion_hogar: lo que pagó o recibió al cuadrar (un reintegro, no un
+//   ingreso ni un gasto de consumo).
+// - pago_tarjeta: el pago de una tarjeta de crédito (las compras con
+//   tarjeta ya cuentan como consumo; el pago es lo que baja el Disponible).
+// - cuadre_hogar: modelo anterior (la parte del miembro al cuadrar), ya no se genera.
 enum OrigenGasto {
   app
   bot
   cuadre_hogar
+  pago_hogar
+  liquidacion_hogar
+  pago_tarjeta
 }
 
 // Frecuencia propia de cada cuenta fija del hogar (ya no hay frecuencia de
@@ -186,12 +197,15 @@ model MetodoPagoPersonal {
   diaPago   Int?           @map("dia_pago")
   cupo      Int?
 
-  usuario           Usuario                @relation(fields: [usuarioId], references: [id])
+  usuario           Usuario                    @relation(fields: [usuarioId], references: [id])
   gastos            GastoPersonal[]
   gastosFijosConfig GastoFijoConfig[]
   ingresos          IngresoPersonal[]
   comprasPersonales CompraCuotasPersonal[]
   comprasHogar      CompraCuotasHogar[]
+  pagosCuentasHogar GastoRecurrenteInstancia[]
+  pagosGastosHogar  GastoVariablePareja[]
+  pagosRecibidos    GastoPersonal[]            @relation("pagoTarjeta")
 
   @@index([usuarioId])
   @@map("metodos_pago_personales")
@@ -284,12 +298,22 @@ model GastoPersonal {
   numeroCuota    Int?               @map("numero_cuota")
   creadoEn       DateTime           @default(now()) @map("creado_en")
 
-  usuario      Usuario               @relation(fields: [usuarioId], references: [id])
-  compra       CompraCuotasPersonal? @relation(fields: [compraId], references: [id])
-  origenConfig GastoFijoConfig?      @relation(fields: [origenConfigId], references: [id])
-  origenCuadre Cuadre?               @relation(fields: [origenCuadreId], references: [id])
-  metodoPago   MetodoPagoPersonal?   @relation(fields: [metodoPagoId], references: [id])
-  categoria    CategoriaPersonal?    @relation(fields: [categoriaId], references: [id])
+  // Movimiento de caja del pago de un gasto del hogar (origen pago_hogar):
+  // se borra solo si se borra ese gasto del hogar.
+  pagoCuotaHogarId String? @unique @map("pago_cuota_hogar_id")
+  pagoGastoHogarId String? @unique @map("pago_gasto_hogar_id")
+  // Pago de tarjeta (origen pago_tarjeta): la tarjeta que se pagó.
+  tarjetaPagadaId  String? @map("tarjeta_pagada_id")
+
+  usuario        Usuario                   @relation(fields: [usuarioId], references: [id])
+  compra         CompraCuotasPersonal?     @relation(fields: [compraId], references: [id])
+  pagoCuotaHogar GastoRecurrenteInstancia? @relation(fields: [pagoCuotaHogarId], references: [id], onDelete: Cascade)
+  pagoGastoHogar GastoVariablePareja?      @relation(fields: [pagoGastoHogarId], references: [id], onDelete: Cascade)
+  tarjetaPagada  MetodoPagoPersonal?       @relation("pagoTarjeta", fields: [tarjetaPagadaId], references: [id])
+  origenConfig   GastoFijoConfig?          @relation(fields: [origenConfigId], references: [id])
+  origenCuadre   Cuadre?                   @relation(fields: [origenCuadreId], references: [id])
+  metodoPago     MetodoPagoPersonal?       @relation(fields: [metodoPagoId], references: [id])
+  categoria      CategoriaPersonal?        @relation(fields: [categoriaId], references: [id])
 
   @@unique([origenConfigId, fecha])
   @@unique([origenCuadreId, usuarioId, fecha])
@@ -311,12 +335,17 @@ model IngresoPersonal {
   origen         OrigenGasto           @default(app)
   creadoEn       DateTime              @default(now()) @map("creado_en")
 
+  // Reintegro recibido al cuadrar (origen liquidacion_hogar).
+  origenCuadreId String? @map("origen_cuadre_id")
+
   usuario      Usuario             @relation(fields: [usuarioId], references: [id])
+  origenCuadre Cuadre?             @relation(fields: [origenCuadreId], references: [id])
   origenConfig IngresoFijoConfig?  @relation(fields: [origenConfigId], references: [id])
   metodoPago   MetodoPagoPersonal? @relation(fields: [metodoPagoId], references: [id])
   categoria    CategoriaPersonal?  @relation(fields: [categoriaId], references: [id])
 
   @@unique([origenConfigId, fecha])
+  @@unique([origenCuadreId, usuarioId])
   @@index([usuarioId])
   @@map("ingresos_personales")
 }
@@ -390,12 +419,16 @@ model GastoRecurrenteInstancia {
   monto         Int?
   pagoUsuarioId String?          @map("pago_usuario_id")
   fechaPago     DateTime?        @map("fecha_pago")
+  // Método de pago personal con el que se pagó (privado: solo lo ve quien pagó).
+  metodoPagoId  String?          @map("metodo_pago_id")
   estado        EstadoGastoHogar @default(por_pagar)
   creadoEn      DateTime         @default(now()) @map("creado_en")
 
-  concepto ConceptoRecurrentePareja          @relation(fields: [conceptoId], references: [id])
-  pagador  Usuario?                          @relation("gastoRecurrentePagador", fields: [pagoUsuarioId], references: [id])
-  repartos GastoRecurrenteInstanciaReparto[]
+  concepto       ConceptoRecurrentePareja          @relation(fields: [conceptoId], references: [id])
+  pagador        Usuario?                          @relation("gastoRecurrentePagador", fields: [pagoUsuarioId], references: [id])
+  metodoPago     MetodoPagoPersonal?               @relation(fields: [metodoPagoId], references: [id])
+  movimientoPago GastoPersonal?
+  repartos       GastoRecurrenteInstanciaReparto[]
 
   @@unique([conceptoId, fecha])
   @@index([conceptoId, estado])
@@ -431,12 +464,16 @@ model GastoVariablePareja {
   compraId      String?          @map("compra_id")
   numeroCuota   Int?             @map("numero_cuota")
   fechaPago     DateTime?        @map("fecha_pago")
+  // Método de pago personal con el que se pagó (privado: solo lo ve quien pagó).
+  metodoPagoId  String?          @map("metodo_pago_id")
   creadoEn      DateTime         @default(now()) @map("creado_en")
 
-  hogar    Hogar                        @relation(fields: [hogarId], references: [id])
-  pagador  Usuario                      @relation("gastoVariablePagador", fields: [pagoUsuarioId], references: [id])
-  compra   CompraCuotasHogar?           @relation(fields: [compraId], references: [id])
-  repartos GastoVariableParejaReparto[]
+  hogar          Hogar                        @relation(fields: [hogarId], references: [id])
+  pagador        Usuario                      @relation("gastoVariablePagador", fields: [pagoUsuarioId], references: [id])
+  metodoPago     MetodoPagoPersonal?          @relation(fields: [metodoPagoId], references: [id])
+  movimientoPago GastoPersonal?
+  compra         CompraCuotasHogar?           @relation(fields: [compraId], references: [id])
+  repartos       GastoVariableParejaReparto[]
 
   @@unique([compraId, numeroCuota])
   @@index([hogarId, estado])
@@ -475,6 +512,7 @@ model Cuadre {
   items                     CuadreItem[]
   balances                  CuadreBalanceMiembro[]
   gastosPersonalesGenerados GastoPersonal[]
+  ingresosPersonales        IngresoPersonal[]
 
   @@index([hogarId, estado])
   @@map("cuadres")

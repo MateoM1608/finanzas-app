@@ -9,10 +9,66 @@ async function requireMetodoDelUsuario(usuarioId, id) {
   return metodo;
 }
 
-export function listarMetodosPago(usuarioActual) {
-  return prisma.metodoPagoPersonal.findMany({
-    where: { usuarioId: usuarioActual.id },
-    orderBy: { nombre: 'asc' },
+/**
+ * Deuda de cada tarjeta de crédito = lo que se ha cargado (gastos pagados con
+ * ella: compras, cuotas, pagos del hogar) − los pagos registrados a la
+ * tarjeta. Las compras con tarjeta no bajan el Disponible hasta pagarla.
+ */
+export async function calcularDeudaTarjetas(usuarioId) {
+  const [cargos, pagos] = await Promise.all([
+    prisma.gastoPersonal.groupBy({
+      by: ['metodoPagoId'],
+      where: { usuarioId, estado: 'pagado', metodoPago: { tipo: 'tarjeta_credito' } },
+      _sum: { monto: true },
+    }),
+    prisma.gastoPersonal.groupBy({
+      by: ['tarjetaPagadaId'],
+      where: { usuarioId, estado: 'pagado', origen: 'pago_tarjeta', tarjetaPagadaId: { not: null } },
+      _sum: { monto: true },
+    }),
+  ]);
+  const deuda = new Map();
+  for (const c of cargos) deuda.set(c.metodoPagoId, (deuda.get(c.metodoPagoId) ?? 0) + (c._sum.monto ?? 0));
+  for (const p of pagos) deuda.set(p.tarjetaPagadaId, (deuda.get(p.tarjetaPagadaId) ?? 0) - (p._sum.monto ?? 0));
+  return deuda;
+}
+
+export async function listarMetodosPago(usuarioActual) {
+  const [metodos, deuda] = await Promise.all([
+    prisma.metodoPagoPersonal.findMany({ where: { usuarioId: usuarioActual.id }, orderBy: { nombre: 'asc' } }),
+    calcularDeudaTarjetas(usuarioActual.id),
+  ]);
+  return metodos.map((m) => (m.tipo === 'tarjeta_credito' ? { ...m, deuda: deuda.get(m.id) ?? 0 } : m));
+}
+
+/**
+ * Registra el pago de una tarjeta de crédito: un movimiento (origen
+ * pago_tarjeta) que SÍ baja el Disponible, desde la cuenta con que se pagó.
+ * No es consumo (las compras ya contaron al hacerse).
+ */
+export async function registrarPagoTarjeta(usuarioActual, tarjetaId, data) {
+  const tarjeta = await requireMetodoDelUsuario(usuarioActual.id, tarjetaId);
+  if (tarjeta.tipo !== 'tarjeta_credito') {
+    throw new HttpError(400, 'Solo se registran pagos de una tarjeta de crédito');
+  }
+  if (data.metodoPagoId) {
+    const desde = await requireMetodoDelUsuario(usuarioActual.id, data.metodoPagoId);
+    if (desde.tipo === 'tarjeta_credito') {
+      throw new HttpError(400, 'Una tarjeta de crédito no se paga con otra tarjeta de crédito');
+    }
+  }
+  return prisma.gastoPersonal.create({
+    data: {
+      usuarioId: usuarioActual.id,
+      monto: data.monto,
+      fecha: data.fecha,
+      descripcion: `Pago de ${tarjeta.nombre}`,
+      estado: 'pagado',
+      esObligatorio: false,
+      metodoPagoId: data.metodoPagoId ?? null,
+      tarjetaPagadaId: tarjetaId,
+      origen: 'pago_tarjeta',
+    },
   });
 }
 

@@ -10,6 +10,7 @@ export const crearGastoVariableSchema = z.object({
   valorTotal: z.number().int().positive(),
   pagoUsuarioId: z.string().uuid(),
   fecha: z.coerce.date(),
+  metodoPagoId: z.string().uuid().nullable().optional(),
   repartos: z.array(repartoItemSchema).optional(),
 });
 
@@ -18,6 +19,7 @@ export const actualizarGastoVariableSchema = z.object({
   valorTotal: z.number().int().positive().optional(),
   pagoUsuarioId: z.string().uuid().optional(),
   fecha: z.coerce.date().optional(),
+  metodoPagoId: z.string().uuid().nullable().optional(),
   repartos: z.array(repartoItemSchema).optional(),
 });
 

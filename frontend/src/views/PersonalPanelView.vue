@@ -369,6 +369,16 @@ function listaDeTab() {
 const listaVisible = computed(() => (verTodo.value ? listaDeTab() : listaDeTab().slice(0, LIMITE_LISTA)));
 const totalLista = computed(() => listaDeTab().length);
 
+// Movimientos de caja que se manejan desde Hogar/Cuadres/Métodos de pago.
+const ORIGEN_MOVIMIENTO = {
+  pago_hogar: { badge: 'Pago del hogar', icono: 'home' },
+  liquidacion_hogar: { badge: 'Cuadre', icono: 'scale' },
+  pago_tarjeta: { badge: 'Pago de tarjeta', icono: 'wallet' },
+};
+function esDelHogar(mov) {
+  return mov.origen === 'pago_hogar' || mov.origen === 'liquidacion_hogar';
+}
+
 function cuotasPagadas(compra) {
   return compra.cuotas.filter((c) => c.estado === 'pagado').length;
 }
@@ -435,7 +445,9 @@ function saldoCompra(compra) {
         <div class="flex flex-wrap items-center justify-between gap-3 px-5 sm:px-6 pt-5 sm:pt-6 pb-4">
           <div>
             <h2 class="section-title">Movimientos</h2>
-            <p class="section-hint">Registrados a mano, generados por tus fijos y los que trae cada cuadre del hogar.</p>
+            <p class="section-hint">
+              La plata que de verdad entró y salió: incluye el total de lo que pagaste del hogar y los cuadres.
+            </p>
           </div>
           <div class="tabs" role="tablist" aria-label="Tipo de movimiento">
             <button
@@ -502,7 +514,7 @@ function saldoCompra(compra) {
             <li v-for="gasto in listaVisible" :key="gasto.id" class="list-row group">
               <div class="flex min-w-0 items-center gap-3">
                 <span class="hidden sm:grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-surface-sunken text-ink-secondary">
-                  <AppIcon :name="gasto.origenCuadreId ? 'home' : gasto.origenConfigId ? 'repeat' : 'receipt'" class="h-4 w-4" />
+                  <AppIcon :name="ORIGEN_MOVIMIENTO[gasto.origen]?.icono ?? (gasto.origenConfigId ? 'repeat' : 'receipt')" class="h-4 w-4" />
                 </span>
                 <div class="min-w-0">
                   <p class="flex flex-wrap items-center gap-1.5 text-sm font-medium text-ink-primary">
@@ -510,7 +522,7 @@ function saldoCompra(compra) {
                     <span v-if="gasto.estado === 'pendiente'" class="badge-warning">Pendiente</span>
                     <span v-if="gasto.esObligatorio" class="badge-accent">Obligatorio</span>
                     <span v-if="gasto.origenConfigId" class="badge-neutral">Fijo</span>
-                    <span v-if="gasto.origenCuadreId" class="badge-neutral">Hogar</span>
+                    <span v-if="ORIGEN_MOVIMIENTO[gasto.origen]" class="badge-neutral">{{ ORIGEN_MOVIMIENTO[gasto.origen].badge }}</span>
                     <span v-if="gasto.compra" class="badge-neutral">Cuota {{ gasto.numeroCuota }}/{{ gasto.compra.numeroCuotas }}</span>
                   </p>
                   <p class="mt-0.5 text-[13px] text-ink-tertiary">
@@ -525,6 +537,7 @@ function saldoCompra(compra) {
                 <span class="text-sm font-semibold text-ink-primary sm:mr-1">−{{ formatCurrency(gasto.monto) }}</span>
                 <div class="flex items-center gap-1">
                   <button
+                    v-if="!esDelHogar(gasto)"
                     type="button"
                     class="btn-ghost btn-sm"
                     :class="gasto.estado === 'pendiente' ? '!text-accent' : ''"
@@ -535,7 +548,7 @@ function saldoCompra(compra) {
                     {{ gasto.estado === 'pagado' ? 'Marcar pendiente' : 'Marcar pagado' }}
                   </button>
                   <button
-                    v-if="!gasto.origenConfigId && !gasto.origenCuadreId && !gasto.compraId"
+                    v-if="!gasto.origenConfigId && !esDelHogar(gasto) && !gasto.compraId"
                     type="button"
                     class="btn-icon !p-1.5 hover:!text-negative sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100"
                     :disabled="eliminandoGastoId === gasto.id"
@@ -614,6 +627,7 @@ function saldoCompra(compra) {
                     <span class="truncate">{{ ingreso.descripcion || ingreso.categoria?.nombre || 'Ingreso personal' }}</span>
                     <span v-if="ingreso.estado === 'pendiente'" class="badge-warning">Pendiente</span>
                     <span v-if="ingreso.origenConfigId" class="badge-neutral">Fijo</span>
+                    <span v-if="ingreso.origen === 'liquidacion_hogar'" class="badge-neutral">Reintegro del cuadre</span>
                   </p>
                   <p class="mt-0.5 text-[13px] text-ink-tertiary">
                     {{ formatDate(ingreso.fecha) }}
@@ -627,6 +641,7 @@ function saldoCompra(compra) {
                 <span class="text-sm font-semibold text-positive sm:mr-1">+{{ formatCurrency(ingreso.monto) }}</span>
                 <div class="flex items-center gap-1">
                   <button
+                    v-if="!esDelHogar(ingreso)"
                     type="button"
                     class="btn-ghost btn-sm"
                     :class="ingreso.estado === 'pendiente' ? '!text-accent' : ''"
@@ -637,7 +652,7 @@ function saldoCompra(compra) {
                     {{ ingreso.estado === 'recibido' ? 'Marcar pendiente' : 'Marcar recibido' }}
                   </button>
                   <button
-                    v-if="!ingreso.origenConfigId"
+                    v-if="!ingreso.origenConfigId && !esDelHogar(ingreso)"
                     type="button"
                     class="btn-icon !p-1.5 hover:!text-negative sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100"
                     :disabled="eliminandoIngresoId === ingreso.id"

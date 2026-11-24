@@ -28,6 +28,9 @@ export async function actualizarIngresoPersonal(usuarioId, ingresoId, data) {
   if (!ingreso || ingreso.usuarioId !== usuarioId) {
     throw new HttpError(404, 'Ingreso no encontrado');
   }
+  if (ingreso.origen === 'liquidacion_hogar') {
+    throw new HttpError(409, 'Este ingreso es el reintegro de un cuadre del hogar y no se puede cambiar');
+  }
 
   return prisma.ingresoPersonal.update({
     where: { id: ingresoId },
@@ -40,6 +43,9 @@ export async function eliminarIngresoPersonal(usuarioId, ingresoId) {
   const ingreso = await prisma.ingresoPersonal.findUnique({ where: { id: ingresoId } });
   if (!ingreso || ingreso.usuarioId !== usuarioId) {
     throw new HttpError(404, 'Ingreso no encontrado');
+  }
+  if (ingreso.origen === 'liquidacion_hogar') {
+    throw new HttpError(409, 'Este ingreso es el reintegro de un cuadre del hogar y no se puede eliminar');
   }
   if (ingreso.origenConfigId) {
     throw new HttpError(

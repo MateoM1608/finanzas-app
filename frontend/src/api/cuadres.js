@@ -20,8 +20,8 @@ export function descartarCuadre(cuadreId) {
   return api.delete(`/api/cuadres/${cuadreId}`);
 }
 
-export function confirmarCuadre(cuadreId) {
-  return api.post(`/api/cuadres/${cuadreId}/confirmar`).then((r) => r.data.cuadre);
+export function confirmarCuadre(cuadreId, metodoPagoId) {
+  return api.post(`/api/cuadres/${cuadreId}/confirmar`, { metodoPagoId }).then((r) => r.data.cuadre);
 }
 
 export function obtenerSaldoHogar() {

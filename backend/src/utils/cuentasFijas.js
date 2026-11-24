@@ -70,6 +70,19 @@ export function fechasDeCuenta(concepto, hasta, { incluirSiguiente = false } = {
 }
 
 /**
+ * Período al que pertenece una cuota: el mes (mensual) o la mitad del mes
+ * (quincenal: día ≤ 15 o después). Sirve para no volver a cobrar un período
+ * que ya se pagó cuando cambia el calendario de la cuenta (ej. del 30 al 5:
+ * septiembre ya pagado el 30 no debe generar otra cuota el 5).
+ */
+export function periodoDeCuota(concepto, fecha) {
+  const f = new Date(fecha);
+  const mes = `${f.getUTCFullYear()}-${f.getUTCMonth()}`;
+  if (concepto.frecuencia !== 'quincenal') return mes;
+  return `${mes}-${f.getUTCDate() <= 15 ? 1 : 2}`;
+}
+
+/**
  * Genera perezosamente (no hay cron en esta app) las cuotas que falten de
  * cada cuenta fija activa del hogar: todas las de su calendario hasta hoy,
  * más la próxima — así se puede marcar pagada antes de su fecha. Idempotente
@@ -80,14 +93,27 @@ export async function asegurarCuotasHogar(hogarId, hoy = hoyUTC()) {
     where: { hogarId, activo: true },
   });
 
+  if (!conceptos.length) return;
+
+  // Períodos que ya tienen una cuota pagada (o en un cuadre): no se vuelven a
+  // generar aunque el calendario haya cambiado de día.
+  const pagadas = await prisma.gastoRecurrenteInstancia.findMany({
+    where: { conceptoId: { in: conceptos.map((c) => c.id) }, estado: { not: 'por_pagar' } },
+    select: { conceptoId: true, fecha: true },
+  });
+  const porId = new Map(conceptos.map((c) => [c.id, c]));
+  const ocupados = new Set(pagadas.map((p) => `${p.conceptoId}|${periodoDeCuota(porId.get(p.conceptoId), p.fecha)}`));
+
   // Una sola query: ON CONFLICT DO NOTHING sobre (conceptoId, fecha) deja
   // intactas las cuotas que ya existen (pagadas o no).
   const filas = conceptos.flatMap((concepto) =>
-    fechasDeCuenta(concepto, hoy, { incluirSiguiente: true }).map((fecha) => ({
-      conceptoId: concepto.id,
-      fecha,
-      monto: concepto.tipoMonto === 'fijo' ? concepto.montoDefault : null,
-    })),
+    fechasDeCuenta(concepto, hoy, { incluirSiguiente: true })
+      .filter((fecha) => !ocupados.has(`${concepto.id}|${periodoDeCuota(concepto, fecha)}`))
+      .map((fecha) => ({
+        conceptoId: concepto.id,
+        fecha,
+        monto: concepto.tipoMonto === 'fijo' ? concepto.montoDefault : null,
+      })),
   );
   if (filas.length) {
     await prisma.gastoRecurrenteInstancia.createMany({ data: filas, skipDuplicates: true });

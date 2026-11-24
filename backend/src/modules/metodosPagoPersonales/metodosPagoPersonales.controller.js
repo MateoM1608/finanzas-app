@@ -1,6 +1,7 @@
 import { asyncHandler } from '../../middleware/asyncHandler.js';
-import { guardarMetodoPagoSchema } from './metodosPagoPersonales.schema.js';
+import { guardarMetodoPagoSchema, pagoTarjetaSchema } from './metodosPagoPersonales.schema.js';
 import {
+  registrarPagoTarjeta,
   listarMetodosPago,
   crearMetodoPago,
   actualizarMetodoPago,
@@ -27,4 +28,9 @@ export const patchMetodoPago = asyncHandler(async (req, res) => {
 export const deleteMetodoPago = asyncHandler(async (req, res) => {
   await eliminarMetodoPago(req.usuario, req.params.id);
   res.status(204).send();
+});
+
+export const postPagoTarjeta = asyncHandler(async (req, res) => {
+  const data = pagoTarjetaSchema.parse(req.body);
+  res.status(201).json({ pago: await registrarPagoTarjeta(req.usuario, req.params.id, data) });
 });

@@ -12,6 +12,10 @@ export function actualizarMetodoPago(id, payload) {
   return api.patch(`/api/metodos-pago-personales/${id}`, payload).then((r) => r.data.metodo);
 }
 
+export function registrarPagoTarjeta(id, payload) {
+  return api.post(`/api/metodos-pago-personales/${id}/pagos`, payload).then((r) => r.data.pago);
+}
+
 export function eliminarMetodoPago(id) {
   return api.delete(`/api/metodos-pago-personales/${id}`);
 }

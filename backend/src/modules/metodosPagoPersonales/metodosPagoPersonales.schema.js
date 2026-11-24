@@ -18,3 +18,9 @@ export const guardarMetodoPagoSchema = z.object({
   diaPago: dia,
   cupo: z.number().int().positive().nullable().optional(),
 });
+
+export const pagoTarjetaSchema = z.object({
+  monto: z.number().int().positive(),
+  fecha: z.coerce.date(),
+  metodoPagoId: z.string().uuid().nullable().optional(),
+});

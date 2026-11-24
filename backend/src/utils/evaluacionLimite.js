@@ -1,26 +1,27 @@
 import { prisma } from '../config/prisma.js';
 import { calcularPeriodoActual, calcularPeriodoAnterior } from './cicloPersonal.js';
 import { hoyUTC } from './fechas.js';
+import { gastosDeConsumo, ingresosReales } from './consumo.js';
 
 function sumarMontos(items) {
   return items.reduce((acc, i) => acc + i.monto, 0);
 }
 
+// Límites miden CONSUMO (ver utils/consumo.js): la parte del usuario en el
+// hogar cuenta como obligatoria; los reintegros de cuadres no son ingreso.
 async function calcularIngresoPeriodo(usuarioId, rango) {
-  const ingresos = await prisma.ingresoPersonal.findMany({
-    where: { usuarioId, estado: 'recibido', fecha: { gte: rango.inicio, lte: rango.fin } },
-  });
-  return sumarMontos(ingresos);
+  return sumarMontos(await ingresosReales(usuarioId, rango));
 }
 
 async function calcularMontoGastado(limite, usuarioId, rango) {
-  const where = { usuarioId, estado: 'pagado', fecha: { gte: rango.inicio, lte: rango.fin } };
-  if (limite.tipoObjetivo === 'categoria') where.categoriaId = limite.categoriaId;
-  else if (limite.tipoObjetivo === 'obligatorios') where.esObligatorio = true;
-  else if (limite.tipoObjetivo === 'no_obligatorios') where.esObligatorio = false;
-
-  const gastos = await prisma.gastoPersonal.findMany({ where });
-  return sumarMontos(gastos);
+  const gastos = await gastosDeConsumo(usuarioId, rango);
+  const filtrados = gastos.filter((g) => {
+    if (limite.tipoObjetivo === 'categoria') return g.categoriaId === limite.categoriaId;
+    if (limite.tipoObjetivo === 'obligatorios') return g.esObligatorio;
+    if (limite.tipoObjetivo === 'no_obligatorios') return !g.esObligatorio;
+    return true;
+  });
+  return sumarMontos(filtrados);
 }
 
 function calcularLimiteMonto(limite, ingresoPeriodo) {

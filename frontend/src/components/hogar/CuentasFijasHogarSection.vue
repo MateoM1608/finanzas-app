@@ -2,6 +2,7 @@
 import { ref, reactive, computed, onMounted } from 'vue';
 import { obtenerCuentasHogar, pagarCuota, deshacerPagoCuota } from '../../api/cuentasHogar.js';
 import { listarMiembros } from '../../api/hogares.js';
+import { listarMetodosPago } from '../../api/metodosPagoPersonales.js';
 import { extractErrorMessage } from '../../api/client.js';
 import { useAuthStore } from '../../stores/auth.js';
 import { formatCurrency, formatDate, hoyISO } from '../../utils/format.js';
@@ -26,16 +27,20 @@ const error = ref('');
 const vista = ref('por_pagar');
 
 const pagando = ref(null); // cuota que se está marcando
-const formPago = reactive({ monto: '', pagoUsuarioId: '', fechaPago: '' });
+const formPago = reactive({ monto: '', pagoUsuarioId: '', fechaPago: '', metodoPagoId: '' });
+const misMetodos = ref([]);
+// El método de pago es personal: solo se pregunta si quien pagó es el usuario actual.
+const pagueYo = computed(() => formPago.pagoUsuarioId === auth.usuario?.id);
 const guardando = ref(false);
 const deshaciendoId = ref(null);
 
 async function cargar() {
   error.value = '';
   try {
-    const [cuentas, lista] = await Promise.all([obtenerCuentasHogar(), listarMiembros()]);
+    const [cuentas, lista, metodos] = await Promise.all([obtenerCuentasHogar(), listarMiembros(), listarMetodosPago()]);
     datos.value = cuentas;
     miembros.value = lista;
+    misMetodos.value = metodos;
   } catch (e) {
     error.value = extractErrorMessage(e);
   } finally {
@@ -64,6 +69,7 @@ function abrirPago(cuota) {
   formPago.monto = cuota.monto ?? '';
   formPago.pagoUsuarioId = cuota.concepto.responsable?.id ?? auth.usuario?.id ?? '';
   formPago.fechaPago = hoyISO();
+  formPago.metodoPagoId = '';
 }
 
 async function onConfirmarPago() {
@@ -74,6 +80,7 @@ async function onConfirmarPago() {
       monto: Number(formPago.monto),
       pagoUsuarioId: formPago.pagoUsuarioId,
       fechaPago: formPago.fechaPago,
+      metodoPagoId: pagueYo.value && formPago.metodoPagoId ? formPago.metodoPagoId : undefined,
     });
     pagando.value = null;
     await cargar();
@@ -166,7 +173,9 @@ const textoVacio = {
             </p>
             <p class="truncate text-[13px] text-ink-tertiary">
               {{ formatDate(cuota.fecha) }}
-              <template v-if="cuota.estado !== 'por_pagar'"> · Pagó {{ cuota.pagador?.nombre }}</template>
+              <template v-if="cuota.estado !== 'por_pagar'">
+                · Pagó {{ cuota.pagador?.nombre }}<template v-if="cuota.metodoPago"> con {{ cuota.metodoPago.nombre }}</template>
+              </template>
               <template v-else-if="cuota.concepto.responsable"> · La paga {{ cuota.concepto.responsable.nombre }}</template>
             </p>
           </div>
@@ -214,6 +223,16 @@ const textoVacio = {
           <select id="pago-cuota-quien" v-model="formPago.pagoUsuarioId" class="field" required>
             <option v-for="m in miembros" :key="m.id" :value="m.id">{{ m.nombre }}</option>
           </select>
+        </div>
+        <div v-if="pagueYo">
+          <label class="label" for="pago-cuota-metodo">Con qué lo pagaste (solo lo ves tú)</label>
+          <select id="pago-cuota-metodo" v-model="formPago.metodoPagoId" class="field">
+            <option value="">Sin definir</option>
+            <option v-for="m in misMetodos" :key="m.id" :value="m.id">{{ m.nombre }}</option>
+          </select>
+          <p v-if="!misMetodos.length" class="mt-1.5 text-xs text-ink-tertiary">
+            Configura tus métodos en Personal → Configuración → Métodos de pago.
+          </p>
         </div>
         <FormField v-model="formPago.fechaPago" type="date" label="Fecha de pago" required />
         <div class="flex justify-end gap-2 pt-1">

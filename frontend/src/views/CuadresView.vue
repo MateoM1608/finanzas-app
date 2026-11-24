@@ -10,6 +10,7 @@ import {
   listarCuadres,
 } from '../api/cuadres.js';
 import { extractErrorMessage } from '../api/client.js';
+import { listarMetodosPago } from '../api/metodosPagoPersonales.js';
 import { useAuthStore } from '../stores/auth.js';
 import { confirmar } from '../composables/useConfirm.js';
 import { formatCurrency, formatDate, formatearBalances, hoyISO } from '../utils/format.js';
@@ -33,13 +34,16 @@ const marcandoId = ref(null);
 const pidiendoConfirmacion = ref(false);
 const confirmando = ref(false);
 const expandidoId = ref(null);
+const misMetodos = ref([]);
+const metodoLiquidacion = ref('');
 
 async function cargar() {
   error.value = '';
   try {
-    const [abierto, cerrados] = await Promise.all([obtenerCuadreAbierto(), listarCuadres()]);
+    const [abierto, cerrados, metodos] = await Promise.all([obtenerCuadreAbierto(), listarCuadres(), listarMetodosPago()]);
     borrador.value = abierto;
     historial.value = cerrados;
+    misMetodos.value = metodos.filter((m) => m.tipo !== 'tarjeta_credito');
   } catch (e) {
     error.value = extractErrorMessage(e);
   } finally {
@@ -101,7 +105,7 @@ async function ejecutarConfirmacion() {
   confirmando.value = true;
   error.value = '';
   try {
-    const cerrado = await confirmarCuadre(borrador.value.id);
+    const cerrado = await confirmarCuadre(borrador.value.id, metodoLiquidacion.value || undefined);
     pidiendoConfirmacion.value = false;
     borrador.value = null;
     historial.value = [cerrado, ...historial.value];
@@ -152,10 +156,15 @@ const preview = computed(() => {
       sumar(r.usuarioId, -r.monto);
     }
   }
-  return [...nombres.entries()].map(([id, nombre]) => ({ usuario: { nombre }, balance: balance.get(id) ?? 0 }));
+  return [...nombres.entries()].map(([id, nombre]) => ({ usuario: { id, nombre }, balance: balance.get(id) ?? 0 }));
 });
 
 const textoPreview = computed(() => (preview.value.length ? formatearBalances(preview.value) : ''));
+
+// Lo que le toca al usuario actual en la liquidación (positivo: recibe).
+const miNeto = computed(() => {
+  return preview.value.find((b) => b.usuario.id === auth.usuario?.id)?.balance ?? 0;
+});
 
 function totalCuadre(cuadre) {
   return cuadre.items.reduce((acc, i) => acc + i.monto, 0);
@@ -327,9 +336,18 @@ function textoBalances(cuadre) {
           {{ formatCurrency(totalIncluido) }}.
         </p>
         <p class="panel-sunken px-4 py-3 text-base font-semibold text-ink-primary">{{ textoPreview }}</p>
+        <div v-if="miNeto !== 0">
+          <label class="label" for="cuadre-metodo">
+            {{ miNeto > 0 ? 'Dónde recibes tu parte' : 'Con qué pagas tu parte' }} ({{ formatCurrency(Math.abs(miNeto)) }}, solo lo ves tú)
+          </label>
+          <select id="cuadre-metodo" v-model="metodoLiquidacion" class="field">
+            <option value="">Sin definir</option>
+            <option v-for="m in misMetodos" :key="m.id" :value="m.id">{{ m.nombre }}</option>
+          </select>
+        </div>
         <p class="text-[13px] text-ink-tertiary">
-          A cada uno se le registra en su panel personal lo que le tocó, un gasto por cada mes que abarque el cuadre.
-          No se puede deshacer.
+          En los movimientos de cada uno queda lo que paga o recibe (un reintegro). Lo que gastó cada uno ya cuenta en
+          sus informes en el mes de cada gasto. No se puede deshacer.
         </p>
         <div class="flex justify-end gap-2">
           <button type="button" class="btn-ghost" @click="pidiendoConfirmacion = false">Cancelar</button>

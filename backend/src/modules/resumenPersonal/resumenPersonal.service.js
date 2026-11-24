@@ -1,6 +1,7 @@
 import { prisma } from '../../config/prisma.js';
 import { calcularPeriodoActual, calcularPeriodoAnterior, dentroDelRango } from '../../utils/cicloPersonal.js';
 import { asegurarInstanciasFijasPersonales } from '../../utils/instanciasFijasPersonales.js';
+import { gastosDeConsumo, ingresosReales } from '../../utils/consumo.js';
 
 const MESES_VENTANA = 6;
 
@@ -24,38 +25,52 @@ export async function obtenerResumenPersonal(usuarioActual) {
   const usuarioId = usuarioActual.id;
   await asegurarInstanciasFijasPersonales(usuarioId);
 
-  const [gastosPagados, ingresosRecibidos, gastosPendientes, ingresosPendientes] = await Promise.all([
+  const finCiclo = calcularPeriodoActual(usuarioActual.frecuenciaCicloPersonal).fin;
+  const [gastosPagados, ingresosRecibidos, gastosPendientes, ingresosPendientes, consumo, ingresosSinReintegros] = await Promise.all([
+    // Vista de CAJA: todo lo que salió (incluye el 100 % de lo pagado del
+    // hogar, los pagos de cuadre y de tarjeta).
     prisma.gastoPersonal.findMany({
       where: { usuarioId, estado: 'pagado' },
-      include: { categoria: true },
-      orderBy: { fecha: 'asc' },
+      include: { metodoPago: { select: { tipo: true } } },
     }),
     prisma.ingresoPersonal.findMany({
       where: { usuarioId, estado: 'recibido' },
       orderBy: { fecha: 'asc' },
     }),
-    // Las cuotas futuras de compras a cuotas no se listan acá hasta que
-    // entren al ciclo actual: viven en "Mis próximos meses".
+    // Las cuotas futuras (de compras a cuotas o de pagos del hogar) no se
+    // listan acá hasta que entren al ciclo actual: viven en "Mis próximos meses".
     prisma.gastoPersonal.findMany({
       where: {
         usuarioId,
         estado: 'pendiente',
-        OR: [{ compraId: null }, { fecha: { lte: calcularPeriodoActual(usuarioActual.frecuenciaCicloPersonal).fin } }],
+        OR: [{ fecha: { lte: finCiclo } }, { compraId: null, origen: { not: 'pago_hogar' } }],
       },
       include: { categoria: true },
     }),
     prisma.ingresoPersonal.findMany({ where: { usuarioId, estado: 'pendiente' }, include: { categoria: true } }),
+    // Vista de CONSUMO: lo que el usuario gastó (su parte del hogar incluida).
+    gastosDeConsumo(usuarioId),
+    ingresosReales(usuarioId),
   ]);
 
-  const disponible = sumarMontos(ingresosRecibidos) - sumarMontos(gastosPagados);
+  // Disponible (caja): lo que entró menos lo que salió. Una compra con
+  // tarjeta de crédito no sale de la cuenta hasta que se paga la tarjeta
+  // (ese pago es un gasto de origen pago_tarjeta, que sí cuenta).
+  const conTarjeta = (g) => g.metodoPago?.tipo === 'tarjeta_credito';
+  const disponible = sumarMontos(ingresosRecibidos) - sumarMontos(gastosPagados.filter((g) => !conTarjeta(g)));
+  const cargosTarjeta = sumarMontos(gastosPagados.filter(conTarjeta));
+  const pagosTarjeta = sumarMontos(gastosPagados.filter((g) => g.origen === 'pago_tarjeta'));
+  const deudaTarjetas = cargosTarjeta - pagosTarjeta;
 
   const frecuencia = usuarioActual.frecuenciaCicloPersonal;
   const periodoActual = calcularPeriodoActual(frecuencia);
   const periodoAnterior = calcularPeriodoAnterior(frecuencia);
 
+  // Neto del ciclo (consumo): ingresos reales menos lo que gastó, con su
+  // parte del hogar y sin reintegros de cuadres.
   const netoEnRango = (rango) => {
-    const ingresos = sumarMontos(ingresosRecibidos.filter((i) => dentroDelRango(i.fecha, rango)));
-    const gastos = sumarMontos(gastosPagados.filter((g) => dentroDelRango(g.fecha, rango)));
+    const ingresos = sumarMontos(ingresosSinReintegros.filter((i) => dentroDelRango(i.fecha, rango)));
+    const gastos = sumarMontos(consumo.filter((g) => dentroDelRango(g.fecha, rango)));
     return ingresos - gastos;
   };
   const netoActual = netoEnRango(periodoActual);
@@ -84,9 +99,10 @@ export async function obtenerResumenPersonal(usuarioActual) {
     })),
   ].sort((a, b) => new Date(a.fecha) - new Date(b.fecha));
 
-  // Serie mensual + desglose por categoría, igual que el dashboard de Fase 6.
+  // Serie mensual + desglose por categoría (consumo: la parte del hogar va
+  // en la categoría "Hogar", en el mes de cada gasto).
   const totalesPorMes = new Map();
-  for (const gasto of gastosPagados) {
+  for (const gasto of consumo) {
     const clave = claveMes(gasto.fecha);
     totalesPorMes.set(clave, (totalesPorMes.get(clave) ?? 0) + gasto.monto);
   }
@@ -98,12 +114,10 @@ export async function obtenerResumenPersonal(usuarioActual) {
   }));
 
   const desdeVentana = ultimosMeses[0];
-  const gastosVentana = desdeVentana
-    ? gastosPagados.filter((g) => claveMes(g.fecha) >= desdeVentana)
-    : gastosPagados;
+  const gastosVentana = desdeVentana ? consumo.filter((g) => claveMes(g.fecha) >= desdeVentana) : consumo;
   const totalesPorCategoria = new Map();
   for (const gasto of gastosVentana) {
-    const categoria = gasto.categoria?.nombre || 'Sin categoría';
+    const categoria = gasto.categoria || 'Sin categoría';
     totalesPorCategoria.set(categoria, (totalesPorCategoria.get(categoria) ?? 0) + gasto.monto);
   }
   const porCategoria = [...totalesPorCategoria.entries()]
@@ -112,6 +126,7 @@ export async function obtenerResumenPersonal(usuarioActual) {
 
   return {
     disponible,
+    deudaTarjetas,
     neto: {
       actual: netoActual,
       anterior: netoAnterior,

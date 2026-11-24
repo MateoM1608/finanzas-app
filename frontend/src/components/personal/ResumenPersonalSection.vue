@@ -110,7 +110,13 @@ const porCategoriaChart = computed(() => {
           >
             {{ formatCurrency(resumen.disponible) }}
           </p>
-          <p class="mt-2.5 text-xs text-ink-tertiary">Ingresos recibidos menos gastos pagados</p>
+          <p class="mt-2.5 text-xs text-ink-tertiary">
+            Lo que entró menos lo que salió. Las compras con tarjeta de crédito cuentan al pagar la tarjeta.
+          </p>
+          <p v-if="resumen.deudaTarjetas > 0" class="mt-2 flex items-center justify-between gap-2 text-[13px]">
+            <span class="text-ink-secondary">Deuda de tarjetas</span>
+            <span class="font-semibold text-warning">{{ formatCurrency(resumen.deudaTarjetas) }}</span>
+          </p>
         </section>
 
         <section class="card card-pad">
@@ -201,7 +207,7 @@ const porCategoriaChart = computed(() => {
           <div class="flex flex-wrap items-start justify-between gap-3 mb-4">
             <div>
               <h2 class="section-title">Gastos</h2>
-              <p class="section-hint">Pagados, últimos meses con movimientos.</p>
+              <p class="section-hint">Lo que gastaste tú: tu parte del hogar incluida, últimos meses.</p>
             </div>
             <div v-if="resumen.serieMensual.length" class="tabs" role="tablist" aria-label="Vista del gráfico">
               <button

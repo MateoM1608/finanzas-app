@@ -2,6 +2,7 @@ import { prisma } from '../../config/prisma.js';
 import { HttpError } from '../../middleware/errorHandler.js';
 import { dividirEnCuotas, fechasDeCuotas } from '../../utils/cuotas.js';
 import { obtenerSplitVigenteGastosVariables, calcularReparto } from '../../utils/reparto.js';
+import { sincronizarPagoGasto } from '../../utils/movimientosHogar.js';
 
 /**
  * Compras a cuotas del hogar: crean de una vez todas sus cuotas como
@@ -133,6 +134,7 @@ async function generarCuotas(tx, compraId, hogarId, datos, porcentajes) {
     await tx.gastoVariableParejaReparto.createMany({
       data: calcularReparto(montos[i], porcentajes).map((r) => ({ gastoId: cuota.id, ...r })),
     });
+    await sincronizarPagoGasto(tx, cuota.id);
   }
   return fechas[0];
 }
@@ -238,6 +240,10 @@ export async function actualizarCompra(usuarioActual, compraId, data) {
       await tx.gastoVariablePareja.updateMany({ where: { compraId }, data: { item: datos.item } });
     }
     await tx.compraCuotasHogar.update({ where: { id: compraId }, data: { ...datos, metodoPagoId } });
+    // Con el método y el nombre ya guardados en la compra, los movimientos de
+    // caja de sus cuotas quedan al día.
+    const cuotas = await tx.gastoVariablePareja.findMany({ where: { compraId }, select: { id: true } });
+    for (const c of cuotas) await sincronizarPagoGasto(tx, c.id);
     return tx.compraCuotasHogar.findUnique({ where: { id: compraId }, include: INCLUDE_COMPRA });
   });
   return ocultarMetodoAjeno(compra, usuarioActual);

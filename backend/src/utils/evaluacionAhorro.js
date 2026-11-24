@@ -3,6 +3,7 @@ import { calcularPeriodoActual } from './cicloPersonal.js';
 import { calcularFechasPendientes } from './instanciasFijas.js';
 import { asegurarInstanciasFijasPersonales } from './instanciasFijasPersonales.js';
 import { hoyUTC } from './fechas.js';
+import { gastosDeConsumo, ingresosReales, ORIGENES_NO_CONSUMO } from './consumo.js';
 
 function sumarMontos(items) {
   return items.reduce((acc, i) => acc + i.monto, 0);
@@ -69,7 +70,7 @@ export async function evaluarPeriodoSiCorresponde(usuarioId, fecha) {
   const rango = { gte: periodo.inicio, lte: periodo.fin };
 
   const obligatoriosPendientes = await prisma.gastoPersonal.count({
-    where: { usuarioId, esObligatorio: true, estado: 'pendiente', fecha: rango },
+    where: { usuarioId, esObligatorio: true, estado: 'pendiente', fecha: rango, origen: { notIn: ORIGENES_NO_CONSUMO } },
   });
   if (obligatoriosPendientes > 0) return null;
 
@@ -79,19 +80,14 @@ export async function evaluarPeriodoSiCorresponde(usuarioId, fecha) {
   // curso solo se evalúa si hay al menos un obligatorio (y todos pagados); un
   // período ya terminado se evalúa siempre (sin pendientes), con lo que de
   // verdad entró y salió en él.
-  const periodoTerminado = periodo.fin < hoy;
-  if (!periodoTerminado) {
-    const obligatoriosPagados = await prisma.gastoPersonal.count({
-      where: { usuarioId, esObligatorio: true, estado: 'pagado', fecha: rango },
-    });
-    if (obligatoriosPagados === 0) return null;
-  }
+  // Consumo del período (su parte del hogar cuenta como obligatoria) e
+  // ingresos reales (sin reintegros de cuadres) — ver utils/consumo.js.
+  const [ingresos, consumo] = await Promise.all([ingresosReales(usuarioId, rango), gastosDeConsumo(usuarioId, rango)]);
+  const gastosObligatorios = consumo.filter((g) => g.esObligatorio);
+  const gastosNoObligatorios = consumo.filter((g) => !g.esObligatorio);
 
-  const [ingresos, gastosObligatorios, gastosNoObligatorios] = await Promise.all([
-    prisma.ingresoPersonal.findMany({ where: { usuarioId, estado: 'recibido', fecha: rango } }),
-    prisma.gastoPersonal.findMany({ where: { usuarioId, esObligatorio: true, estado: 'pagado', fecha: rango } }),
-    prisma.gastoPersonal.findMany({ where: { usuarioId, esObligatorio: false, estado: 'pagado', fecha: rango } }),
-  ]);
+  const periodoTerminado = periodo.fin < hoy;
+  if (!periodoTerminado && gastosObligatorios.length === 0) return null;
 
   const ingresoPeriodo = sumarMontos(ingresos);
   const gastosObligatoriosPeriodo = sumarMontos(gastosObligatorios);

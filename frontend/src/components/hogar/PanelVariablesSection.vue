@@ -267,8 +267,10 @@ async function onCrear() {
       aCuotas.value = false;
       metodoPagoId.value = '';
     } else {
+      if (pagaYo.value && metodoPagoId.value) payload.metodoPagoId = metodoPagoId.value;
       const nuevo = await crearGastoVariable(payload);
       gastos.value = ordenar([...gastos.value, nuevo]);
+      metodoPagoId.value = '';
     }
     item.value = '';
     valorTotal.value = '';
@@ -379,6 +381,14 @@ onMounted(cargar);
         </div>
         <FormField v-model="fecha" type="date" label="Fecha del gasto" required />
 
+        <div v-if="pagaYo">
+          <label class="label" for="gasto-hogar-metodo">Con qué lo pagaste (solo lo ves tú)</label>
+          <select id="gasto-hogar-metodo" v-model="metodoPagoId" class="field">
+            <option value="">Sin definir</option>
+            <option v-for="m in misMetodos" :key="m.id" :value="m.id">{{ m.nombre }}</option>
+          </select>
+        </div>
+
         <div class="sm:col-span-2">
           <label class="inline-flex items-center gap-2.5 text-sm text-ink-secondary cursor-pointer">
             <input v-model="aCuotas" type="checkbox" class="checkbox" />
@@ -393,13 +403,6 @@ onMounted(cargar);
             <select id="compra-hogar-modo" v-model="modoCobro" class="field">
               <option value="automatico">Automático (tarjeta: entra sola en su fecha)</option>
               <option value="manual">Manual (crédito de almacén: se marca al pagar)</option>
-            </select>
-          </div>
-          <div v-if="pagaYo">
-            <label class="label" for="compra-hogar-metodo">Tu método de pago (solo lo ves tú)</label>
-            <select id="compra-hogar-metodo" v-model="metodoPagoId" class="field">
-              <option value="">Sin definir</option>
-              <option v-for="m in misMetodos" :key="m.id" :value="m.id">{{ m.nombre }}</option>
             </select>
           </div>
           <p class="sm:col-span-2 text-[13px] text-ink-tertiary">
@@ -469,7 +472,7 @@ onMounted(cargar);
               <span v-if="gasto.compra" class="badge-neutral">Cuota {{ gasto.numeroCuota }}/{{ gasto.compra.numeroCuotas }}</span>
             </p>
             <p class="text-[13px] text-ink-tertiary mt-1">
-              {{ formatDate(gasto.fecha) }} · Pagó {{ gasto.pagador.nombre }}
+              {{ formatDate(gasto.fecha) }} · Pagó {{ gasto.pagador.nombre }}<template v-if="gasto.metodoPago"> con {{ gasto.metodoPago.nombre }}</template>
             </p>
           </div>
           <span

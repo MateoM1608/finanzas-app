@@ -2,10 +2,13 @@ import { prisma } from '../../config/prisma.js';
 import { HttpError } from '../../middleware/errorHandler.js';
 import { obtenerSplitVigenteGastosVariables, calcularReparto } from '../../utils/reparto.js';
 import { hoyUTC } from '../../utils/fechas.js';
+import { sincronizarPagoCuota, sincronizarPagoGasto } from '../../utils/movimientosHogar.js';
+import { validarMetodoDelPagador, ocultarMetodoAjeno } from '../../utils/metodoPagoPrivado.js';
 
 const INCLUDE_GASTO = {
   compra: { select: { id: true, numeroCuotas: true, modoCobro: true } },
   pagador: { select: { id: true, nombre: true } },
+  metodoPago: { select: { id: true, nombre: true } },
   repartos: { include: { usuario: { select: { id: true, nombre: true } } } },
 };
 
@@ -60,13 +63,14 @@ async function resolverRepartos(hogarId, valorTotal, repartosInput, fecha) {
   return calcularReparto(valorTotal, split);
 }
 
-export function listarGastosVariables(usuarioActual) {
+export async function listarGastosVariables(usuarioActual) {
   const hogarId = requireHogarId(usuarioActual);
-  return prisma.gastoVariablePareja.findMany({
+  const gastos = await prisma.gastoVariablePareja.findMany({
     where: { hogarId },
     include: INCLUDE_GASTO,
     orderBy: [{ fecha: 'desc' }, { creadoEn: 'desc' }],
   });
+  return gastos.map((g) => ocultarMetodoAjeno(g, usuarioActual));
 }
 
 export async function crearGastoVariable(usuarioActual, data) {
@@ -74,8 +78,9 @@ export async function crearGastoVariable(usuarioActual, data) {
   requirePermisoEdicion(usuarioActual);
   await validarMiembroDelHogar(hogarId, data.pagoUsuarioId);
   const repartos = await resolverRepartos(hogarId, data.valorTotal, data.repartos, data.fecha);
+  const metodoPagoId = await validarMetodoDelPagador(usuarioActual, data.pagoUsuarioId, data.metodoPagoId);
 
-  return prisma.$transaction(async (tx) => {
+  const creado = await prisma.$transaction(async (tx) => {
     const gasto = await tx.gastoVariablePareja.create({
       data: {
         hogarId,
@@ -83,15 +88,18 @@ export async function crearGastoVariable(usuarioActual, data) {
         valorTotal: data.valorTotal,
         pagoUsuarioId: data.pagoUsuarioId,
         fecha: data.fecha,
+        metodoPagoId,
       },
     });
 
     await tx.gastoVariableParejaReparto.createMany({
       data: repartos.map((r) => ({ gastoId: gasto.id, usuarioId: r.usuarioId, monto: r.monto })),
     });
+    await sincronizarPagoGasto(tx, gasto.id);
 
     return tx.gastoVariablePareja.findUnique({ where: { id: gasto.id }, include: INCLUDE_GASTO });
   });
+  return ocultarMetodoAjeno(creado, usuarioActual);
 }
 
 export async function actualizarGastoVariable(usuarioActual, gastoId, data) {
@@ -114,6 +122,15 @@ export async function actualizarGastoVariable(usuarioActual, gastoId, data) {
     await validarMiembroDelHogar(hogarId, data.pagoUsuarioId);
   }
 
+  // Si cambia quien pagó, el método del pagador anterior se quita; solo el
+  // pagador puede poner el suyo.
+  const pagadorFinal = data.pagoUsuarioId ?? gasto.pagoUsuarioId;
+  let metodoPagoId;
+  if (data.metodoPagoId !== undefined) {
+    metodoPagoId = await validarMetodoDelPagador(usuarioActual, pagadorFinal, data.metodoPagoId);
+  } else if (pagadorFinal !== gasto.pagoUsuarioId) {
+    metodoPagoId = null;
+  }
   const valorTotalFinal = data.valorTotal ?? gasto.valorTotal;
   const fechaFinal = data.fecha ?? gasto.fecha;
   const debeRecalcularReparto =
@@ -122,10 +139,11 @@ export async function actualizarGastoVariable(usuarioActual, gastoId, data) {
     ? await resolverRepartos(hogarId, valorTotalFinal, data.repartos, fechaFinal)
     : null;
 
-  return prisma.$transaction(async (tx) => {
+  const actualizado = await prisma.$transaction(async (tx) => {
     await tx.gastoVariablePareja.update({
       where: { id: gastoId },
       data: {
+        metodoPagoId,
         item: data.item ?? undefined,
         valorTotal: data.valorTotal ?? undefined,
         pagoUsuarioId: data.pagoUsuarioId ?? undefined,
@@ -140,8 +158,10 @@ export async function actualizarGastoVariable(usuarioActual, gastoId, data) {
       });
     }
 
+    await sincronizarPagoGasto(tx, gastoId);
     return tx.gastoVariablePareja.findUnique({ where: { id: gastoId }, include: INCLUDE_GASTO });
   });
+  return ocultarMetodoAjeno(actualizado, usuarioActual);
 }
 
 export async function eliminarGastoVariable(usuarioActual, gastoId) {
@@ -175,15 +195,19 @@ export async function pagarCuotaVariable(usuarioActual, gastoId, data) {
   if (data.pagoUsuarioId) {
     await validarMiembroDelHogar(hogarId, data.pagoUsuarioId);
   }
-  return prisma.gastoVariablePareja.update({
-    where: { id: gastoId },
-    data: {
-      estado: 'pagado',
-      pagoUsuarioId: data.pagoUsuarioId ?? undefined,
-      fechaPago: data.fechaPago ?? hoyUTC(),
-    },
-    include: INCLUDE_GASTO,
+  const pagada = await prisma.$transaction(async (tx) => {
+    await tx.gastoVariablePareja.update({
+      where: { id: gastoId },
+      data: {
+        estado: 'pagado',
+        pagoUsuarioId: data.pagoUsuarioId ?? undefined,
+        fechaPago: data.fechaPago ?? hoyUTC(),
+      },
+    });
+    await sincronizarPagoGasto(tx, gastoId);
+    return tx.gastoVariablePareja.findUnique({ where: { id: gastoId }, include: INCLUDE_GASTO });
   });
+  return ocultarMetodoAjeno(pagada, usuarioActual);
 }
 
 export async function deshacerPagoCuotaVariable(usuarioActual, gastoId) {
@@ -199,9 +223,10 @@ export async function deshacerPagoCuotaVariable(usuarioActual, gastoId) {
   if (gasto.estado !== 'pagado') {
     throw new HttpError(409, 'Esta cuota no está pagada o ya está en un cuadre');
   }
-  return prisma.gastoVariablePareja.update({
-    where: { id: gastoId },
-    data: { estado: 'por_pagar', fechaPago: null },
-    include: INCLUDE_GASTO,
+  const deshecha = await prisma.$transaction(async (tx) => {
+    await tx.gastoVariablePareja.update({ where: { id: gastoId }, data: { estado: 'por_pagar', fechaPago: null } });
+    await sincronizarPagoGasto(tx, gastoId);
+    return tx.gastoVariablePareja.findUnique({ where: { id: gastoId }, include: INCLUDE_GASTO });
   });
+  return ocultarMetodoAjeno(deshecha, usuarioActual);
 }

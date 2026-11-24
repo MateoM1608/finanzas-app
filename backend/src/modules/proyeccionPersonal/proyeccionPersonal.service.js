@@ -1,6 +1,6 @@
 import { prisma } from '../../config/prisma.js';
 import { calcularFechasPendientes } from '../../utils/instanciasFijas.js';
-import { fechasDeCuenta } from '../../utils/cuentasFijas.js';
+import { fechasDeCuenta, periodoDeCuota } from '../../utils/cuentasFijas.js';
 import { obtenerSplitVigente } from '../../utils/reparto.js';
 import { hoyUTC } from '../../utils/fechas.js';
 
@@ -68,7 +68,7 @@ export async function obtenerProyeccion(usuarioActual, numeroMeses = 6) {
     }),
     prisma.ingresoFijoConfig.findMany({ where: { usuarioId, activo: true } }),
     prisma.ingresoPersonal.findMany({
-      where: { usuarioId, fecha: { gte: inicio, lte: fin } },
+      where: { usuarioId, fecha: { gte: inicio, lte: fin }, origen: { not: 'liquidacion_hogar' } },
       select: { origenConfigId: true, fecha: true, monto: true, descripcion: true },
     }),
   ]);
@@ -123,11 +123,20 @@ export async function obtenerProyeccion(usuarioActual, numeroMeses = 6) {
     });
     const ultimoMonto = new Map(ultimosPagados.map((u) => [u.conceptoId, u.monto]));
     const cuotaPorClave = new Map(cuotasCuentas.map((c) => [`${c.conceptoId}|${c.fecha.getTime()}`, c]));
+    const conceptoPorId = new Map(conceptos.map((c) => [c.id, c]));
+    // Un período ya pagado en otra fecha (la cuenta cambió de día) cuenta con ese pago.
+    const pagadaPorPeriodo = new Map(
+      cuotasCuentas
+        .filter((c) => c.estado !== 'por_pagar' && conceptoPorId.has(c.conceptoId))
+        .map((c) => [`${c.conceptoId}|${periodoDeCuota(conceptoPorId.get(c.conceptoId), c.fecha)}`, c]),
+    );
     const miPorcentaje = porcentajeDe(splitActual, usuarioId);
 
     for (const concepto of conceptos) {
       for (const fecha of fechasDeCuenta(concepto, fin).filter(enVentana)) {
-        const cuota = cuotaPorClave.get(`${concepto.id}|${fecha.getTime()}`);
+        const cuota =
+          cuotaPorClave.get(`${concepto.id}|${fecha.getTime()}`) ??
+          pagadaPorPeriodo.get(`${concepto.id}|${periodoDeCuota(concepto, fecha)}`);
         const miReparto = cuota?.repartos.find((r) => r.usuarioId === usuarioId);
         if (miReparto) {
           sumar(fecha, 'hogarCuentasFijas', miReparto.monto, concepto.nombre);
