@@ -14,6 +14,7 @@ import {
 import App from './App.vue';
 import { router } from './router/index.js';
 import './assets/main.css';
+import './composables/useTheme.js';
 
 ChartJS.register(
   CategoryScale,
@@ -25,6 +26,10 @@ ChartJS.register(
   Tooltip,
   Legend,
 );
+
+ChartJS.defaults.font.family = 'Geist, Inter, system-ui, sans-serif';
+ChartJS.defaults.font.size = 12;
+ChartJS.defaults.animation.duration = 400;
 
 const app = createApp(App);
 

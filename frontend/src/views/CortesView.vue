@@ -11,7 +11,7 @@ import {
 import { listarMiembros } from '../api/hogares.js';
 import { extractErrorMessage } from '../api/client.js';
 import { formatCurrency, formatDate, formatDateLocal, formatearBalances, formatReparto } from '../utils/format.js';
-import AppHeader from '../components/AppHeader.vue';
+import AppLayout from '../components/AppLayout.vue';
 import AlertError from '../components/AlertError.vue';
 
 const corteAbierto = ref(null);
@@ -216,16 +216,8 @@ onMounted(cargar);
 </script>
 
 <template>
-  <div class="min-h-screen">
-    <AppHeader />
-
-    <main class="max-w-3xl mx-auto px-4 sm:px-6 py-10 space-y-6">
-      <div>
-        <h1 class="text-2xl font-semibold text-ink-primary">Cortes</h1>
-        <p class="text-ink-secondary mt-1.5 text-sm">
-          Liquidación de gastos compartidos: revisa qué incluir y confirma.
-        </p>
-      </div>
+  <AppLayout title="Cortes" subtitle="Liquidación de gastos compartidos: revisa qué incluir y confirma.">
+    <div class="space-y-6">
 
       <AlertError :message="error" />
 
@@ -409,6 +401,6 @@ onMounted(cargar);
           </ul>
         </div>
       </template>
-    </main>
-  </div>
+    </div>
+  </AppLayout>
 </template>

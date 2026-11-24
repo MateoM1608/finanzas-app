@@ -2,48 +2,255 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * Tokens de color en canales RGB (ver tailwind.config.js).
+ * Claro: base cálida-neutra con cobalto como único acento de acción;
+ * verde/rojo/ámbar reservados para semántica financiera.
+ * Oscuro: grafito azulado, no negro puro, con el acento aclarado para
+ * mantener contraste.
+ */
 @layer base {
-  html {
+  :root {
+    --c-canvas: 244 245 241;
+    --c-surface: 255 255 255;
+    --c-surface-hover: 240 241 236;
+    --c-surface-raised: 249 250 247;
+    --c-surface-sunken: 236 238 232;
+    --c-border: 226 228 221;
+    --c-border-strong: 205 208 199;
+    --c-ink-primary: 17 21 26;
+    --c-ink-secondary: 88 96 104;
+    --c-ink-tertiary: 138 145 151;
+    --c-accent: 41 74 209;
+    --c-accent-hover: 31 60 180;
+    --c-on-accent: 255 255 255;
+    --c-positive: 10 135 84;
+    --c-negative: 205 45 59;
+    --c-warning: 176 112 10;
+    --c-overlay: 12 15 20;
+    --shadow-card: 0 1px 0 rgb(17 21 26 / 0.03), 0 1px 3px rgb(17 21 26 / 0.04);
+    --shadow-pop: 0 12px 32px -8px rgb(17 21 26 / 0.18), 0 2px 6px rgb(17 21 26 / 0.06);
     color-scheme: light;
+  }
+
+  .dark {
+    --c-canvas: 11 13 17;
+    --c-surface: 18 21 27;
+    --c-surface-hover: 27 31 39;
+    --c-surface-raised: 23 27 34;
+    --c-surface-sunken: 14 16 21;
+    --c-border: 36 41 51;
+    --c-border-strong: 54 60 73;
+    --c-ink-primary: 234 237 242;
+    --c-ink-secondary: 157 164 177;
+    --c-ink-tertiary: 110 118 132;
+    --c-accent: 118 145 255;
+    --c-accent-hover: 146 168 255;
+    --c-on-accent: 9 12 28;
+    --c-positive: 61 204 137;
+    --c-negative: 255 112 122;
+    --c-warning: 240 182 72;
+    --c-overlay: 0 0 0;
+    --shadow-card: 0 0 0 transparent;
+    --shadow-pop: 0 16px 40px -8px rgb(0 0 0 / 0.6), 0 0 0 1px rgb(255 255 255 / 0.04);
+    color-scheme: dark;
+  }
+
+  html {
+    -webkit-tap-highlight-color: transparent;
   }
 
   body {
     @apply bg-canvas text-ink-primary antialiased;
-    font-feature-settings: 'cv11', 'ss01';
+    font-feature-settings: 'ss01', 'cv11';
+    /* Montos alineados en columnas y sin "saltos" al cambiar de valor. */
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* El cambio de tema no debe animar todo el árbol. */
+  .theme-switching *,
+  .theme-switching *::before,
+  .theme-switching *::after {
+    transition: none !important;
+  }
+
+  ::selection {
+    background: rgb(var(--c-accent) / 0.22);
+  }
+
+  :focus-visible {
+    outline: 2px solid rgb(var(--c-accent));
+    outline-offset: 2px;
+  }
+
+  select.field {
+    background-color: rgb(var(--c-surface-raised));
+    color: rgb(var(--c-ink-primary));
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
   }
 }
 
 @layer components {
+  /* --- Superficies --- */
   .card {
     @apply bg-surface border border-border rounded-2xl shadow-card;
   }
 
-  .btn-primary {
-    @apply inline-flex items-center justify-center rounded-xl bg-accent text-white font-medium
-      px-4 py-2.5 transition-colors hover:bg-accent-hover
+  .card-pad {
+    @apply p-5 sm:p-6;
+  }
+
+  .panel-sunken {
+    @apply bg-surface-sunken/60 border border-border rounded-xl;
+  }
+
+  /* --- Botones --- */
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl font-medium text-sm
+      px-4 py-2.5 select-none
+      transition-[background-color,color,border-color,transform] duration-150 ease-out
+      active:scale-[0.98]
       disabled:opacity-40 disabled:pointer-events-none;
+    touch-action: manipulation;
+  }
+
+  .btn-primary {
+    @apply btn bg-accent text-accent-on hover:bg-accent-hover;
   }
 
   .btn-secondary {
-    @apply inline-flex items-center justify-center rounded-xl bg-surface-raised text-ink-primary font-medium
-      border border-border px-4 py-2.5 transition-colors hover:bg-surface-hover
-      disabled:opacity-40 disabled:pointer-events-none;
+    @apply btn bg-surface text-ink-primary border border-border hover:bg-surface-hover hover:border-border-strong;
   }
 
   .btn-ghost {
-    @apply inline-flex items-center justify-center rounded-xl text-ink-secondary font-medium
-      px-4 py-2.5 transition-colors hover:text-ink-primary hover:bg-surface-hover;
+    @apply btn text-ink-secondary hover:text-ink-primary hover:bg-surface-hover;
   }
 
+  .btn-danger {
+    @apply btn text-negative hover:bg-negative/10;
+  }
+
+  .btn-sm {
+    @apply px-3 py-1.5 text-[13px] rounded-lg;
+  }
+
+  .btn-icon {
+    @apply btn p-2 text-ink-secondary hover:text-ink-primary hover:bg-surface-hover;
+  }
+
+  /* --- Formularios --- */
   .field {
-    @apply w-full bg-surface-raised border border-border rounded-xl px-3.5 py-2.5
+    @apply w-full bg-surface-raised border border-border rounded-xl px-3.5 py-2.5 text-sm
       text-ink-primary placeholder:text-ink-tertiary
-      focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent
+      hover:border-border-strong
+      focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/20
       disabled:opacity-50 disabled:cursor-not-allowed
-      transition-colors;
+      transition-[border-color,box-shadow] duration-150;
   }
 
   .label {
-    @apply block text-sm font-medium text-ink-secondary mb-1.5;
+    @apply block text-[13px] font-medium text-ink-secondary mb-1.5;
+  }
+
+  .checkbox {
+    @apply h-4 w-4 rounded border-border-strong text-accent accent-[rgb(var(--c-accent))];
+  }
+
+  /* --- Tipografía de página --- */
+  .page-title {
+    @apply text-2xl sm:text-[1.75rem] font-semibold tracking-tight text-ink-primary;
+  }
+
+  .page-subtitle {
+    @apply text-sm text-ink-secondary mt-1;
+  }
+
+  .section-title {
+    @apply text-[15px] font-semibold text-ink-primary tracking-tight;
+  }
+
+  .section-hint {
+    @apply text-[13px] text-ink-secondary mt-0.5;
+  }
+
+  .stat-label {
+    @apply text-[13px] font-medium text-ink-secondary;
+  }
+
+  .stat-value {
+    @apply text-2xl font-semibold tracking-tight text-ink-primary;
+  }
+
+  .amount-positive {
+    @apply text-positive;
+  }
+
+  .amount-negative {
+    @apply text-negative;
+  }
+
+  /* --- Listas --- */
+  .list {
+    @apply divide-y divide-border;
+  }
+
+  .list-row {
+    @apply flex items-center justify-between gap-4 py-3.5;
+  }
+
+  /* --- Insignias --- */
+  .badge {
+    @apply inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-semibold leading-4;
+  }
+
+  .badge-neutral {
+    @apply badge bg-surface-sunken text-ink-secondary;
+  }
+
+  .badge-accent {
+    @apply badge bg-accent/10 text-accent;
+  }
+
+  .badge-positive {
+    @apply badge bg-positive/10 text-positive;
+  }
+
+  .badge-negative {
+    @apply badge bg-negative/10 text-negative;
+  }
+
+  .badge-warning {
+    @apply badge bg-warning/15 text-warning;
+  }
+
+  /* --- Pestañas segmentadas --- */
+  .tabs {
+    @apply inline-flex gap-1 rounded-xl bg-surface-sunken p-1 overflow-x-auto max-w-full;
+  }
+
+  .tab {
+    @apply whitespace-nowrap rounded-lg px-3.5 py-1.5 text-[13px] font-medium text-ink-secondary
+      transition-colors duration-150 hover:text-ink-primary;
+  }
+
+  .tab-active {
+    @apply bg-surface text-ink-primary shadow-card;
+  }
+
+  .dark .tab-active {
+    @apply bg-surface-hover;
+  }
+
+  /* --- Estado vacío --- */
+  .empty {
+    @apply text-sm text-ink-tertiary py-6 text-center;
   }
 }

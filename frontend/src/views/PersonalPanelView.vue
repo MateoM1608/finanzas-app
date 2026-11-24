@@ -6,7 +6,7 @@ import { listarCategorias } from '../api/categoriasPersonales.js';
 import { listarMetodosPago } from '../api/metodosPagoPersonales.js';
 import { extractErrorMessage } from '../api/client.js';
 import { formatCurrency, formatDate, hoyISO } from '../utils/format.js';
-import AppHeader from '../components/AppHeader.vue';
+import AppLayout from '../components/AppLayout.vue';
 import FormField from '../components/FormField.vue';
 import AlertError from '../components/AlertError.vue';
 import AppModal from '../components/AppModal.vue';
@@ -216,10 +216,8 @@ onMounted(cargarTodo);
 </script>
 
 <template>
-  <div class="min-h-screen">
-    <AppHeader />
-
-    <main class="max-w-3xl mx-auto px-4 sm:px-6 py-10 space-y-8">
+  <AppLayout title="Personal" subtitle="Tu dinero: disponible, compromisos, límites y ahorros.">
+    <div class="space-y-6">
       <ResumenPersonalSection ref="resumenRef" />
 
       <section class="card p-6 sm:p-8">
@@ -427,10 +425,10 @@ onMounted(cargarTodo);
           </li>
         </ul>
       </section>
-    </main>
+    </div>
 
-    <AppModal v-if="mostrarConfig" title="Configuración personal" @close="cerrarConfig">
+    <AppModal v-if="mostrarConfig" title="Configuración personal" size="lg" @close="cerrarConfig">
       <ConfiguracionPersonalSection :tab-inicial="configTab" />
     </AppModal>
-  </div>
+  </AppLayout>
 </template>
