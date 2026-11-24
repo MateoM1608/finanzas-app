@@ -17,7 +17,7 @@ const router = useRouter();
 const NAV = [
   { name: 'panel-personal', label: 'Personal', icon: 'wallet' },
   { name: 'panel-hogar', label: 'Hogar', icon: 'home' },
-  { name: 'cortes', label: 'Cortes', icon: 'scale' },
+  { name: 'cuadres', label: 'Cuadres', icon: 'scale' },
   { name: 'settings', label: 'Configuración', short: 'Ajustes', icon: 'settings' },
 ];
 

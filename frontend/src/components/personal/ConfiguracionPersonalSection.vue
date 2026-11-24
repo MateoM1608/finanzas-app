@@ -740,7 +740,7 @@ const categoriasParaAhorro = computed(() => categorias.value.filter((c) => c.apl
           <AppIcon name="info" class="mt-0.5 h-4 w-4 shrink-0" />
           <span>
             Define los períodos que usan "Disponible" y el resto del panel personal (ej. quincenal = del 1 al 15 y
-            del 16 a fin de mes) — independiente de la frecuencia de corte del hogar.
+            del 16 a fin de mes) — independiente de los cuadres del hogar.
           </span>
         </p>
       </div>

@@ -306,7 +306,7 @@ const totalLista = computed(() => (tabMovimientos.value === 'gastos' ? gastos.va
         <div class="flex flex-wrap items-center justify-between gap-3 px-5 sm:px-6 pt-5 sm:pt-6 pb-4">
           <div>
             <h2 class="section-title">Movimientos</h2>
-            <p class="section-hint">Registrados a mano, generados por tus fijos y los que trae cada corte del hogar.</p>
+            <p class="section-hint">Registrados a mano, generados por tus fijos y los que trae cada cuadre del hogar.</p>
           </div>
           <div class="tabs" role="tablist" aria-label="Tipo de movimiento">
             <button
@@ -357,7 +357,7 @@ const totalLista = computed(() => (tabMovimientos.value === 'gastos' ? gastos.va
             <li v-for="gasto in listaVisible" :key="gasto.id" class="list-row group">
               <div class="flex min-w-0 items-center gap-3">
                 <span class="hidden sm:grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-surface-sunken text-ink-secondary">
-                  <AppIcon :name="gasto.origenCorteId ? 'home' : gasto.origenConfigId ? 'repeat' : 'receipt'" class="h-4 w-4" />
+                  <AppIcon :name="gasto.origenCuadreId ? 'home' : gasto.origenConfigId ? 'repeat' : 'receipt'" class="h-4 w-4" />
                 </span>
                 <div class="min-w-0">
                   <p class="flex flex-wrap items-center gap-1.5 text-sm font-medium text-ink-primary">
@@ -365,7 +365,7 @@ const totalLista = computed(() => (tabMovimientos.value === 'gastos' ? gastos.va
                     <span v-if="gasto.estado === 'pendiente'" class="badge-warning">Pendiente</span>
                     <span v-if="gasto.esObligatorio" class="badge-accent">Obligatorio</span>
                     <span v-if="gasto.origenConfigId" class="badge-neutral">Fijo</span>
-                    <span v-if="gasto.origenCorteId" class="badge-neutral">Hogar</span>
+                    <span v-if="gasto.origenCuadreId" class="badge-neutral">Hogar</span>
                   </p>
                   <p class="mt-0.5 text-[13px] text-ink-tertiary">
                     {{ formatDate(gasto.fecha) }}
@@ -389,7 +389,7 @@ const totalLista = computed(() => (tabMovimientos.value === 'gastos' ? gastos.va
                     {{ gasto.estado === 'pagado' ? 'Marcar pendiente' : 'Marcar pagado' }}
                   </button>
                   <button
-                    v-if="!gasto.origenConfigId && !gasto.origenCorteId"
+                    v-if="!gasto.origenConfigId && !gasto.origenCuadreId"
                     type="button"
                     class="btn-icon !p-1.5 hover:!text-negative sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100"
                     :disabled="eliminandoGastoId === gasto.id"

@@ -6,7 +6,6 @@ import {
   postJoin,
   getHogarActual,
   patchHogar,
-  putPuntosCorte,
   getMiembros,
   patchMiembroPermisos,
   postTransferirAdmin,
@@ -20,7 +19,6 @@ hogaresRouter.get('/actual', getHogarActual);
 hogaresRouter.patch('/', patchHogar);
 hogaresRouter.post('/join', postJoin);
 hogaresRouter.post('/invitaciones', postInvitacion);
-hogaresRouter.put('/puntos-corte', putPuntosCorte);
 hogaresRouter.get('/miembros', getMiembros);
 hogaresRouter.patch('/miembros/:id/permisos', patchMiembroPermisos);
 hogaresRouter.post('/transferir-admin', postTransferirAdmin);

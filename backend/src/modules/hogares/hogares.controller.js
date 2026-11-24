@@ -3,7 +3,6 @@ import {
   crearHogarSchema,
   joinHogarSchema,
   actualizarHogarSchema,
-  actualizarPuntosCorteSchema,
   actualizarPermisosMiembroSchema,
   transferirAdminSchema,
 } from './hogares.schema.js';
@@ -13,7 +12,6 @@ import {
   unirseHogar,
   obtenerHogarActual,
   actualizarHogar,
-  actualizarPuntosCorte,
   listarMiembros,
   actualizarPermisosMiembro,
   transferirAdmin,
@@ -38,20 +36,14 @@ export const postJoin = asyncHandler(async (req, res) => {
 });
 
 export const getHogarActual = asyncHandler(async (req, res) => {
-  const { hogar, puntosCorte } = await obtenerHogarActual(req.usuario);
-  res.json({ hogar, puntosCorte });
+  const hogar = await obtenerHogarActual(req.usuario);
+  res.json({ hogar });
 });
 
 export const patchHogar = asyncHandler(async (req, res) => {
   const data = actualizarHogarSchema.parse(req.body);
-  const { hogar, puntosCorte } = await actualizarHogar(req.usuario, data);
-  res.json({ hogar, puntosCorte });
-});
-
-export const putPuntosCorte = asyncHandler(async (req, res) => {
-  const { puntos } = actualizarPuntosCorteSchema.parse(req.body);
-  const puntosCorte = await actualizarPuntosCorte(req.usuario, puntos);
-  res.json({ puntosCorte });
+  const hogar = await actualizarHogar(req.usuario, data);
+  res.json({ hogar });
 });
 
 export const getMiembros = asyncHandler(async (req, res) => {

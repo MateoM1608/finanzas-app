@@ -2,34 +2,37 @@
 import { ref } from 'vue';
 import AppLayout from '../components/AppLayout.vue';
 import AppIcon from '../components/AppIcon.vue';
-import AppModal from '../components/AppModal.vue';
-import PanelRecurrentesSection from '../components/hogar/PanelRecurrentesSection.vue';
+import SaldoHogarSection from '../components/hogar/SaldoHogarSection.vue';
+import CuentasFijasHogarSection from '../components/hogar/CuentasFijasHogarSection.vue';
 import PanelVariablesSection from '../components/hogar/PanelVariablesSection.vue';
 import ResumenHogarSection from '../components/hogar/ResumenHogarSection.vue';
 
-const mostrarRecurrentes = ref(false);
+const saldoRef = ref(null);
+const resumenRef = ref(null);
+
+// Pagar una cuenta o registrar un gasto mueve el saldo y el informe.
+function onCambio() {
+  saldoRef.value?.recargar();
+  resumenRef.value?.recargar();
+}
 </script>
 
 <template>
-  <AppLayout title="Hogar" subtitle="Gastos compartidos y balance entre los miembros.">
+  <AppLayout title="Hogar" subtitle="Gastos compartidos y quién le debe a quién.">
     <template #actions>
-      <button class="btn-secondary" @click="mostrarRecurrentes = true">
-        <AppIcon name="repeat" class="h-4 w-4" />
-        Gastos recurrentes
-      </button>
+      <router-link :to="{ name: 'cuadres' }" class="btn-secondary">
+        <AppIcon name="scale" class="h-4 w-4" />
+        Cuadres
+      </router-link>
     </template>
 
     <div class="space-y-6">
-      <ResumenHogarSection />
-      <PanelVariablesSection />
+      <SaldoHogarSection ref="saldoRef" />
+      <div class="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
+        <CuentasFijasHogarSection @cambio="onCambio" />
+        <PanelVariablesSection @cambio="onCambio" />
+      </div>
+      <ResumenHogarSection ref="resumenRef" />
     </div>
-
-    <AppModal
-      v-if="mostrarRecurrentes"
-      title="Gastos recurrentes de este período"
-      @close="mostrarRecurrentes = false"
-    >
-      <PanelRecurrentesSection />
-    </AppModal>
   </AppLayout>
 </template>

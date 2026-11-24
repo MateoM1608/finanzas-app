@@ -10,23 +10,23 @@ export function origenClave(item) {
 }
 
 /**
- * Resuelve el origen real (nombre, pagador, reparto) de una lista de
- * CorteItem en dos queries por lote (una para recurrentes, otra para
- * variables) en vez de una query por ítem — ver backlog de N+1 en CLAUDE.md.
+ * Resuelve el origen real (nombre, fecha, pagador, reparto) de una lista de
+ * CuadreItem en dos queries por lote (una para cuotas de cuentas fijas, otra
+ * para gastos variables) en vez de una query por ítem.
  */
-export async function obtenerOrigenesDetalladosPorLote(items) {
+export async function obtenerOrigenesDetalladosPorLote(items, client = prisma) {
   const idsRecurrentes = items.filter((i) => i.tipoOrigen === 'recurrente').map((i) => i.origenId);
   const idsVariables = items.filter((i) => i.tipoOrigen === 'variable').map((i) => i.origenId);
 
-  const [instancias, variables] = await Promise.all([
+  const [cuotas, variables] = await Promise.all([
     idsRecurrentes.length
-      ? prisma.gastoRecurrenteInstancia.findMany({
+      ? client.gastoRecurrenteInstancia.findMany({
           where: { id: { in: idsRecurrentes } },
-          include: { ...INCLUDE_COMUN, concepto: { select: { nombre: true, tipoMonto: true } } },
+          include: { ...INCLUDE_COMUN, concepto: { select: { nombre: true } } },
         })
       : [],
     idsVariables.length
-      ? prisma.gastoVariablePareja.findMany({
+      ? client.gastoVariablePareja.findMany({
           where: { id: { in: idsVariables } },
           include: INCLUDE_COMUN,
         })
@@ -34,18 +34,22 @@ export async function obtenerOrigenesDetalladosPorLote(items) {
   ]);
 
   const mapa = new Map();
-  for (const instancia of instancias) {
-    mapa.set(`recurrente:${instancia.id}`, {
-      nombre: instancia.concepto.nombre,
-      tipoMonto: instancia.concepto.tipoMonto,
-      pagador: instancia.pagador,
-      repartos: instancia.repartos,
+  for (const cuota of cuotas) {
+    mapa.set(`recurrente:${cuota.id}`, {
+      nombre: cuota.concepto.nombre,
+      fecha: cuota.fecha,
+      monto: cuota.monto,
+      estado: cuota.estado,
+      pagador: cuota.pagador,
+      repartos: cuota.repartos,
     });
   }
   for (const gasto of variables) {
     mapa.set(`variable:${gasto.id}`, {
       nombre: gasto.item,
-      tipoMonto: null,
+      fecha: gasto.fecha,
+      monto: gasto.valorTotal,
+      estado: gasto.estado,
       pagador: gasto.pagador,
       repartos: gasto.repartos,
     });

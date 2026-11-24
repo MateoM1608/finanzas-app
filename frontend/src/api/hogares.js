@@ -20,10 +20,6 @@ export function actualizarHogar(payload) {
   return api.patch('/api/hogares', payload).then((r) => r.data);
 }
 
-export function actualizarPuntosCorte(puntos) {
-  return api.put('/api/hogares/puntos-corte', { puntos }).then((r) => r.data.puntosCorte);
-}
-
 export function listarMiembros() {
   return api.get('/api/hogares/miembros').then((r) => r.data.miembros);
 }

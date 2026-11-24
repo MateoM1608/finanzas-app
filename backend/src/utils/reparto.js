@@ -1,11 +1,22 @@
 import { prisma } from '../config/prisma.js';
 import { hoyUTC } from './fechas.js';
 
-export async function obtenerSplitVigente(hogarId, contexto = 'general', client = prisma) {
-  const ultimo = await client.splitPorcentajeMiembro.findFirst({
-    where: { hogarId, contexto, periodoInicio: { lte: hoyUTC() } },
-    orderBy: { periodoInicio: 'desc' },
-  });
+/**
+ * Split vigente en `fecha` (por defecto hoy): el último configurado con
+ * `periodoInicio` ≤ esa fecha. Un gasto del hogar se reparte con el split
+ * vigente en SU fecha, no en la de hoy. Si el gasto es anterior a cualquier
+ * split configurado, cae al primero que exista.
+ */
+export async function obtenerSplitVigente(hogarId, contexto = 'general', client = prisma, fecha = hoyUTC()) {
+  const ultimo =
+    (await client.splitPorcentajeMiembro.findFirst({
+      where: { hogarId, contexto, periodoInicio: { lte: fecha } },
+      orderBy: { periodoInicio: 'desc' },
+    })) ??
+    (await client.splitPorcentajeMiembro.findFirst({
+      where: { hogarId, contexto },
+      orderBy: { periodoInicio: 'asc' },
+    }));
   if (!ultimo) return [];
   return client.splitPorcentajeMiembro.findMany({
     where: { hogarId, contexto, periodoInicio: ultimo.periodoInicio },
@@ -16,10 +27,10 @@ export async function obtenerSplitVigente(hogarId, contexto = 'general', client 
  * Split vigente para gastos variables puntuales: usa el split propio de ese
  * contexto si existe; si nadie lo ha configurado, cae al split general del hogar.
  */
-export async function obtenerSplitVigenteGastosVariables(hogarId, client = prisma) {
-  const propio = await obtenerSplitVigente(hogarId, 'gastos_variables', client);
+export async function obtenerSplitVigenteGastosVariables(hogarId, client = prisma, fecha = hoyUTC()) {
+  const propio = await obtenerSplitVigente(hogarId, 'gastos_variables', client, fecha);
   if (propio.length) return propio;
-  return obtenerSplitVigente(hogarId, 'general', client);
+  return obtenerSplitVigente(hogarId, 'general', client, fecha);
 }
 
 /**

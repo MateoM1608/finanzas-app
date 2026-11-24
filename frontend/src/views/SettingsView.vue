@@ -13,7 +13,7 @@ const auth = useAuthStore();
 const tabs = [
   { id: 'hogar', label: 'Hogar', icono: 'home' },
   { id: 'miembros', label: 'Miembros', icono: 'users' },
-  { id: 'conceptos', label: 'Conceptos', icono: 'repeat' },
+  { id: 'conceptos', label: 'Cuentas fijas', icono: 'repeat' },
   { id: 'split', label: 'Reparto', icono: 'sliders' },
 ];
 
@@ -23,7 +23,7 @@ const canEdit = computed(() => Boolean(auth.usuario?.esAdmin || auth.usuario?.pu
 </script>
 
 <template>
-  <AppLayout title="Configuración del hogar" subtitle="Frecuencia de corte, miembros, conceptos recurrentes y reparto de gastos.">
+  <AppLayout title="Configuración del hogar" subtitle="Miembros, cuentas fijas del hogar y reparto de gastos.">
     <div class="space-y-6 max-w-3xl">
       <div class="tabs" role="tablist" aria-label="Secciones de configuración">
         <button

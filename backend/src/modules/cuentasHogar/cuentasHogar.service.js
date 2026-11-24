@@ -1,0 +1,160 @@
+import { prisma } from '../../config/prisma.js';
+import { HttpError } from '../../middleware/errorHandler.js';
+import { asegurarCuotasHogar } from '../../utils/cuentasFijas.js';
+import { obtenerSplitVigente, calcularReparto } from '../../utils/reparto.js';
+import { hoyUTC } from '../../utils/fechas.js';
+
+/**
+ * Cuotas de las cuentas fijas del hogar (GastoRecurrenteInstancia). Una
+ * cuota solo cuenta para el saldo y los cuadres cuando alguien la marca como
+ * pagada: lo que nadie ha pagado no genera deuda entre los miembros.
+ */
+
+const INCLUDE_CUOTA = {
+  concepto: {
+    select: {
+      id: true,
+      nombre: true,
+      tipoMonto: true,
+      frecuencia: true,
+      responsable: { select: { id: true, nombre: true } },
+    },
+  },
+  pagador: { select: { id: true, nombre: true } },
+  repartos: { include: { usuario: { select: { id: true, nombre: true } } } },
+};
+
+function requireHogarId(usuarioActual) {
+  if (!usuarioActual.hogarId) {
+    throw new HttpError(409, 'No perteneces a ningún hogar todavía');
+  }
+  return usuarioActual.hogarId;
+}
+
+function requirePermisoEdicion(usuarioActual) {
+  if (!usuarioActual.esAdmin && !usuarioActual.puedeEditarGastos) {
+    throw new HttpError(403, 'No tienes permiso para editar los gastos del hogar');
+  }
+}
+
+async function requireCuotaDelHogar(hogarId, cuotaId) {
+  const cuota = await prisma.gastoRecurrenteInstancia.findUnique({
+    where: { id: cuotaId },
+    include: { concepto: true },
+  });
+  if (!cuota || cuota.concepto.hogarId !== hogarId) {
+    throw new HttpError(404, 'Cuota no encontrada');
+  }
+  return cuota;
+}
+
+/**
+ * Vista de las cuentas fijas para Panel del hogar:
+ * - porPagar: cuotas con fecha ≤ hoy que nadie ha pagado (`atrasada` si ya pasó su día).
+ * - proximas: la siguiente cuota sin pagar de cada cuenta, con fecha futura.
+ * - pagadasSinCuadrar: pagadas que todavía no entran a un cuadre cerrado.
+ */
+export async function obtenerCuentasHogar(usuarioActual) {
+  const hogarId = requireHogarId(usuarioActual);
+  const hoy = hoyUTC();
+  await asegurarCuotasHogar(hogarId, hoy);
+
+  const cuotas = await prisma.gastoRecurrenteInstancia.findMany({
+    where: {
+      concepto: { hogarId },
+      estado: { in: ['por_pagar', 'pagado', 'en_cuadre'] },
+    },
+    include: INCLUDE_CUOTA,
+    orderBy: { fecha: 'asc' },
+  });
+
+  const porPagar = [];
+  const proximas = [];
+  const pagadasSinCuadrar = [];
+  const conProxima = new Set();
+
+  for (const cuota of cuotas) {
+    if (cuota.estado !== 'por_pagar') {
+      pagadasSinCuadrar.push(cuota);
+    } else if (cuota.fecha <= hoy) {
+      porPagar.push({ ...cuota, atrasada: cuota.fecha < hoy });
+    } else if (!conProxima.has(cuota.conceptoId)) {
+      conProxima.add(cuota.conceptoId);
+      proximas.push(cuota);
+    }
+  }
+
+  return { porPagar, proximas, pagadasSinCuadrar };
+}
+
+export async function pagarCuota(usuarioActual, cuotaId, data) {
+  const hogarId = requireHogarId(usuarioActual);
+  requirePermisoEdicion(usuarioActual);
+  const cuota = await requireCuotaDelHogar(hogarId, cuotaId);
+  if (cuota.estado !== 'por_pagar') {
+    throw new HttpError(409, 'Esta cuota ya está marcada como pagada');
+  }
+
+  const pagoUsuarioId = data.pagoUsuarioId ?? cuota.concepto.responsableUsuarioId ?? usuarioActual.id;
+  const pertenece = await prisma.usuario.count({ where: { id: pagoUsuarioId, hogarId } });
+  if (!pertenece) {
+    throw new HttpError(400, 'Quien pagó debe ser un miembro de tu hogar');
+  }
+
+  const monto = cuota.concepto.tipoMonto === 'variable' ? data.monto : (data.monto ?? cuota.monto);
+  if (monto == null) {
+    throw new HttpError(400, 'Indica cuánto se pagó: es una cuenta de monto variable');
+  }
+
+  // Se reparte con el split vigente en la FECHA de la cuota, no el de hoy.
+  const split = await obtenerSplitVigente(hogarId, 'general', prisma, cuota.fecha);
+  if (!split.length) {
+    throw new HttpError(409, 'Configura primero el porcentaje de reparto del hogar en Configuración');
+  }
+
+  return prisma.$transaction(async (tx) => {
+    await tx.gastoRecurrenteInstanciaReparto.deleteMany({ where: { instanciaId: cuotaId } });
+    await tx.gastoRecurrenteInstanciaReparto.createMany({
+      data: calcularReparto(monto, split).map((r) => ({ instanciaId: cuotaId, ...r })),
+    });
+    return tx.gastoRecurrenteInstancia.update({
+      where: { id: cuotaId },
+      data: {
+        monto,
+        pagoUsuarioId,
+        fechaPago: data.fechaPago ?? hoyUTC(),
+        estado: 'pagado',
+      },
+      include: INCLUDE_CUOTA,
+    });
+  });
+}
+
+export async function deshacerPagoCuota(usuarioActual, cuotaId) {
+  const hogarId = requireHogarId(usuarioActual);
+  requirePermisoEdicion(usuarioActual);
+  const cuota = await requireCuotaDelHogar(hogarId, cuotaId);
+  if (cuota.estado === 'en_cuadre') {
+    throw new HttpError(409, 'Esta cuota está en el cuadre en curso — desmárcala del cuadre primero');
+  }
+  if (cuota.estado === 'cuadrado') {
+    throw new HttpError(409, 'Esta cuota ya se cuadró y no se puede modificar');
+  }
+  if (cuota.estado !== 'pagado') {
+    throw new HttpError(409, 'Esta cuota no está marcada como pagada');
+  }
+
+  return prisma.$transaction(async (tx) => {
+    await tx.gastoRecurrenteInstanciaReparto.deleteMany({ where: { instanciaId: cuotaId } });
+    return tx.gastoRecurrenteInstancia.update({
+      where: { id: cuotaId },
+      data: {
+        estado: 'por_pagar',
+        pagoUsuarioId: null,
+        fechaPago: null,
+        monto: cuota.concepto.tipoMonto === 'fijo' ? cuota.concepto.montoDefault : null,
+      },
+      include: INCLUDE_CUOTA,
+    });
+  });
+}

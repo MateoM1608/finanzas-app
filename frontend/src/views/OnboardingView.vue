@@ -17,7 +17,6 @@ const error = ref('');
 const loading = ref(false);
 
 const nombreHogar = ref('');
-const frecuenciaCorte = ref('quincenal');
 const codigo = ref('');
 
 // Opciones de onboarding mostradas como tarjetas (solo presentación).
@@ -29,7 +28,7 @@ const opciones = [
 // Puntos de valor del panel de marca (solo presentación).
 const beneficios = [
   { icono: 'wallet', titulo: 'Disponible real', texto: 'Ingresos recibidos menos gastos pagados, sin estimaciones.' },
-  { icono: 'scale', titulo: 'Cortes de hogar', texto: 'Liquida los gastos compartidos y sabe quién le debe a quién.' },
+  { icono: 'scale', titulo: 'Cuadre de cuentas', texto: 'Saldo en vivo de quién le debe a quién, y cuadren cuando quieran.' },
   { icono: 'piggy', titulo: 'Ahorros y límites', texto: 'Metas con sugerencias automáticas y alertas por categoría.' },
 ];
 
@@ -37,10 +36,7 @@ async function onCrear() {
   error.value = '';
   loading.value = true;
   try {
-    const { usuario } = await crearHogar({
-      nombre: nombreHogar.value,
-      frecuenciaCorte: frecuenciaCorte.value,
-    });
+    const { usuario } = await crearHogar({ nombre: nombreHogar.value });
     auth.setUsuario(usuario);
     router.push({ name: 'panel-personal' });
   } catch (e) {
@@ -162,15 +158,9 @@ function cambiarModo(nuevo) {
 
             <FormField v-model="nombreHogar" label="Nombre del hogar" required placeholder="Casa de Mateo y Dani" />
 
-            <div>
-              <label class="label" for="onboarding-frecuencia">Frecuencia de corte</label>
-              <select id="onboarding-frecuencia" v-model="frecuenciaCorte" class="field">
-                <option value="semanal">Semanal</option>
-                <option value="quincenal">Quincenal</option>
-                <option value="mensual">Mensual</option>
-              </select>
-              <p class="mt-1.5 text-xs text-ink-tertiary">Cada cuánto se liquidan los gastos compartidos. Puedes cambiarla después.</p>
-            </div>
+            <p class="text-xs text-ink-tertiary">
+              Sin fechas fijas de corte: registran los gastos del hogar y cuadran cuentas cuando quieran.
+            </p>
 
             <button type="submit" class="btn-primary w-full" :disabled="loading">
               {{ loading ? 'Creando…' : 'Crear hogar' }}

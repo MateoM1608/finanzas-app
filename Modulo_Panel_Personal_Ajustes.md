@@ -71,10 +71,11 @@ gastos_personales
   id, usuario_id, origen_config_id (nullable si es esporádico),
   monto, fecha, descripcion, estado (pagado/pendiente),
   es_obligatorio (bool), metodo_pago_id (nullable), categoria_id (nullable),
-  origen (app/bot/corte_hogar)
+  origen (app/bot/cuadre_hogar)
 ```
 - Un gasto esporádico es una fila aquí sin `origen_config_id`, con su propio `es_obligatorio` (ej. una factura médica inesperada puede marcarse obligatoria aunque no sea recurrente).
-- **`origen = corte_hogar`:** cuando se cierra un corte del hogar, el sistema debe generar automáticamente una fila aquí por la parte que le tocó liquidar a este usuario, con `estado = pagado`, `es_obligatorio = true`, y una referencia al corte de origen (agregar campo `corte_id` nullable si no existe ya un mecanismo de referencia). **Importante: el campo `fecha` de este gasto debe ser la `fecha_nominal` del corte (ej. 30 de julio), NUNCA la `fecha_ejecucion`** (ej. 10 de agosto) — de lo contrario el gasto cae en el periodo personal equivocado solo porque el corte se ejecutó tarde. Esto ajusta el disponible del usuario sin que tenga que registrarlo manualmente, y hace que ese ítem cuente en la evaluación de obligatorios del periodo al que realmente pertenece (sección 6).
+- **Nota (2026-11-24):** los cortes del hogar se reemplazaron por cuadres abiertos sin fecha nominal. El equivalente vigente es `origen = cuadre_hogar`: al confirmar un cuadre se genera un gasto por miembro **por cada mes** de los gastos incluidos, fechado el último día de ese mes (o el día del cuadre si es el mes en curso), con lo que la regla de "caer en el período correcto" de abajo se sigue cumpliendo. Ver `backend/README.md` (Cuadres).
+- **`origen = corte_hogar`** *(diseño original, con cortes)*: cuando se cierra un corte del hogar, el sistema debe generar automáticamente una fila aquí por la parte que le tocó liquidar a este usuario, con `estado = pagado`, `es_obligatorio = true`, y una referencia al corte de origen (agregar campo `corte_id` nullable si no existe ya un mecanismo de referencia). **Importante: el campo `fecha` de este gasto debe ser la `fecha_nominal` del corte (ej. 30 de julio), NUNCA la `fecha_ejecucion`** (ej. 10 de agosto) — de lo contrario el gasto cae en el periodo personal equivocado solo porque el corte se ejecutó tarde. Esto ajusta el disponible del usuario sin que tenga que registrarlo manualmente, y hace que ese ítem cuente en la evaluación de obligatorios del periodo al que realmente pertenece (sección 6).
 
 ---
 

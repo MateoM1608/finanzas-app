@@ -35,7 +35,7 @@ async function requireGastoDelHogar(hogarId, gastoId) {
   return gasto;
 }
 
-async function resolverRepartos(hogarId, valorTotal, repartosInput) {
+async function resolverRepartos(hogarId, valorTotal, repartosInput, fecha) {
   if (repartosInput && repartosInput.length) {
     const suma = repartosInput.reduce((acc, r) => acc + r.monto, 0);
     if (suma !== valorTotal) {
@@ -47,11 +47,12 @@ async function resolverRepartos(hogarId, valorTotal, repartosInput) {
     return repartosInput;
   }
 
-  const split = await obtenerSplitVigenteGastosVariables(hogarId);
+  // Split vigente en la fecha del gasto, no el de hoy.
+  const split = await obtenerSplitVigenteGastosVariables(hogarId, prisma, fecha);
   if (!split.length) {
     throw new HttpError(
       409,
-      'Configura primero un split de porcentaje (general o de gastos variables) en Settings, o especifica el reparto manualmente',
+      'Configura primero un split de porcentaje (general o de gastos variables) en Configuración, o especifica el reparto manualmente',
     );
   }
   return calcularReparto(valorTotal, split);
@@ -62,7 +63,7 @@ export function listarGastosVariables(usuarioActual) {
   return prisma.gastoVariablePareja.findMany({
     where: { hogarId },
     include: INCLUDE_GASTO,
-    orderBy: { fechaLimite: 'asc' },
+    orderBy: [{ fecha: 'desc' }, { creadoEn: 'desc' }],
   });
 }
 
@@ -70,7 +71,7 @@ export async function crearGastoVariable(usuarioActual, data) {
   const hogarId = requireHogarId(usuarioActual);
   requirePermisoEdicion(usuarioActual);
   await validarMiembroDelHogar(hogarId, data.pagoUsuarioId);
-  const repartos = await resolverRepartos(hogarId, data.valorTotal, data.repartos);
+  const repartos = await resolverRepartos(hogarId, data.valorTotal, data.repartos, data.fecha);
 
   return prisma.$transaction(async (tx) => {
     const gasto = await tx.gastoVariablePareja.create({
@@ -79,7 +80,7 @@ export async function crearGastoVariable(usuarioActual, data) {
         item: data.item,
         valorTotal: data.valorTotal,
         pagoUsuarioId: data.pagoUsuarioId,
-        fechaLimite: data.fechaLimite,
+        fecha: data.fecha,
       },
     });
 
@@ -95,13 +96,13 @@ export async function actualizarGastoVariable(usuarioActual, gastoId, data) {
   const hogarId = requireHogarId(usuarioActual);
   requirePermisoEdicion(usuarioActual);
   const gasto = await requireGastoDelHogar(hogarId, gastoId);
-  if (gasto.estado === 'liquidado') {
-    throw new HttpError(409, 'Este gasto ya fue liquidado en un corte y no se puede editar');
+  if (gasto.estado === 'cuadrado') {
+    throw new HttpError(409, 'Este gasto ya se cuadró y no se puede editar');
   }
-  if (gasto.estado === 'incluido_en_corte') {
+  if (gasto.estado === 'en_cuadre') {
     throw new HttpError(
       409,
-      'Este gasto está incluido en un corte abierto — desmárcalo del corte para poder editarlo',
+      'Este gasto está en el cuadre en curso — desmárcalo del cuadre para poder editarlo',
     );
   }
   if (data.pagoUsuarioId) {
@@ -109,9 +110,11 @@ export async function actualizarGastoVariable(usuarioActual, gastoId, data) {
   }
 
   const valorTotalFinal = data.valorTotal ?? gasto.valorTotal;
-  const debeRecalcularReparto = data.valorTotal !== undefined || data.repartos !== undefined;
+  const fechaFinal = data.fecha ?? gasto.fecha;
+  const debeRecalcularReparto =
+    data.valorTotal !== undefined || data.repartos !== undefined || data.fecha !== undefined;
   const nuevosRepartos = debeRecalcularReparto
-    ? await resolverRepartos(hogarId, valorTotalFinal, data.repartos)
+    ? await resolverRepartos(hogarId, valorTotalFinal, data.repartos, fechaFinal)
     : null;
 
   return prisma.$transaction(async (tx) => {
@@ -121,7 +124,7 @@ export async function actualizarGastoVariable(usuarioActual, gastoId, data) {
         item: data.item ?? undefined,
         valorTotal: data.valorTotal ?? undefined,
         pagoUsuarioId: data.pagoUsuarioId ?? undefined,
-        fechaLimite: data.fechaLimite ?? undefined,
+        fecha: data.fecha ?? undefined,
       },
     });
 
@@ -140,8 +143,8 @@ export async function eliminarGastoVariable(usuarioActual, gastoId) {
   const hogarId = requireHogarId(usuarioActual);
   requirePermisoEdicion(usuarioActual);
   const gasto = await requireGastoDelHogar(hogarId, gastoId);
-  if (gasto.estado !== 'pendiente') {
-    throw new HttpError(409, 'Solo se pueden eliminar gastos que sigan pendientes');
+  if (gasto.estado !== 'pagado') {
+    throw new HttpError(409, 'Solo se pueden eliminar gastos que todavía no estén en un cuadre');
   }
 
   await prisma.$transaction([

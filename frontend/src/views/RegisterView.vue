@@ -21,7 +21,7 @@ const loading = ref(false);
 // Puntos de valor del panel de marca (solo presentación).
 const beneficios = [
   { icono: 'wallet', titulo: 'Disponible real', texto: 'Ingresos recibidos menos gastos pagados, sin estimaciones.' },
-  { icono: 'scale', titulo: 'Cortes de hogar', texto: 'Liquida los gastos compartidos y sabe quién le debe a quién.' },
+  { icono: 'scale', titulo: 'Cuadre de cuentas', texto: 'Saldo en vivo de quién le debe a quién, y cuadren cuando quieran.' },
   { icono: 'piggy', titulo: 'Ahorros y límites', texto: 'Metas con sugerencias automáticas y alertas por categoría.' },
 ];
 

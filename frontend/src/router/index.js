@@ -43,11 +43,13 @@ const routes = [
     meta: { requiresAuth: true, requiresHogar: true },
   },
   {
-    path: '/cortes',
-    name: 'cortes',
-    component: () => import('../views/CortesView.vue'),
+    path: '/cuadres',
+    name: 'cuadres',
+    component: () => import('../views/CuadresView.vue'),
     meta: { requiresAuth: true, requiresHogar: true },
   },
+  // Enlaces viejos de antes de los cuadres abiertos.
+  { path: '/cortes', redirect: '/cuadres' },
 ];
 
 export const router = createRouter({

@@ -1,22 +1,17 @@
 import { prisma } from '../../config/prisma.js';
 import { HttpError } from '../../middleware/errorHandler.js';
 import { generateInvitationCode } from '../../utils/invitationCode.js';
-import { puntosCorteDefault } from '../../utils/puntosCorteDefault.js';
 
 const INVITACION_VIGENCIA_DIAS = 7;
 
-export async function crearHogar(usuarioActual, { nombre, frecuenciaCorte }) {
+export async function crearHogar(usuarioActual, { nombre }) {
   if (usuarioActual.hogarId) {
     throw new HttpError(409, 'Ya perteneces a un hogar');
   }
 
   return prisma.$transaction(async (tx) => {
     const hogar = await tx.hogar.create({
-      data: {
-        nombre,
-        frecuenciaCorte,
-        puntosCorte: { create: puntosCorteDefault(frecuenciaCorte) },
-      },
+      data: { nombre },
     });
 
     const usuario = await tx.usuario.update({
@@ -56,12 +51,7 @@ export async function generarInvitacion(usuarioActual) {
 
 export async function obtenerHogarActual(usuarioActual) {
   const hogarId = requireHogarId(usuarioActual);
-  const hogar = await prisma.hogar.findUnique({ where: { id: hogarId } });
-  const puntosCorte = await prisma.puntoCorteHogar.findMany({
-    where: { hogarId },
-    orderBy: { orden: 'asc' },
-  });
-  return { hogar, puntosCorte };
+  return prisma.hogar.findUnique({ where: { id: hogarId } });
 }
 
 function requireHogarId(usuarioActual) {
@@ -83,64 +73,10 @@ function requireAdmin(usuarioActual) {
   }
 }
 
-export async function actualizarHogar(usuarioActual, { nombre, frecuenciaCorte }) {
+export async function actualizarHogar(usuarioActual, { nombre }) {
   const hogarId = requireHogarId(usuarioActual);
   requirePermisoEdicion(usuarioActual);
-
-  const hogarActual = await prisma.hogar.findUnique({ where: { id: hogarId } });
-  const cambiaFrecuencia = frecuenciaCorte && frecuenciaCorte !== hogarActual.frecuenciaCorte;
-
-  return prisma.$transaction(async (tx) => {
-    if (cambiaFrecuencia) {
-      const puntosExistentes = await tx.puntoCorteHogar.findMany({ where: { hogarId } });
-      const puntoIds = puntosExistentes.map((p) => p.id);
-      await tx.conceptoPuntoCorte.deleteMany({ where: { puntoCorteId: { in: puntoIds } } });
-      await tx.puntoCorteHogar.deleteMany({ where: { hogarId } });
-      await tx.puntoCorteHogar.createMany({
-        data: puntosCorteDefault(frecuenciaCorte).map((p) => ({ ...p, hogarId })),
-      });
-    }
-
-    const hogar = await tx.hogar.update({
-      where: { id: hogarId },
-      data: {
-        nombre: nombre ?? undefined,
-        frecuenciaCorte: frecuenciaCorte ?? undefined,
-      },
-    });
-
-    const puntosCorte = await tx.puntoCorteHogar.findMany({
-      where: { hogarId },
-      orderBy: { orden: 'asc' },
-    });
-
-    return { hogar, puntosCorte };
-  });
-}
-
-export async function actualizarPuntosCorte(usuarioActual, puntos) {
-  const hogarId = requireHogarId(usuarioActual);
-  requirePermisoEdicion(usuarioActual);
-
-  const existentes = await prisma.puntoCorteHogar.findMany({ where: { hogarId } });
-  const existentesIds = new Set(existentes.map((p) => p.id));
-
-  for (const punto of puntos) {
-    if (!existentesIds.has(punto.id)) {
-      throw new HttpError(400, 'Uno de los puntos de corte no pertenece a tu hogar');
-    }
-  }
-
-  await prisma.$transaction(
-    puntos.map((punto) =>
-      prisma.puntoCorteHogar.update({
-        where: { id: punto.id },
-        data: { referencia: punto.referencia },
-      }),
-    ),
-  );
-
-  return prisma.puntoCorteHogar.findMany({ where: { hogarId }, orderBy: { orden: 'asc' } });
+  return prisma.hogar.update({ where: { id: hogarId }, data: { nombre: nombre ?? undefined } });
 }
 
 export async function listarMiembros(usuarioActual) {

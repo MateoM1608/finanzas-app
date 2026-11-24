@@ -23,7 +23,7 @@ export function formatCurrency(monto) {
 }
 
 /**
- * Fecha de calendario (fecha de un gasto, fecha nominal de un corte…). El
+ * Fecha de calendario (fecha de un gasto, fecha de una cuota…). El
  * backend las guarda como medianoche UTC de ese día, así que se formatean en
  * UTC: formateadas en hora de Colombia (UTC-5) salían un día antes.
  */
@@ -31,7 +31,7 @@ export function formatDate(fecha) {
   return dateFormatter.format(new Date(fecha));
 }
 
-/** Momento real (ej. cuándo se ejecutó un corte): en la hora local del navegador. */
+/** Momento real (ej. cuándo se cerró un cuadre): en la hora local del navegador. */
 export function formatDateLocal(fecha) {
   return localDateFormatter.format(new Date(fecha));
 }
@@ -52,7 +52,7 @@ export function formatReparto(repartos) {
 }
 
 /**
- * Resume una lista de balances de corte [{ usuario: { nombre }, balance }] en
+ * Resume una lista de balances de cuadre [{ usuario: { nombre }, balance }] en
  * texto legible. Con 2 miembros da el formato "X le debe $N a Y"; con más,
  * lista el balance de cada quien.
  */
@@ -70,4 +70,16 @@ export function formatearBalances(balances) {
   return balances
     .map((b) => `${b.usuario.nombre}: ${b.balance >= 0 ? '+' : ''}${formatCurrency(b.balance)}`)
     .join(' · ');
+}
+
+function textoDia(dia) {
+  return dia == null ? 'último día' : `día ${dia}`;
+}
+
+/** Describe el calendario de una cuenta fija: "Cada mes, día 30" / "Cada quincena, día 15 y último día". */
+export function describirCalendario(cuenta) {
+  if (cuenta.frecuencia === 'quincenal') {
+    return `Cada quincena, ${textoDia(cuenta.diaMes ?? 15)} y ${textoDia(cuenta.diaMes2)}`;
+  }
+  return `Cada mes, ${textoDia(cuenta.diaMes)}`;
 }

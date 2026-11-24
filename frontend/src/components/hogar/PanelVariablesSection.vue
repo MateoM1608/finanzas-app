@@ -8,11 +8,13 @@ import {
 } from '../../api/gastosVariables.js';
 import { listarMiembros } from '../../api/hogares.js';
 import { extractErrorMessage } from '../../api/client.js';
-import { formatCurrency, formatDate, formatReparto } from '../../utils/format.js';
+import { formatCurrency, formatDate, formatReparto, hoyISO } from '../../utils/format.js';
 import FormField from '../FormField.vue';
 import AlertError from '../AlertError.vue';
 import AppModal from '../AppModal.vue';
 import AppIcon from '../AppIcon.vue';
+
+const emit = defineEmits(['cambio']);
 
 const gastos = ref([]);
 const miembros = ref([]);
@@ -24,7 +26,7 @@ const mostrarForm = ref(false);
 const item = ref('');
 const valorTotal = ref('');
 const pagoUsuarioId = ref('');
-const fechaLimite = ref('');
+const fecha = ref(hoyISO());
 const creando = ref(false);
 
 const personalizarReparto = ref(false);
@@ -34,15 +36,19 @@ const editandoRepartoId = ref(null);
 const repartoEdicion = reactive({}); // usuarioId -> string
 const guardandoRepartoId = ref(null);
 
+const LIMITE_LISTA = 8;
+const verTodo = ref(false);
+const visibles = computed(() => (verTodo.value ? gastos.value : gastos.value.slice(0, LIMITE_LISTA)));
+
 function ordenar(lista) {
-  return [...lista].sort((a, b) => new Date(a.fechaLimite) - new Date(b.fechaLimite));
+  return [...lista].sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
 }
 
 // Solo presentación: insignia por estado del gasto.
 const ESTADO_INFO = {
-  pendiente: { label: 'Pendiente', clase: 'badge-warning' },
-  incluido_en_corte: { label: 'En corte abierto', clase: 'badge-accent' },
-  liquidado: { label: 'Liquidado', clase: 'badge-positive' },
+  pagado: { label: 'Sin cuadrar', clase: 'badge-warning' },
+  en_cuadre: { label: 'En cuadre', clase: 'badge-accent' },
+  cuadrado: { label: 'Cuadrado', clase: 'badge-positive' },
 };
 
 function estadoInfo(gasto) {
@@ -50,7 +56,7 @@ function estadoInfo(gasto) {
 }
 
 function esEditable(gasto) {
-  return gasto.estado === 'pendiente';
+  return gasto.estado === 'pagado';
 }
 
 function inicializarRepartoManual() {
@@ -91,7 +97,7 @@ async function onCrear() {
       item: item.value,
       valorTotal: Number(valorTotal.value),
       pagoUsuarioId: pagoUsuarioId.value,
-      fechaLimite: fechaLimite.value,
+      fecha: fecha.value,
     };
     if (personalizarReparto.value) {
       payload.repartos = miembros.value.map((m) => ({
@@ -104,10 +110,11 @@ async function onCrear() {
     item.value = '';
     valorTotal.value = '';
     pagoUsuarioId.value = '';
-    fechaLimite.value = '';
+    fecha.value = hoyISO();
     personalizarReparto.value = false;
     for (const m of miembros.value) repartoManual[m.id] = '';
     mostrarForm.value = false;
+    emit('cambio');
   } catch (e) {
     error.value = extractErrorMessage(e);
   } finally {
@@ -121,6 +128,7 @@ async function onCambiarPagador(gasto, usuarioId) {
     const actualizado = await actualizarGastoVariable(gasto.id, { pagoUsuarioId: usuarioId });
     const idx = gastos.value.findIndex((g) => g.id === gasto.id);
     gastos.value[idx] = actualizado;
+    emit('cambio');
   } catch (e) {
     error.value = extractErrorMessage(e);
   }
@@ -132,6 +140,7 @@ async function onEliminar(gasto) {
   try {
     await eliminarGastoVariable(gasto.id);
     gastos.value = gastos.value.filter((g) => g.id !== gasto.id);
+    emit('cambio');
   } catch (e) {
     error.value = extractErrorMessage(e);
   } finally {
@@ -168,6 +177,7 @@ async function onGuardarReparto(gasto) {
     const idx = gastos.value.findIndex((g) => g.id === gasto.id);
     gastos.value[idx] = actualizado;
     editandoRepartoId.value = null;
+    emit('cambio');
   } catch (e) {
     error.value = extractErrorMessage(e);
   } finally {
@@ -182,8 +192,8 @@ onMounted(cargar);
   <section class="card card-pad" aria-labelledby="gastos-variables-titulo">
     <div class="flex flex-wrap items-start justify-between gap-3 mb-5">
       <div class="min-w-0">
-        <h3 id="gastos-variables-titulo" class="section-title">Gastos variables puntuales</h3>
-        <p class="section-hint">Gastos únicos del hogar; entran al próximo corte según su fecha límite.</p>
+        <h3 id="gastos-variables-titulo" class="section-title">Gastos variables</h3>
+        <p class="section-hint">Mercado, compras y gastos puntuales. Ya están pagados, así que entran al saldo de una vez.</p>
       </div>
       <button class="btn-primary" @click="mostrarForm = true">
         <AppIcon name="plus" class="h-4 w-4" />
@@ -195,7 +205,7 @@ onMounted(cargar);
 
     <AppModal v-if="mostrarForm" title="Agregar gasto variable" @close="mostrarForm = false">
       <form class="grid grid-cols-1 sm:grid-cols-2 gap-4" @submit.prevent="onCrear">
-        <FormField v-model="item" label="Item" required placeholder="Creta, regalo…" />
+        <FormField v-model="item" label="Item" required placeholder="Mercado, cafetera…" />
         <FormField v-model="valorTotal" type="number" label="Valor total (COP)" required />
         <div>
           <label class="label" for="gasto-variable-pagador">Quién pagó</label>
@@ -204,7 +214,7 @@ onMounted(cargar);
             <option v-for="m in miembros" :key="m.id" :value="m.id">{{ m.nombre }}</option>
           </select>
         </div>
-        <FormField v-model="fechaLimite" type="date" label="Fecha límite" required />
+        <FormField v-model="fecha" type="date" label="Fecha del gasto" required />
 
         <div class="sm:col-span-2">
           <label class="inline-flex items-center gap-2.5 text-sm text-ink-secondary cursor-pointer">
@@ -251,11 +261,11 @@ onMounted(cargar);
     <p v-if="loading" class="text-sm text-ink-tertiary">Cargando…</p>
     <div v-else-if="!gastos.length" class="empty flex flex-col items-center gap-2">
       <AppIcon name="receipt" class="h-6 w-6" />
-      No hay gastos variables pendientes.
+      Aún no hay gastos variables registrados.
     </div>
 
     <ul v-else class="list">
-      <li v-for="gasto in gastos" :key="gasto.id" class="py-3.5">
+      <li v-for="gasto in visibles" :key="gasto.id" class="py-3.5">
         <div class="flex items-start justify-between gap-4">
           <div class="min-w-0" :class="{ 'opacity-60': !esEditable(gasto) }">
             <p class="flex flex-wrap items-center gap-2 text-sm font-medium text-ink-primary">
@@ -265,7 +275,7 @@ onMounted(cargar);
               </span>
             </p>
             <p class="text-[13px] text-ink-tertiary mt-1">
-              Vence {{ formatDate(gasto.fechaLimite) }} · Pagó {{ gasto.pagador.nombre }}
+              {{ formatDate(gasto.fecha) }} · Pagó {{ gasto.pagador.nombre }}
             </p>
           </div>
           <span
@@ -344,5 +354,10 @@ onMounted(cargar);
         </div>
       </li>
     </ul>
+    <div v-if="gastos.length > LIMITE_LISTA" class="mt-2 flex justify-center">
+      <button type="button" class="btn-ghost btn-sm" @click="verTodo = !verTodo">
+        {{ verTodo ? 'Ver menos' : `Ver los ${gastos.length}` }}
+      </button>
+    </div>
   </section>
 </template>
