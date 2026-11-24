@@ -49,6 +49,8 @@ export async function sincronizarPagoGasto(tx, gastoId) {
     fecha: gasto.fechaPago ?? gasto.fecha,
     descripcion: `Hogar · ${nombre}`,
     metodoPagoId: gasto.metodoPagoId ?? gasto.compra?.metodoPagoId ?? null,
+    capital: gasto.capital,
+    interes: gasto.interes,
   });
 }
 

@@ -1,6 +1,6 @@
 import { prisma } from '../../config/prisma.js';
 import { HttpError } from '../../middleware/errorHandler.js';
-import { dividirEnCuotas, fechasDeCuotas, sugerirFechaPrimeraCuota } from '../../utils/cuotas.js';
+import { calcularCuotas, fechasDeCuotas, sugerirFechaPrimeraCuota } from '../../utils/cuotas.js';
 import { evaluarPeriodoSiCorresponde } from '../../utils/evaluacionAhorro.js';
 import { hoyUTC } from '../../utils/fechas.js';
 
@@ -42,14 +42,16 @@ export async function sugerirPrimeraCuota(usuarioActual, { fechaCompra, metodoPa
 /** Crea las N cuotas (GastoPersonal) de una compra con los datos dados. */
 async function generarCuotas(tx, compraId, usuarioId, datos) {
   const hoy = hoyUTC();
-  const montos = dividirEnCuotas(datos.montoTotal, datos.numeroCuotas);
+  const cuotas = calcularCuotas(datos.montoTotal, datos.numeroCuotas, datos.tasaMensual, datos.sistemaInteres);
   const fechas = fechasDeCuotas(datos.fechaPrimeraCuota, datos.numeroCuotas);
   await tx.gastoPersonal.createMany({
     data: fechas.map((fecha, i) => ({
       usuarioId,
       compraId,
       numeroCuota: i + 1,
-      monto: montos[i],
+      monto: cuotas[i].monto,
+      capital: cuotas[i].capital,
+      interes: cuotas[i].interes,
       fecha,
       descripcion: datos.descripcion,
       estado: datos.modoCobro === 'automatico' && fecha <= hoy ? 'pagado' : 'pendiente',
@@ -81,6 +83,8 @@ export async function crearCompra(usuarioActual, data) {
     numeroCuotas: data.numeroCuotas,
     fechaPrimeraCuota: data.fechaPrimeraCuota,
     modoCobro: data.modoCobro,
+    tasaMensual: data.tasaMensual ?? 0,
+    sistemaInteres: data.sistemaInteres ?? 'capital_fijo',
     metodoPagoId: data.metodoPagoId ?? null,
     categoriaId: data.categoriaId ?? null,
     esObligatorio: data.esObligatorio ?? true,
@@ -95,7 +99,7 @@ export async function crearCompra(usuarioActual, data) {
   return compra;
 }
 
-const CAMPOS_ESTRUCTURALES = ['montoTotal', 'numeroCuotas', 'fechaPrimeraCuota', 'modoCobro'];
+const CAMPOS_ESTRUCTURALES = ['montoTotal', 'numeroCuotas', 'fechaPrimeraCuota', 'modoCobro', 'tasaMensual', 'sistemaInteres'];
 
 /**
  * Edita una compra. Descripción, categoría, método y obligatorio se pueden
@@ -123,6 +127,8 @@ export async function actualizarCompra(usuarioActual, compraId, data) {
     numeroCuotas: data.numeroCuotas ?? actual.numeroCuotas,
     fechaPrimeraCuota: data.fechaPrimeraCuota ?? actual.fechaPrimeraCuota,
     modoCobro: data.modoCobro ?? actual.modoCobro,
+    tasaMensual: data.tasaMensual ?? actual.tasaMensual,
+    sistemaInteres: data.sistemaInteres ?? actual.sistemaInteres,
     metodoPagoId: data.metodoPagoId === undefined ? actual.metodoPagoId : data.metodoPagoId,
     categoriaId: data.categoriaId === undefined ? actual.categoriaId : data.categoriaId,
     esObligatorio: data.esObligatorio ?? actual.esObligatorio,

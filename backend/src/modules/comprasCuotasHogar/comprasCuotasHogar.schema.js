@@ -7,6 +7,8 @@ export const crearCompraHogarSchema = z.object({
   fechaCompra: z.coerce.date(),
   fechaPrimeraCuota: z.coerce.date(),
   modoCobro: z.enum(['automatico', 'manual']),
+  tasaMensual: z.number().min(0).max(10).optional(),
+  sistemaInteres: z.enum(['capital_fijo', 'cuota_fija']).optional(),
   pagoUsuarioId: z.string().uuid(),
   metodoPagoId: z.string().uuid().nullable().optional(),
   repartos: z
@@ -21,6 +23,8 @@ export const actualizarCompraHogarSchema = z.object({
   fechaCompra: z.coerce.date().optional(),
   fechaPrimeraCuota: z.coerce.date().optional(),
   modoCobro: z.enum(['automatico', 'manual']).optional(),
+  tasaMensual: z.number().min(0).max(10).optional(),
+  sistemaInteres: z.enum(['capital_fijo', 'cuota_fija']).optional(),
   pagoUsuarioId: z.string().uuid().optional(),
   metodoPagoId: z.string().uuid().nullable().optional(),
   repartos: z

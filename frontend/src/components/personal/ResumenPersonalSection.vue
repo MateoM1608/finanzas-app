@@ -113,10 +113,14 @@ const porCategoriaChart = computed(() => {
           <p class="mt-2.5 text-xs text-ink-tertiary">
             Lo que entró menos lo que salió. Las compras con tarjeta de crédito cuentan al pagar la tarjeta.
           </p>
-          <p v-if="resumen.deudaTarjetas > 0" class="mt-2 flex items-center justify-between gap-2 text-[13px]">
+          <router-link
+            v-if="resumen.deudaTarjetas > 0"
+            :to="{ name: 'tarjetas' }"
+            class="mt-2 flex items-center justify-between gap-2 rounded-lg text-[13px] hover:underline"
+          >
             <span class="text-ink-secondary">Deuda de tarjetas</span>
             <span class="font-semibold text-warning">{{ formatCurrency(resumen.deudaTarjetas) }}</span>
-          </p>
+          </router-link>
         </section>
 
         <section class="card card-pad">

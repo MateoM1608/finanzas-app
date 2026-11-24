@@ -65,3 +65,40 @@ export function sugerirFechaPrimeraCuota(fechaCompra, metodo) {
   }
   return enMes(anio, mes + 1, compra.getUTCDate());
 }
+
+/**
+ * Cuotas de una compra con su capital e interés: [{ monto, capital, interes }].
+ * `tasaMensual` en % (ej. 2.1 = 2,1 % mensual). Sin interés: el total se
+ * divide en partes iguales (dividirEnCuotas). Con interés, sobre el saldo de
+ * capital que falta antes de cada cuota:
+ * - capital_fijo: capital = total/N (residuo en la última) e interés =
+ *   saldo × tasa; las cuotas van bajando.
+ * - cuota_fija (francés): cuota = P·r / (1 − (1+r)^−N), interés = saldo × r
+ *   y capital = cuota − interés; la última cierra el saldo exacto.
+ * Todo en COP enteros.
+ */
+export function calcularCuotas(total, numeroCuotas, tasaMensual = 0, sistema = 'capital_fijo') {
+  const r = (tasaMensual ?? 0) / 100;
+  if (r <= 0) {
+    return dividirEnCuotas(total, numeroCuotas).map((m) => ({ monto: m, capital: m, interes: 0 }));
+  }
+  const cuotas = [];
+  let saldo = total;
+  if (sistema === 'cuota_fija') {
+    const cuotaFija = Math.round((total * r) / (1 - (1 + r) ** -numeroCuotas));
+    for (let i = 0; i < numeroCuotas; i += 1) {
+      const interes = Math.round(saldo * r);
+      const capital = i === numeroCuotas - 1 ? saldo : Math.min(saldo, cuotaFija - interes);
+      cuotas.push({ monto: capital + interes, capital, interes });
+      saldo -= capital;
+    }
+    return cuotas;
+  }
+  const capitales = dividirEnCuotas(total, numeroCuotas);
+  for (const capital of capitales) {
+    const interes = Math.round(saldo * r);
+    cuotas.push({ monto: capital + interes, capital, interes });
+    saldo -= capital;
+  }
+  return cuotas;
+}

@@ -84,6 +84,9 @@ const gACuotas = ref(false);
 const gNumeroCuotas = ref('3');
 const gPrimeraCuota = ref('');
 const gModoCobro = ref('automatico');
+const gConInteres = ref(false);
+const gTasa = ref('');
+const gSistema = ref('capital_fijo');
 const compras = ref([]);
 const eliminandoCompraId = ref(null);
 const editandoCompra = ref(null);
@@ -158,10 +161,14 @@ async function onAgregarCompra() {
     numeroCuotas: Number(gNumeroCuotas.value),
     fechaPrimeraCuota: gPrimeraCuota.value,
     modoCobro: gModoCobro.value,
+    tasaMensual: gConInteres.value ? Number(gTasa.value) || 0 : 0,
+    sistemaInteres: gSistema.value,
     metodoPagoId: gMetodoPagoId.value || undefined,
     categoriaId: gCategoriaId.value || undefined,
     esObligatorio: gEsObligatorio.value,
   });
+  gConInteres.value = false;
+  gTasa.value = '';
   await Promise.all([cargarCompras(), cargarGastos()]);
 }
 
@@ -468,6 +475,10 @@ function saldoCompra(compra) {
 <template>
   <AppLayout title="Personal" subtitle="Tu dinero: disponible, compromisos, límites y ahorros.">
     <template #actions>
+      <router-link :to="{ name: 'tarjetas' }" class="btn-secondary" aria-label="Tarjetas y cuentas">
+        <AppIcon name="wallet" class="h-4 w-4" />
+        <span class="hidden sm:inline">Tarjetas</span>
+      </router-link>
       <button type="button" class="btn-secondary" aria-label="Configuración personal" @click="abrirConfig()">
         <AppIcon name="sliders" class="h-4 w-4" />
         <span class="hidden sm:inline">Configuración</span>
@@ -942,8 +953,22 @@ function saldoCompra(compra) {
             </select>
           </div>
           <p class="self-end pb-2.5 text-[13px] text-ink-secondary">
-            <template v-if="valorCuota">≈ {{ formatCurrency(valorCuota) }} por cuota</template>
+            <template v-if="valorCuota">≈ {{ formatCurrency(valorCuota) }} de capital por cuota</template>
           </p>
+          <label class="sm:col-span-2 inline-flex items-center gap-2.5 text-sm text-ink-secondary cursor-pointer">
+            <input v-model="gConInteres" type="checkbox" class="checkbox" />
+            Tiene interés
+          </label>
+          <template v-if="gConInteres">
+            <FormField v-model="gTasa" type="number" step="0.01" label="Tasa mensual (%)" hint="La que aparece en el extracto, ej. 2,1" required />
+            <div>
+              <label class="label" for="g-sistema">Cómo se calcula</label>
+              <select id="g-sistema" v-model="gSistema" class="field">
+                <option value="capital_fijo">Capital fijo + interés sobre lo que falta (cuotas bajan)</option>
+                <option value="cuota_fija">Cuota fija (todas iguales)</option>
+              </select>
+            </div>
+          </template>
           <p class="sm:col-span-2 text-[13px] text-ink-tertiary">
             El monto es el total de la compra y la descripción es obligatoria. Se crean todas las cuotas; las
             automáticas se dan por pagadas en su fecha.

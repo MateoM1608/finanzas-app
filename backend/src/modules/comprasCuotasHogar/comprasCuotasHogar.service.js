@@ -1,6 +1,6 @@
 import { prisma } from '../../config/prisma.js';
 import { HttpError } from '../../middleware/errorHandler.js';
-import { dividirEnCuotas, fechasDeCuotas } from '../../utils/cuotas.js';
+import { calcularCuotas, fechasDeCuotas } from '../../utils/cuotas.js';
 import { obtenerSplitVigenteGastosVariables, calcularReparto } from '../../utils/reparto.js';
 import { sincronizarPagoGasto } from '../../utils/movimientosHogar.js';
 
@@ -102,6 +102,8 @@ export async function crearCompra(usuarioActual, data) {
         fechaCompra: data.fechaCompra,
         fechaPrimeraCuota: data.fechaPrimeraCuota,
         modoCobro: data.modoCobro,
+        tasaMensual: data.tasaMensual ?? 0,
+        sistemaInteres: data.sistemaInteres ?? 'capital_fijo',
         pagoUsuarioId: data.pagoUsuarioId,
         metodoPagoId: data.metodoPagoId ?? null,
       },
@@ -115,7 +117,7 @@ export async function crearCompra(usuarioActual, data) {
 
 /** Crea las N cuotas (GastoVariablePareja + reparto) de una compra con los datos dados. */
 async function generarCuotas(tx, compraId, hogarId, datos, porcentajes) {
-  const montos = dividirEnCuotas(datos.montoTotal, datos.numeroCuotas);
+  const cuotas = calcularCuotas(datos.montoTotal, datos.numeroCuotas, datos.tasaMensual, datos.sistemaInteres);
   const fechas = fechasDeCuotas(datos.fechaPrimeraCuota, datos.numeroCuotas);
   const estadoInicial = datos.modoCobro === 'automatico' ? 'pagado' : 'por_pagar';
   for (let i = 0; i < fechas.length; i += 1) {
@@ -123,7 +125,9 @@ async function generarCuotas(tx, compraId, hogarId, datos, porcentajes) {
       data: {
         hogarId,
         item: datos.item,
-        valorTotal: montos[i],
+        valorTotal: cuotas[i].monto,
+        capital: cuotas[i].capital,
+        interes: cuotas[i].interes,
         pagoUsuarioId: datos.pagoUsuarioId,
         fecha: fechas[i],
         estado: estadoInicial,
@@ -132,7 +136,8 @@ async function generarCuotas(tx, compraId, hogarId, datos, porcentajes) {
       },
     });
     await tx.gastoVariableParejaReparto.createMany({
-      data: calcularReparto(montos[i], porcentajes).map((r) => ({ gastoId: cuota.id, ...r })),
+      // El interés también se reparte: el reparto va sobre el valor total de la cuota.
+      data: calcularReparto(cuotas[i].monto, porcentajes).map((r) => ({ gastoId: cuota.id, ...r })),
     });
     await sincronizarPagoGasto(tx, cuota.id);
   }
@@ -150,7 +155,7 @@ async function porcentajesActuales(compraId) {
   return primera.repartos.map((r) => ({ usuarioId: r.usuarioId, porcentaje: (r.monto / primera.valorTotal) * 100 }));
 }
 
-const CAMPOS_ESTRUCTURALES = ['montoTotal', 'numeroCuotas', 'fechaPrimeraCuota', 'modoCobro', 'pagoUsuarioId'];
+const CAMPOS_ESTRUCTURALES = ['montoTotal', 'numeroCuotas', 'fechaPrimeraCuota', 'modoCobro', 'pagoUsuarioId', 'tasaMensual', 'sistemaInteres'];
 
 /**
  * Edita una compra del hogar. El nombre (y el método de pago, solo su
@@ -176,6 +181,8 @@ export async function actualizarCompra(usuarioActual, compraId, data) {
     fechaPrimeraCuota: data.fechaPrimeraCuota ?? actual.fechaPrimeraCuota,
     modoCobro: data.modoCobro ?? actual.modoCobro,
     pagoUsuarioId: data.pagoUsuarioId ?? actual.pagoUsuarioId,
+    tasaMensual: data.tasaMensual ?? actual.tasaMensual,
+    sistemaInteres: data.sistemaInteres ?? actual.sistemaInteres,
   };
   if (datos.pagoUsuarioId !== actual.pagoUsuarioId) {
     const pagador = await prisma.usuario.count({ where: { id: datos.pagoUsuarioId, hogarId } });

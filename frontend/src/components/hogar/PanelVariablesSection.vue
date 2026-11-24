@@ -69,6 +69,9 @@ const aCuotas = ref(false);
 const numeroCuotas = ref('3');
 const primeraCuota = ref('');
 const modoCobro = ref('automatico');
+const hConInteres = ref(false);
+const hTasa = ref('');
+const hSistema = ref('capital_fijo');
 const metodoPagoId = ref('');
 const eliminandoCompraId = ref(null);
 const editandoCompra = ref(null);
@@ -259,6 +262,8 @@ async function onCrear() {
         fechaCompra: payload.fecha,
         fechaPrimeraCuota: primeraCuota.value,
         modoCobro: modoCobro.value,
+        tasaMensual: hConInteres.value ? Number(hTasa.value) || 0 : 0,
+        sistemaInteres: hSistema.value,
         pagoUsuarioId: payload.pagoUsuarioId,
         metodoPagoId: pagaYo.value && metodoPagoId.value ? metodoPagoId.value : undefined,
         repartos: payload.repartos,
@@ -405,8 +410,22 @@ onMounted(cargar);
               <option value="manual">Manual (crédito de almacén: se marca al pagar)</option>
             </select>
           </div>
+          <label class="sm:col-span-2 inline-flex items-center gap-2.5 text-sm text-ink-secondary cursor-pointer">
+            <input v-model="hConInteres" type="checkbox" class="checkbox" />
+            Tiene interés
+          </label>
+          <template v-if="hConInteres">
+            <FormField v-model="hTasa" type="number" step="0.01" label="Tasa mensual (%)" hint="La que aparece en el extracto, ej. 2,1" required />
+            <div>
+              <label class="label" for="compra-hogar-sistema">Cómo se calcula</label>
+              <select id="compra-hogar-sistema" v-model="hSistema" class="field">
+                <option value="capital_fijo">Capital fijo + interés sobre lo que falta (cuotas bajan)</option>
+                <option value="cuota_fija">Cuota fija (todas iguales)</option>
+              </select>
+            </div>
+          </template>
           <p class="sm:col-span-2 text-[13px] text-ink-tertiary">
-            <template v-if="valorCuota">≈ {{ formatCurrency(valorCuota) }} por cuota. </template>
+            <template v-if="valorCuota">≈ {{ formatCurrency(valorCuota) }} de capital por cuota. </template>
             El valor total es el de la compra y la fecha es el día en que compraron; el reparto acordado ese día se
             aplica a todas las cuotas.
           </p>

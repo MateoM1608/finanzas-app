@@ -293,9 +293,12 @@ model GastoPersonal {
   metodoPagoId   String?            @map("metodo_pago_id")
   categoriaId    String?            @map("categoria_id")
   origen         OrigenGasto        @default(app)
-  // Cuota de una compra a cuotas personal (numeroCuota 1..N).
+  // Cuota de una compra a cuotas personal (numeroCuota 1..N), o movimiento
+  // de caja de una cuota del hogar: capital + interés = monto.
   compraId       String?            @map("compra_id")
   numeroCuota    Int?               @map("numero_cuota")
+  capital        Int?
+  interes        Int?
   creadoEn       DateTime           @default(now()) @map("creado_en")
 
   // Movimiento de caja del pago de un gasto del hogar (origen pago_hogar):
@@ -463,6 +466,8 @@ model GastoVariablePareja {
   // es de cobro manual la cuota nace `por_pagar` y alguien la marca pagada.
   compraId      String?          @map("compra_id")
   numeroCuota   Int?             @map("numero_cuota")
+  capital       Int?
+  interes       Int?
   fechaPago     DateTime?        @map("fecha_pago")
   // Método de pago personal con el que se pagó (privado: solo lo ve quien pagó).
   metodoPagoId  String?          @map("metodo_pago_id")
@@ -697,6 +702,15 @@ model LimiteEvaluadoPeriodo {
   @@map("limites_evaluados_periodo")
 }
 
+// Cómo se calculan las cuotas de una compra con interés (tasaMensual > 0):
+// - capital_fijo: abono a capital fijo (total/N) + interés sobre el saldo
+//   que falta; las cuotas van bajando (lo usual en tarjetas en Colombia).
+// - cuota_fija: sistema francés, todas las cuotas iguales.
+enum SistemaInteres {
+  capital_fijo
+  cuota_fija
+}
+
 // --- Compras a cuotas (entrega B) ---
 // Una compra a cuotas crea de una vez todas sus cuotas como gastos normales
 // (GastoPersonal / GastoVariablePareja) con `compraId` + `numeroCuota`. Monto
@@ -715,6 +729,9 @@ model CompraCuotasPersonal {
   metodoPagoId      String?          @map("metodo_pago_id")
   categoriaId       String?          @map("categoria_id")
   esObligatorio     Boolean          @default(true) @map("es_obligatorio")
+  // Interés: tasa mensual en % (0 = sin interés) y cómo se calcula.
+  tasaMensual       Float            @default(0) @map("tasa_mensual")
+  sistemaInteres    SistemaInteres   @default(capital_fijo) @map("sistema_interes")
   creadoEn          DateTime         @default(now()) @map("creado_en")
 
   usuario    Usuario             @relation(fields: [usuarioId], references: [id])
@@ -739,6 +756,8 @@ model CompraCuotasHogar {
   modoCobro         ModoFijoPersonal @map("modo_cobro")
   pagoUsuarioId     String           @map("pago_usuario_id")
   metodoPagoId      String?          @map("metodo_pago_id")
+  tasaMensual       Float            @default(0) @map("tasa_mensual")
+  sistemaInteres    SistemaInteres   @default(capital_fijo) @map("sistema_interes")
   creadoEn          DateTime         @default(now()) @map("creado_en")
 
   hogar      Hogar                 @relation(fields: [hogarId], references: [id])

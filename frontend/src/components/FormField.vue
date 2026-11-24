@@ -11,6 +11,8 @@ defineProps({
   disabled: { type: Boolean, default: false },
   inputmode: { type: String, default: undefined },
   hint: { type: String, default: '' },
+  // Para números con decimales (ej. una tasa de interés): step="0.01".
+  step: { type: String, default: undefined },
 });
 
 defineEmits(['update:modelValue']);
@@ -30,7 +32,8 @@ const id = useId();
       :autocomplete="autocomplete"
       :required="required"
       :disabled="disabled"
-      :inputmode="inputmode ?? (type === 'number' ? 'numeric' : undefined)"
+      :step="step"
+      :inputmode="inputmode ?? (type === 'number' ? (step ? 'decimal' : 'numeric') : undefined)"
       @input="$emit('update:modelValue', $event.target.value)"
     />
     <p v-if="hint" class="mt-1.5 text-xs text-ink-tertiary">{{ hint }}</p>

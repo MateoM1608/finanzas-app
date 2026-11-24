@@ -31,6 +31,12 @@ const routes = [
     meta: { requiresAuth: true, requiresHogar: true },
   },
   {
+    path: '/personal/tarjetas',
+    name: 'tarjetas',
+    component: () => import('../views/TarjetasView.vue'),
+    meta: { requiresAuth: true, requiresHogar: true },
+  },
+  {
     path: '/settings',
     name: 'settings',
     component: () => import('../views/SettingsView.vue'),

@@ -32,6 +32,9 @@ const form = reactive({
   categoriaId: c.categoriaId ?? '',
   esObligatorio: c.esObligatorio ?? true,
   pagoUsuarioId: c.pagoUsuarioId ?? '',
+  conInteres: (c.tasaMensual ?? 0) > 0,
+  tasaMensual: c.tasaMensual || '',
+  sistemaInteres: c.sistemaInteres ?? 'capital_fijo',
 });
 
 const pagaYo = computed(() => props.tipo === 'personal' || form.pagoUsuarioId === props.usuarioActualId);
@@ -44,6 +47,8 @@ const cambiaCuotas = computed(
     Number(form.numeroCuotas) !== c.numeroCuotas ||
     form.fechaPrimeraCuota !== c.fechaPrimeraCuota.slice(0, 10) ||
     form.modoCobro !== c.modoCobro ||
+    (form.conInteres ? Number(form.tasaMensual) || 0 : 0) !== (c.tasaMensual ?? 0) ||
+    (form.conInteres && form.sistemaInteres !== c.sistemaInteres) ||
     (props.tipo === 'hogar' && form.pagoUsuarioId !== c.pagoUsuarioId),
 );
 
@@ -53,6 +58,8 @@ function onSubmit() {
     numeroCuotas: Number(form.numeroCuotas),
     fechaPrimeraCuota: form.fechaPrimeraCuota,
     modoCobro: form.modoCobro,
+    tasaMensual: form.conInteres ? Number(form.tasaMensual) || 0 : 0,
+    sistemaInteres: form.sistemaInteres,
   };
   if (props.tipo === 'personal') {
     Object.assign(payload, {
@@ -85,6 +92,20 @@ function onSubmit() {
         <option value="manual">Manual (se marca al pagar)</option>
       </select>
     </div>
+    <label class="sm:col-span-2 inline-flex items-center gap-2.5 text-sm text-ink-secondary cursor-pointer">
+      <input v-model="form.conInteres" type="checkbox" class="checkbox" />
+      Tiene interés
+    </label>
+    <template v-if="form.conInteres">
+      <FormField v-model="form.tasaMensual" type="number" step="0.01" label="Tasa mensual (%)" required />
+      <div>
+        <label class="label" :for="`compra-${compra.id}-sistema`">Cómo se calcula</label>
+        <select :id="`compra-${compra.id}-sistema`" v-model="form.sistemaInteres" class="field">
+          <option value="capital_fijo">Capital fijo + interés sobre lo que falta</option>
+          <option value="cuota_fija">Cuota fija</option>
+        </select>
+      </div>
+    </template>
     <div v-if="tipo === 'hogar'">
       <label class="label" :for="`compra-${compra.id}-pagador`">Quién paga</label>
       <select :id="`compra-${compra.id}-pagador`" v-model="form.pagoUsuarioId" class="field">
