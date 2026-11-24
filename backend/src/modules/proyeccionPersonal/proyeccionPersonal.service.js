@@ -25,6 +25,41 @@ function porcentajeDe(split, usuarioId) {
   return split.find((s) => s.usuarioId === usuarioId)?.porcentaje ?? 0;
 }
 
+/**
+ * Costo MENSUAL promedio de cada cuenta variable: la suma de lo pagado en
+ * cada mes, promediada sobre los últimos `meses` meses COMPLETOS (con todas
+ * sus cuotas pagadas: 1 si es mensual, 2 si es quincenal — 3 meses de una
+ * quincenal son 6 pagos). Un mes a medio pagar bajaría el promedio, así que
+ * solo si todavía no hay ningún mes completo se usan los meses con algún
+ * pago, escalando su total al mes completo.
+ *
+ * `pagadas` viene ordenado por fecha descendente; `cuotasPorMes` da cuántas
+ * cuotas tiene al mes cada cuenta.
+ */
+export function costoMensualPromedio(pagadas, cuotasPorMes, meses) {
+  const porConcepto = new Map();
+  for (const p of pagadas) {
+    const delConcepto = porConcepto.get(p.conceptoId) ?? new Map();
+    const mes = claveMes(p.fecha);
+    const acumulado = delConcepto.get(mes) ?? { total: 0, cuotas: 0 };
+    acumulado.total += p.monto;
+    acumulado.cuotas += 1;
+    delConcepto.set(mes, acumulado);
+    porConcepto.set(p.conceptoId, delConcepto);
+  }
+  const promedios = new Map();
+  for (const [conceptoId, porMes] of porConcepto) {
+    const esperadas = cuotasPorMes.get(conceptoId) ?? 1;
+    const recientes = [...porMes.entries()].sort((a, b) => b[0].localeCompare(a[0]));
+    const completos = recientes.filter(([, m]) => m.cuotas >= esperadas).slice(0, meses);
+    const tomados = completos.length
+      ? completos.map(([, m]) => m.total)
+      : recientes.slice(0, meses).map(([, m]) => (m.total * esperadas) / m.cuotas);
+    promedios.set(conceptoId, Math.round(tomados.reduce((a, b) => a + b, 0) / tomados.length));
+  }
+  return promedios;
+}
+
 export async function obtenerProyeccion(usuarioActual, numeroMeses = 6) {
   const usuarioId = usuarioActual.id;
   const hogarId = usuarioActual.hogarId;
@@ -114,14 +149,20 @@ export async function obtenerProyeccion(usuarioActual, numeroMeses = 6) {
       obtenerSplitVigente(hogarId, 'general'),
     ]);
 
-    // Para cuentas de monto variable sin pagar: el último monto pagado de esa cuenta, marcado como estimado.
-    const ultimosPagados = await prisma.gastoRecurrenteInstancia.findMany({
-      where: { concepto: { hogarId }, monto: { not: null }, estado: { not: 'por_pagar' } },
+    // Cuentas de monto variable sin pagar: se estiman con su COSTO MENSUAL
+    // promedio de los últimos 3 meses completos pagados (costoMensualPromedio);
+    // cada cuota sin pagar toma la parte que le toca del mes (la mitad, si es
+    // quincenal). Se marca como estimado.
+    const pagadasVariables = await prisma.gastoRecurrenteInstancia.findMany({
+      where: { concepto: { hogarId, tipoMonto: 'variable' }, monto: { not: null }, estado: { not: 'por_pagar' } },
       orderBy: { fecha: 'desc' },
-      distinct: ['conceptoId'],
-      select: { conceptoId: true, monto: true },
+      select: { conceptoId: true, monto: true, fecha: true },
     });
-    const ultimoMonto = new Map(ultimosPagados.map((u) => [u.conceptoId, u.monto]));
+    const cuotasPorMes = new Map(conceptos.map((c) => [c.id, c.frecuencia === 'quincenal' ? 2 : 1]));
+    const costoMensual = costoMensualPromedio(pagadasVariables, cuotasPorMes, 3);
+    const estimadoPorCuota = new Map(
+      [...costoMensual.entries()].map(([id, mensual]) => [id, Math.round(mensual / (cuotasPorMes.get(id) ?? 1))]),
+    );
     const cuotaPorClave = new Map(cuotasCuentas.map((c) => [`${c.conceptoId}|${c.fecha.getTime()}`, c]));
     const conceptoPorId = new Map(conceptos.map((c) => [c.id, c]));
     // Un período ya pagado en otra fecha (la cuenta cambió de día) cuenta con ese pago.
@@ -142,7 +183,7 @@ export async function obtenerProyeccion(usuarioActual, numeroMeses = 6) {
           sumar(fecha, 'hogarCuentasFijas', miReparto.monto, concepto.nombre);
           continue;
         }
-        const montoTotal = cuota?.monto ?? concepto.montoDefault ?? ultimoMonto.get(concepto.id) ?? null;
+        const montoTotal = cuota?.monto ?? concepto.montoDefault ?? estimadoPorCuota.get(concepto.id) ?? null;
         if (montoTotal == null) continue;
         const estimado = concepto.tipoMonto === 'variable';
         sumar(fecha, 'hogarCuentasFijas', Math.round((montoTotal * miPorcentaje) / 100), concepto.nombre, { estimado });
