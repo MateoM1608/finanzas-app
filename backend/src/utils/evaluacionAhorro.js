@@ -73,6 +73,20 @@ export async function evaluarPeriodoSiCorresponde(usuarioId, fecha) {
   });
   if (obligatoriosPendientes > 0) return null;
 
+  // Un período EN CURSO sin ningún obligatorio cumple "todos pagados" desde el
+  // primer día: se evaluaba en la primera visita al panel, con el ingreso del
+  // período todavía sin recibir, y quedaba guardado en $0 para siempre. En
+  // curso solo se evalúa si hay al menos un obligatorio (y todos pagados); un
+  // período ya terminado se evalúa siempre (sin pendientes), con lo que de
+  // verdad entró y salió en él.
+  const periodoTerminado = periodo.fin < hoy;
+  if (!periodoTerminado) {
+    const obligatoriosPagados = await prisma.gastoPersonal.count({
+      where: { usuarioId, esObligatorio: true, estado: 'pagado', fecha: rango },
+    });
+    if (obligatoriosPagados === 0) return null;
+  }
+
   const [ingresos, gastosObligatorios, gastosNoObligatorios] = await Promise.all([
     prisma.ingresoPersonal.findMany({ where: { usuarioId, estado: 'recibido', fecha: rango } }),
     prisma.gastoPersonal.findMany({ where: { usuarioId, esObligatorio: true, estado: 'pagado', fecha: rango } }),
@@ -84,7 +98,13 @@ export async function evaluarPeriodoSiCorresponde(usuarioId, fecha) {
   const gastosNoObligatoriosPeriodo = sumarMontos(gastosNoObligatorios);
   const baseCalculoAhorro = ingresoPeriodo - gastosObligatoriosPeriodo;
 
-  const ahorrosActivos = await prisma.ahorroPersonal.findMany({ where: { usuarioId, activo: true } });
+  // Solo metas que ya existían durante el período: al evaluar uno pasado (el
+  // anterior, o el script de recálculo) no se le aplica — ni se le debita —
+  // una meta creada después de que terminó.
+  const finDelPeriodo = new Date(periodo.fin.getTime() + 24 * 60 * 60 * 1000);
+  const ahorrosActivos = await prisma.ahorroPersonal.findMany({
+    where: { usuarioId, activo: true, creadoEn: { lt: finDelPeriodo } },
+  });
 
   // El débito automático pertenece al período evaluado: si se evalúa uno ya
   // terminado (ej. se pagó tarde un obligatorio del mes pasado), cae en su

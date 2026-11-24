@@ -1,6 +1,6 @@
 import { prisma } from '../../config/prisma.js';
 import { HttpError } from '../../middleware/errorHandler.js';
-import { calcularPeriodoActual, dentroDelRango } from '../../utils/cicloPersonal.js';
+import { calcularPeriodoActual, calcularPeriodoAnterior, dentroDelRango } from '../../utils/cicloPersonal.js';
 import { evaluarPeriodoSiCorresponde } from '../../utils/evaluacionAhorro.js';
 import { hoyUTC } from '../../utils/fechas.js';
 
@@ -77,6 +77,12 @@ export async function registrarAporte(usuarioActual, ahorroId, data) {
  */
 export async function obtenerResumenAhorros(usuarioActual) {
   const usuarioId = usuarioActual.id;
+  // El anterior primero: un período sin obligatorios solo se evalúa una vez
+  // terminado, y sin esto nadie lo dispararía (no hay cron).
+  await evaluarPeriodoSiCorresponde(
+    usuarioId,
+    calcularPeriodoAnterior(usuarioActual.frecuenciaCicloPersonal, hoyUTC()).inicio,
+  );
   await evaluarPeriodoSiCorresponde(usuarioId, hoyUTC());
 
   const ahorros = await prisma.ahorroPersonal.findMany({
