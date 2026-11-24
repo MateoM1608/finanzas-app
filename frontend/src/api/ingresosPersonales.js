@@ -15,3 +15,7 @@ export function actualizarIngreso(id, payload) {
 export function eliminarIngreso(id) {
   return api.delete(`/api/ingresos-personales/${id}`);
 }
+
+export function cambiarMetodoIngreso(id, metodoPagoId) {
+  return api.patch(`/api/ingresos-personales/${id}/metodo`, { metodoPagoId }).then((r) => r.data.ingreso);
+}

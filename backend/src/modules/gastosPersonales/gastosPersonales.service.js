@@ -90,3 +90,36 @@ export async function eliminarGastoPersonal(usuarioId, gastoId) {
 
   await prisma.gastoPersonal.delete({ where: { id: gastoId } });
 }
+
+async function requireMetodoPropio(usuarioId, metodoPagoId) {
+  if (!metodoPagoId) return null;
+  const metodo = await prisma.metodoPagoPersonal.findUnique({ where: { id: metodoPagoId } });
+  if (!metodo || metodo.usuarioId !== usuarioId) {
+    throw new HttpError(400, 'Método de pago no encontrado');
+  }
+  return metodoPagoId;
+}
+
+/**
+ * Cambia SOLO el método de pago de un movimiento propio. Es la única
+ * edición permitida en los movimientos del hogar (pago al 100 % o pago de un
+ * cuadre): el monto y la fecha vienen del hogar, pero con qué se pagó es
+ * dato de cada quien y se puede definir después (ej. el otro miembro confirmó
+ * el cuadre o marcó el pago). En un pago del hogar, el método queda también
+ * en el gasto del hogar, para que el movimiento siga sincronizado.
+ */
+export async function cambiarMetodoGastoPersonal(usuarioId, gastoId, metodoPagoId) {
+  const gasto = await prisma.gastoPersonal.findUnique({ where: { id: gastoId } });
+  if (!gasto || gasto.usuarioId !== usuarioId) {
+    throw new HttpError(404, 'Gasto no encontrado');
+  }
+  const metodo = await requireMetodoPropio(usuarioId, metodoPagoId);
+  return prisma.$transaction(async (tx) => {
+    if (gasto.pagoCuotaHogarId) {
+      await tx.gastoRecurrenteInstancia.update({ where: { id: gasto.pagoCuotaHogarId }, data: { metodoPagoId: metodo } });
+    } else if (gasto.pagoGastoHogarId) {
+      await tx.gastoVariablePareja.update({ where: { id: gasto.pagoGastoHogarId }, data: { metodoPagoId: metodo } });
+    }
+    return tx.gastoPersonal.update({ where: { id: gastoId }, data: { metodoPagoId: metodo }, include: INCLUDE_GASTO });
+  });
+}

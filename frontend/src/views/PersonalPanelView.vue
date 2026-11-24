@@ -1,7 +1,7 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue';
-import { listarGastos, crearGasto, actualizarGasto, eliminarGasto } from '../api/gastosPersonales.js';
-import { listarIngresos, crearIngreso, actualizarIngreso, eliminarIngreso } from '../api/ingresosPersonales.js';
+import { listarGastos, crearGasto, actualizarGasto, eliminarGasto, cambiarMetodoGasto } from '../api/gastosPersonales.js';
+import { listarIngresos, crearIngreso, actualizarIngreso, eliminarIngreso, cambiarMetodoIngreso } from '../api/ingresosPersonales.js';
 import { listarCategorias } from '../api/categoriasPersonales.js';
 import { listarMetodosPago } from '../api/metodosPagoPersonales.js';
 import {
@@ -379,6 +379,26 @@ function esDelHogar(mov) {
   return mov.origen === 'pago_hogar' || mov.origen === 'liquidacion_hogar';
 }
 
+// En los movimientos del hogar solo se puede cambiar el método (con qué se
+// pagó o dónde entró): se puede definir después de pagar o de cuadrar.
+const metodoEditando = ref(null);
+async function onCambiarMetodo(tipo, mov, metodoPagoId) {
+  error.value = '';
+  try {
+    if (tipo === 'gasto') {
+      const actualizado = await cambiarMetodoGasto(mov.id, metodoPagoId || null);
+      gastos.value[gastos.value.findIndex((g) => g.id === mov.id)] = actualizado;
+    } else {
+      const actualizado = await cambiarMetodoIngreso(mov.id, metodoPagoId || null);
+      ingresos.value[ingresos.value.findIndex((i) => i.id === mov.id)] = actualizado;
+    }
+    metodoEditando.value = null;
+    recargarResumenes();
+  } catch (e) {
+    error.value = extractErrorMessage(e);
+  }
+}
+
 function cuotasPagadas(compra) {
   return compra.cuotas.filter((c) => c.estado === 'pagado').length;
 }
@@ -535,7 +555,29 @@ function saldoCompra(compra) {
 
               <div class="flex shrink-0 flex-col items-end gap-1 sm:flex-row sm:items-center sm:gap-2">
                 <span class="text-sm font-semibold text-ink-primary sm:mr-1">−{{ formatCurrency(gasto.monto) }}</span>
-                <div class="flex items-center gap-1">
+                <div v-if="metodoEditando === `gasto-${gasto.id}`" class="flex items-center gap-1">
+                  <label :for="`metodo-gasto-${gasto.id}`" class="sr-only">Método de pago</label>
+                  <select
+                    :id="`metodo-gasto-${gasto.id}`"
+                    class="field !w-auto !py-1.5 !text-[13px]"
+                    :value="gasto.metodoPagoId ?? ''"
+                    @change="onCambiarMetodo('gasto', gasto, $event.target.value)"
+                  >
+                    <option value="">Sin definir</option>
+                    <option v-for="m in metodos" :key="m.id" :value="m.id">{{ m.nombre }}</option>
+                  </select>
+                  <button type="button" class="btn-ghost btn-sm" @click="metodoEditando = null">Listo</button>
+                </div>
+                <div v-else class="flex items-center gap-1">
+                  <button
+                    v-if="esDelHogar(gasto)"
+                    type="button"
+                    class="btn-ghost btn-sm"
+                    title="Con qué se pagó (solo lo ves tú)"
+                    @click="metodoEditando = `gasto-${gasto.id}`"
+                  >
+                    {{ gasto.metodoPago ? 'Cambiar método' : 'Elegir método' }}
+                  </button>
                   <button
                     v-if="!esDelHogar(gasto)"
                     type="button"
@@ -639,7 +681,31 @@ function saldoCompra(compra) {
 
               <div class="flex shrink-0 flex-col items-end gap-1 sm:flex-row sm:items-center sm:gap-2">
                 <span class="text-sm font-semibold text-positive sm:mr-1">+{{ formatCurrency(ingreso.monto) }}</span>
-                <div class="flex items-center gap-1">
+                <div v-if="metodoEditando === `ingreso-${ingreso.id}`" class="flex items-center gap-1">
+                  <label :for="`metodo-ingreso-${ingreso.id}`" class="sr-only">Dónde entró</label>
+                  <select
+                    :id="`metodo-ingreso-${ingreso.id}`"
+                    class="field !w-auto !py-1.5 !text-[13px]"
+                    :value="ingreso.metodoPagoId ?? ''"
+                    @change="onCambiarMetodo('ingreso', ingreso, $event.target.value)"
+                  >
+                    <option value="">Sin definir</option>
+                    <option v-for="m in metodos.filter((x) => x.tipo !== 'tarjeta_credito')" :key="m.id" :value="m.id">
+                      {{ m.nombre }}
+                    </option>
+                  </select>
+                  <button type="button" class="btn-ghost btn-sm" @click="metodoEditando = null">Listo</button>
+                </div>
+                <div v-else class="flex items-center gap-1">
+                  <button
+                    v-if="esDelHogar(ingreso)"
+                    type="button"
+                    class="btn-ghost btn-sm"
+                    title="Dónde entró la plata (solo lo ves tú)"
+                    @click="metodoEditando = `ingreso-${ingreso.id}`"
+                  >
+                    {{ ingreso.metodoPago ? 'Cambiar dónde entró' : 'Elegir dónde entró' }}
+                  </button>
                   <button
                     v-if="!esDelHogar(ingreso)"
                     type="button"

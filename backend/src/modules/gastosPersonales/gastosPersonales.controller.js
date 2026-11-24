@@ -1,6 +1,7 @@
 import { asyncHandler } from '../../middleware/asyncHandler.js';
-import { crearGastoPersonalSchema, actualizarGastoPersonalSchema } from './gastosPersonales.schema.js';
+import { crearGastoPersonalSchema, actualizarGastoPersonalSchema, cambiarMetodoSchema } from './gastosPersonales.schema.js';
 import {
+  cambiarMetodoGastoPersonal,
   listarGastosPersonales,
   crearGastoPersonal,
   actualizarGastoPersonal,
@@ -27,4 +28,9 @@ export const patchGasto = asyncHandler(async (req, res) => {
 export const deleteGasto = asyncHandler(async (req, res) => {
   await eliminarGastoPersonal(req.usuario.id, req.params.id);
   res.status(204).send();
+});
+
+export const patchMetodoGasto = asyncHandler(async (req, res) => {
+  const { metodoPagoId } = cambiarMetodoSchema.parse(req.body);
+  res.json({ gasto: await cambiarMetodoGastoPersonal(req.usuario.id, req.params.id, metodoPagoId) });
 });

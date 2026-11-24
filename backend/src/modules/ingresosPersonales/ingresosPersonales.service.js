@@ -56,3 +56,22 @@ export async function eliminarIngresoPersonal(usuarioId, ingresoId) {
 
   await prisma.ingresoPersonal.delete({ where: { id: ingresoId } });
 }
+
+async function requireMetodoPropio(usuarioId, metodoPagoId) {
+  if (!metodoPagoId) return null;
+  const metodo = await prisma.metodoPagoPersonal.findUnique({ where: { id: metodoPagoId } });
+  if (!metodo || metodo.usuarioId !== usuarioId) {
+    throw new HttpError(400, 'Método de pago no encontrado');
+  }
+  return metodoPagoId;
+}
+
+/** Cambia SOLO el método de un ingreso propio (ej. dónde entró el reintegro de un cuadre). */
+export async function cambiarMetodoIngresoPersonal(usuarioId, ingresoId, metodoPagoId) {
+  const ingreso = await prisma.ingresoPersonal.findUnique({ where: { id: ingresoId } });
+  if (!ingreso || ingreso.usuarioId !== usuarioId) {
+    throw new HttpError(404, 'Ingreso no encontrado');
+  }
+  const metodo = await requireMetodoPropio(usuarioId, metodoPagoId);
+  return prisma.ingresoPersonal.update({ where: { id: ingresoId }, data: { metodoPagoId: metodo }, include: INCLUDE_INGRESO });
+}

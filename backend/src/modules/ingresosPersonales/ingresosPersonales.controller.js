@@ -1,6 +1,7 @@
 import { asyncHandler } from '../../middleware/asyncHandler.js';
-import { crearIngresoPersonalSchema, actualizarIngresoPersonalSchema } from './ingresosPersonales.schema.js';
+import { crearIngresoPersonalSchema, actualizarIngresoPersonalSchema, cambiarMetodoSchema } from './ingresosPersonales.schema.js';
 import {
+  cambiarMetodoIngresoPersonal,
   listarIngresosPersonales,
   crearIngresoPersonal,
   actualizarIngresoPersonal,
@@ -27,4 +28,9 @@ export const patchIngreso = asyncHandler(async (req, res) => {
 export const deleteIngreso = asyncHandler(async (req, res) => {
   await eliminarIngresoPersonal(req.usuario.id, req.params.id);
   res.status(204).send();
+});
+
+export const patchMetodoIngreso = asyncHandler(async (req, res) => {
+  const { metodoPagoId } = cambiarMetodoSchema.parse(req.body);
+  res.json({ ingreso: await cambiarMetodoIngresoPersonal(req.usuario.id, req.params.id, metodoPagoId) });
 });

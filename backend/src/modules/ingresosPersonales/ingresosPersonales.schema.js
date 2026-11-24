@@ -17,3 +17,7 @@ export const actualizarIngresoPersonalSchema = z.object({
   metodoPagoId: z.string().uuid().nullable().optional(),
   categoriaId: z.string().uuid().nullable().optional(),
 });
+
+export const cambiarMetodoSchema = z.object({
+  metodoPagoId: z.string().uuid().nullable(),
+});

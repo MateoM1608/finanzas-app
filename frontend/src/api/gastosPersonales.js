@@ -15,3 +15,7 @@ export function actualizarGasto(id, payload) {
 export function eliminarGasto(id) {
   return api.delete(`/api/gastos-personales/${id}`);
 }
+
+export function cambiarMetodoGasto(id, metodoPagoId) {
+  return api.patch(`/api/gastos-personales/${id}/metodo`, { metodoPagoId }).then((r) => r.data.gasto);
+}
