@@ -330,7 +330,7 @@ onMounted(cargarTodo);
 // --- Presentación (no cambia datos) ---
 const mostrarRegistro = ref(false);
 const tipoRegistro = ref('gasto');
-const tabMovimientos = ref('gastos');
+const tabMovimientos = ref('todos');
 const LIMITE_LISTA = 8;
 const verTodo = ref(false);
 
@@ -361,10 +361,68 @@ const gastosALaFecha = computed(() => {
   return gastos.value.filter((g) => !g.compraId || g.fecha.slice(0, 10) <= hoy);
 });
 
+// --- Filtro por fechas (Todos, Gastos, Ingresos) ---
+const filtroDesde = ref('');
+const filtroHasta = ref('');
+const hayFiltro = computed(() => Boolean(filtroDesde.value || filtroHasta.value));
+
+function enRango(fecha) {
+  const f = String(fecha).slice(0, 10);
+  return (!filtroDesde.value || f >= filtroDesde.value) && (!filtroHasta.value || f <= filtroHasta.value);
+}
+
+function isoDe(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function aplicarRango(tipo) {
+  const hoy = new Date();
+  verTodo.value = false;
+  if (tipo === 'mes') {
+    filtroDesde.value = isoDe(new Date(hoy.getFullYear(), hoy.getMonth(), 1));
+    filtroHasta.value = isoDe(new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0));
+  } else if (tipo === 'mesAnterior') {
+    filtroDesde.value = isoDe(new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1));
+    filtroHasta.value = isoDe(new Date(hoy.getFullYear(), hoy.getMonth(), 0));
+  } else if (tipo === '30dias') {
+    filtroDesde.value = isoDe(new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate() - 29));
+    filtroHasta.value = isoDe(hoy);
+  } else {
+    filtroDesde.value = '';
+    filtroHasta.value = '';
+  }
+}
+
+// Filas de la lista: { tipo: 'gasto' | 'ingreso', mov }, más recientes primero.
+function filas(lista, tipo) {
+  return lista.filter((m) => enRango(m.fecha)).map((mov) => ({ tipo, mov }));
+}
+function porFechaDesc(a, b) {
+  const fa = String(a.mov.fecha).slice(0, 10);
+  const fb = String(b.mov.fecha).slice(0, 10);
+  if (fa !== fb) return fa < fb ? 1 : -1;
+  return String(b.mov.creadoEn ?? '').localeCompare(String(a.mov.creadoEn ?? ''));
+}
+const filasMovimientos = computed(() => {
+  if (tabMovimientos.value === 'gastos') return filas(gastosALaFecha.value, 'gasto').sort(porFechaDesc);
+  if (tabMovimientos.value === 'ingresos') return filas(ingresos.value, 'ingreso').sort(porFechaDesc);
+  return [...filas(gastosALaFecha.value, 'gasto'), ...filas(ingresos.value, 'ingreso')].sort(porFechaDesc);
+});
+
+// Totales de caja de lo que se está viendo (solo lo ya pagado/recibido).
+const totalesFiltro = computed(() => {
+  let entradas = 0;
+  let salidas = 0;
+  for (const { tipo, mov } of filasMovimientos.value) {
+    if (tipo === 'ingreso' && mov.estado === 'recibido') entradas += mov.monto;
+    if (tipo === 'gasto' && mov.estado === 'pagado') salidas += mov.monto;
+  }
+  return { entradas, salidas };
+});
+
 function listaDeTab() {
-  if (tabMovimientos.value === 'gastos') return gastosALaFecha.value;
   if (tabMovimientos.value === 'compras') return compras.value;
-  return ingresos.value;
+  return filasMovimientos.value;
 }
 const listaVisible = computed(() => (verTodo.value ? listaDeTab() : listaDeTab().slice(0, LIMITE_LISTA)));
 const totalLista = computed(() => listaDeTab().length);
@@ -474,6 +532,16 @@ function saldoCompra(compra) {
               type="button"
               role="tab"
               class="tab"
+              :class="{ 'tab-active': tabMovimientos === 'todos' }"
+              :aria-selected="tabMovimientos === 'todos'"
+              @click="cambiarTab('todos')"
+            >
+              Todos <span class="ml-1 text-ink-tertiary">{{ gastosALaFecha.length + ingresos.length }}</span>
+            </button>
+            <button
+              type="button"
+              role="tab"
+              class="tab"
               :class="{ 'tab-active': tabMovimientos === 'gastos' }"
               :aria-selected="tabMovimientos === 'gastos'"
               @click="cambiarTab('gastos')"
@@ -503,6 +571,35 @@ function saldoCompra(compra) {
           </div>
         </div>
 
+        <div
+          v-if="tabMovimientos !== 'compras'"
+          class="mx-5 sm:mx-6 mb-3 flex flex-wrap items-end gap-3 rounded-xl border border-border bg-surface-sunken/60 p-3"
+        >
+          <div>
+            <label class="label !mb-1" for="mov-desde">Desde</label>
+            <input id="mov-desde" v-model="filtroDesde" type="date" class="field !w-auto !py-1.5 !text-[13px]" @change="verTodo = false" />
+          </div>
+          <div>
+            <label class="label !mb-1" for="mov-hasta">Hasta</label>
+            <input id="mov-hasta" v-model="filtroHasta" type="date" class="field !w-auto !py-1.5 !text-[13px]" @change="verTodo = false" />
+          </div>
+          <div class="flex flex-wrap gap-1">
+            <button type="button" class="btn-ghost btn-sm" @click="aplicarRango('mes')">Este mes</button>
+            <button type="button" class="btn-ghost btn-sm" @click="aplicarRango('mesAnterior')">Mes anterior</button>
+            <button type="button" class="btn-ghost btn-sm" @click="aplicarRango('30dias')">Últimos 30 días</button>
+            <button v-if="hayFiltro" type="button" class="btn-ghost btn-sm" @click="aplicarRango('todo')">Quitar filtro</button>
+          </div>
+          <p class="ml-auto text-[13px] text-ink-secondary">
+            <span v-if="tabMovimientos !== 'gastos'" class="whitespace-nowrap">
+              Entró <span class="font-semibold text-positive">+{{ formatCurrency(totalesFiltro.entradas) }}</span>
+            </span>
+            <span v-if="tabMovimientos === 'todos'" class="mx-1.5 text-ink-tertiary">·</span>
+            <span v-if="tabMovimientos !== 'ingresos'" class="whitespace-nowrap">
+              Salió <span class="font-semibold text-ink-primary">−{{ formatCurrency(totalesFiltro.salidas) }}</span>
+            </span>
+          </p>
+        </div>
+
         <div class="px-5 sm:px-6 pb-2">
           <div v-if="loading" class="space-y-3 py-3" aria-busy="true">
             <div v-for="n in 4" :key="n" class="h-10 rounded-lg bg-surface-sunken animate-pulse" />
@@ -511,27 +608,33 @@ function saldoCompra(compra) {
           <div v-else-if="!totalLista" class="empty py-10">
             <AppIcon name="receipt" class="mx-auto mb-2 h-6 w-6" />
             {{
-              tabMovimientos === 'gastos'
-                ? 'Aún no has registrado gastos personales.'
-                : tabMovimientos === 'compras'
-                  ? 'No tienes compras a cuotas. Regístralas desde Registrar movimiento, marcando "Es una compra a cuotas".'
-                  : 'Aún no has registrado ingresos personales.'
+              hayFiltro && tabMovimientos !== 'compras'
+                ? 'No hay movimientos entre esas fechas.'
+                : tabMovimientos === 'gastos'
+                  ? 'Aún no has registrado gastos personales.'
+                  : tabMovimientos === 'compras'
+                    ? 'No tienes compras a cuotas. Regístralas desde Registrar movimiento, marcando "Es una compra a cuotas".'
+                    : tabMovimientos === 'ingresos'
+                      ? 'Aún no has registrado ingresos personales.'
+                      : 'Aún no tienes movimientos.'
             }}
-            <div v-if="tabMovimientos !== 'compras'" class="mt-4">
+            <div v-if="tabMovimientos !== 'compras' && !hayFiltro" class="mt-4">
               <button
                 type="button"
                 class="btn-secondary btn-sm"
-                @click="abrirRegistro(tabMovimientos === 'gastos' ? 'gasto' : 'ingreso')"
+                @click="abrirRegistro(tabMovimientos === 'ingresos' ? 'ingreso' : 'gasto')"
               >
                 <AppIcon name="plus" class="h-3.5 w-3.5" />
-                {{ tabMovimientos === 'gastos' ? 'Registrar gasto' : 'Registrar ingreso' }}
+                {{ tabMovimientos === 'ingresos' ? 'Registrar ingreso' : 'Registrar movimiento' }}
               </button>
             </div>
           </div>
 
-          <!-- Gastos -->
-          <ul v-else-if="tabMovimientos === 'gastos'" class="list">
-            <li v-for="gasto in listaVisible" :key="gasto.id" class="list-row group">
+          <!-- Todos / Gastos / Ingresos (una sola lista, más recientes primero) -->
+          <ul v-else-if="tabMovimientos !== 'compras'" class="list">
+            <template v-for="fila in listaVisible" :key="`${fila.tipo}-${fila.mov.id}`">
+            <template v-if="fila.tipo === 'gasto'">
+            <li v-for="gasto in [fila.mov]" :key="gasto.id" class="list-row group">
               <div class="flex min-w-0 items-center gap-3">
                 <span class="hidden sm:grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-surface-sunken text-ink-secondary">
                   <AppIcon :name="ORIGEN_MOVIMIENTO[gasto.origen]?.icono ?? (gasto.origenConfigId ? 'repeat' : 'receipt')" class="h-4 w-4" />
@@ -604,62 +707,9 @@ function saldoCompra(compra) {
                 </div>
               </div>
             </li>
-          </ul>
-
-          <!-- Compras a cuotas -->
-          <ul v-else-if="tabMovimientos === 'compras'" class="list">
-            <li v-for="compra in listaVisible" :key="compra.id" class="list-row group">
-              <div class="flex min-w-0 items-center gap-3">
-                <span class="hidden sm:grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-surface-sunken text-ink-secondary">
-                  <AppIcon name="calendar" class="h-4 w-4" />
-                </span>
-                <div class="min-w-0">
-                  <p class="flex flex-wrap items-center gap-1.5 text-sm font-medium text-ink-primary">
-                    <span class="truncate">{{ compra.descripcion }}</span>
-                    <span class="badge-neutral">{{ cuotasPagadas(compra) }}/{{ compra.numeroCuotas }} pagadas</span>
-                    <span :class="compra.modoCobro === 'automatico' ? 'badge-accent' : 'badge-warning'">
-                      {{ compra.modoCobro === 'automatico' ? 'Automático' : 'Manual' }}
-                    </span>
-                  </p>
-                  <p class="mt-0.5 text-[13px] text-ink-tertiary">
-                    {{ formatCurrency(compra.montoTotal) }} en {{ compra.numeroCuotas }} cuotas · desde
-                    {{ formatDate(compra.fechaPrimeraCuota) }}
-                    <template v-if="compra.metodoPago"> · {{ compra.metodoPago.nombre }}</template>
-                  </p>
-                </div>
-              </div>
-              <div class="flex shrink-0 items-center gap-2">
-                <span class="text-right">
-                  <span class="block text-sm font-semibold text-ink-primary">{{ formatCurrency(saldoCompra(compra)) }}</span>
-                  <span class="block text-xs text-ink-tertiary">por pagar</span>
-                </span>
-                <button
-                  type="button"
-                  class="btn-icon !p-1.5"
-                  :aria-label="`Editar ${compra.descripcion}`"
-                  title="Editar compra"
-                  @click="(errorCompra = ''), (editandoCompra = compra)"
-                >
-                  <AppIcon name="edit" class="h-4 w-4" />
-                </button>
-                <button
-                  v-if="!cuotasPagadas(compra)"
-                  type="button"
-                  class="btn-icon !p-1.5 hover:!text-negative sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100"
-                  :disabled="eliminandoCompraId === compra.id"
-                  :aria-label="`Eliminar ${compra.descripcion}`"
-                  title="Eliminar compra"
-                  @click="onEliminarCompra(compra)"
-                >
-                  <AppIcon name="trash" class="h-4 w-4" />
-                </button>
-              </div>
-            </li>
-          </ul>
-
-          <!-- Ingresos -->
-          <ul v-else class="list">
-            <li v-for="ingreso in listaVisible" :key="ingreso.id" class="list-row group">
+            </template>
+            <template v-else>
+            <li v-for="ingreso in [fila.mov]" :key="ingreso.id" class="list-row group">
               <div class="flex min-w-0 items-center gap-3">
                 <span class="hidden sm:grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-positive/10 text-positive">
                   <AppIcon :name="ingreso.origenConfigId ? 'repeat' : 'arrowDownLeft'" class="h-4 w-4" />
@@ -732,7 +782,61 @@ function saldoCompra(compra) {
                 </div>
               </div>
             </li>
+            </template>
+            </template>
           </ul>
+
+          <!-- Compras a cuotas -->
+          <ul v-else-if="tabMovimientos === 'compras'" class="list">
+            <li v-for="compra in listaVisible" :key="compra.id" class="list-row group">
+              <div class="flex min-w-0 items-center gap-3">
+                <span class="hidden sm:grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-surface-sunken text-ink-secondary">
+                  <AppIcon name="calendar" class="h-4 w-4" />
+                </span>
+                <div class="min-w-0">
+                  <p class="flex flex-wrap items-center gap-1.5 text-sm font-medium text-ink-primary">
+                    <span class="truncate">{{ compra.descripcion }}</span>
+                    <span class="badge-neutral">{{ cuotasPagadas(compra) }}/{{ compra.numeroCuotas }} pagadas</span>
+                    <span :class="compra.modoCobro === 'automatico' ? 'badge-accent' : 'badge-warning'">
+                      {{ compra.modoCobro === 'automatico' ? 'Automático' : 'Manual' }}
+                    </span>
+                  </p>
+                  <p class="mt-0.5 text-[13px] text-ink-tertiary">
+                    {{ formatCurrency(compra.montoTotal) }} en {{ compra.numeroCuotas }} cuotas · desde
+                    {{ formatDate(compra.fechaPrimeraCuota) }}
+                    <template v-if="compra.metodoPago"> · {{ compra.metodoPago.nombre }}</template>
+                  </p>
+                </div>
+              </div>
+              <div class="flex shrink-0 items-center gap-2">
+                <span class="text-right">
+                  <span class="block text-sm font-semibold text-ink-primary">{{ formatCurrency(saldoCompra(compra)) }}</span>
+                  <span class="block text-xs text-ink-tertiary">por pagar</span>
+                </span>
+                <button
+                  type="button"
+                  class="btn-icon !p-1.5"
+                  :aria-label="`Editar ${compra.descripcion}`"
+                  title="Editar compra"
+                  @click="(errorCompra = ''), (editandoCompra = compra)"
+                >
+                  <AppIcon name="edit" class="h-4 w-4" />
+                </button>
+                <button
+                  v-if="!cuotasPagadas(compra)"
+                  type="button"
+                  class="btn-icon !p-1.5 hover:!text-negative sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100"
+                  :disabled="eliminandoCompraId === compra.id"
+                  :aria-label="`Eliminar ${compra.descripcion}`"
+                  title="Eliminar compra"
+                  @click="onEliminarCompra(compra)"
+                >
+                  <AppIcon name="trash" class="h-4 w-4" />
+                </button>
+              </div>
+            </li>
+          </ul>
+
         </div>
 
         <div v-if="!loading && totalLista > LIMITE_LISTA" class="border-t border-border px-5 sm:px-6 py-3">
