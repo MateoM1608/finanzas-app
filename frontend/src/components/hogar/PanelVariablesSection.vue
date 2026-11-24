@@ -12,6 +12,7 @@ import { formatCurrency, formatDate, formatReparto } from '../../utils/format.js
 import FormField from '../FormField.vue';
 import AlertError from '../AlertError.vue';
 import AppModal from '../AppModal.vue';
+import AppIcon from '../AppIcon.vue';
 
 const gastos = ref([]);
 const miembros = ref([]);
@@ -37,9 +38,11 @@ function ordenar(lista) {
   return [...lista].sort((a, b) => new Date(a.fechaLimite) - new Date(b.fechaLimite));
 }
 
+// Solo presentación: insignia por estado del gasto.
 const ESTADO_INFO = {
-  incluido_en_corte: { label: 'En corte abierto', clase: 'bg-accent-muted text-accent' },
-  liquidado: { label: 'Liquidado', clase: 'bg-surface-raised text-ink-tertiary' },
+  pendiente: { label: 'Pendiente', clase: 'badge-warning' },
+  incluido_en_corte: { label: 'En corte abierto', clase: 'badge-accent' },
+  liquidado: { label: 'Liquidado', clase: 'badge-positive' },
 };
 
 function estadoInfo(gasto) {
@@ -176,21 +179,27 @@ onMounted(cargar);
 </script>
 
 <template>
-  <div class="card p-6 sm:p-8">
-    <div class="flex flex-wrap items-center justify-between gap-3 mb-5">
-      <h3 class="text-base font-semibold text-ink-primary">Gastos variables puntuales</h3>
-      <button class="btn-primary" @click="mostrarForm = true">Agregar gasto variable</button>
+  <section class="card card-pad" aria-labelledby="gastos-variables-titulo">
+    <div class="flex flex-wrap items-start justify-between gap-3 mb-5">
+      <div class="min-w-0">
+        <h3 id="gastos-variables-titulo" class="section-title">Gastos variables puntuales</h3>
+        <p class="section-hint">Gastos únicos del hogar; entran al próximo corte según su fecha límite.</p>
+      </div>
+      <button class="btn-primary" @click="mostrarForm = true">
+        <AppIcon name="plus" class="h-4 w-4" />
+        Agregar gasto variable
+      </button>
     </div>
 
-    <AlertError :message="error" />
+    <AlertError :message="error" class="mb-4" />
 
     <AppModal v-if="mostrarForm" title="Agregar gasto variable" @close="mostrarForm = false">
       <form class="grid grid-cols-1 sm:grid-cols-2 gap-4" @submit.prevent="onCrear">
         <FormField v-model="item" label="Item" required placeholder="Creta, regalo…" />
         <FormField v-model="valorTotal" type="number" label="Valor total (COP)" required />
         <div>
-          <label class="label">Quién pagó</label>
-          <select v-model="pagoUsuarioId" class="field" required>
+          <label class="label" for="gasto-variable-pagador">Quién pagó</label>
+          <select id="gasto-variable-pagador" v-model="pagoUsuarioId" class="field" required>
             <option value="" disabled>Selecciona</option>
             <option v-for="m in miembros" :key="m.id" :value="m.id">{{ m.nombre }}</option>
           </select>
@@ -198,8 +207,8 @@ onMounted(cargar);
         <FormField v-model="fechaLimite" type="date" label="Fecha límite" required />
 
         <div class="sm:col-span-2">
-          <label class="inline-flex items-center gap-2 text-sm text-ink-secondary">
-            <input v-model="personalizarReparto" type="checkbox" />
+          <label class="inline-flex items-center gap-2.5 text-sm text-ink-secondary cursor-pointer">
+            <input v-model="personalizarReparto" type="checkbox" class="checkbox" />
             Personalizar el reparto de este gasto
           </label>
         </div>
@@ -213,110 +222,118 @@ onMounted(cargar);
             />
           </div>
           <p
-            class="sm:col-span-2 text-sm"
-            :class="repartoManualValido ? 'text-positive' : 'text-negative'"
+            class="sm:col-span-2 flex items-center gap-2 text-[13px] font-medium rounded-lg px-3 py-2"
+            :class="repartoManualValido ? 'text-positive bg-positive/10' : 'text-negative bg-negative/10'"
           >
-            Suma del reparto: {{ formatCurrency(sumaRepartoManual) }}
-            <span v-if="valorTotal"> de {{ formatCurrency(Number(valorTotal)) }}</span>
+            <AppIcon :name="repartoManualValido ? 'check' : 'alert'" class="h-4 w-4 shrink-0" />
+            <span>
+              Suma del reparto: {{ formatCurrency(sumaRepartoManual) }}
+              <span v-if="valorTotal"> de {{ formatCurrency(Number(valorTotal)) }}</span>
+            </span>
           </p>
         </template>
 
-        <div class="sm:col-span-2">
+        <div class="sm:col-span-2 pt-1">
+          <p v-if="!personalizarReparto" class="text-[13px] text-ink-tertiary mb-3">
+            El reparto se calcula automáticamente según el reparto configurado en Configuración.
+          </p>
           <button
             type="submit"
-            class="btn-primary"
+            class="btn-primary w-full sm:w-auto"
             :disabled="creando || (personalizarReparto && !repartoManualValido)"
           >
             {{ creando ? 'Agregando…' : 'Agregar gasto' }}
           </button>
-          <p v-if="!personalizarReparto" class="text-xs text-ink-tertiary mt-2">
-            El reparto se calcula automáticamente según el split configurado en Settings.
-          </p>
         </div>
       </form>
     </AppModal>
 
-    <p v-if="loading" class="text-sm text-ink-secondary">Cargando…</p>
-    <p v-else-if="!gastos.length" class="text-sm text-ink-secondary">No hay gastos variables pendientes.</p>
+    <p v-if="loading" class="text-sm text-ink-tertiary">Cargando…</p>
+    <div v-else-if="!gastos.length" class="empty flex flex-col items-center gap-2">
+      <AppIcon name="receipt" class="h-6 w-6" />
+      No hay gastos variables pendientes.
+    </div>
 
-    <ul v-else class="divide-y divide-border">
-      <li
-        v-for="gasto in gastos"
-        :key="gasto.id"
-        class="py-4 group"
-        :class="{ 'opacity-50': !esEditable(gasto) }"
-      >
-        <div class="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p class="text-ink-primary font-medium flex items-center gap-2">
-              {{ gasto.item }}
-              <span
-                v-if="estadoInfo(gasto)"
-                class="text-xs font-semibold uppercase px-2 py-0.5 rounded-full"
-                :class="estadoInfo(gasto).clase"
-              >
+    <ul v-else class="list">
+      <li v-for="gasto in gastos" :key="gasto.id" class="py-3.5">
+        <div class="flex items-start justify-between gap-4">
+          <div class="min-w-0" :class="{ 'opacity-60': !esEditable(gasto) }">
+            <p class="flex flex-wrap items-center gap-2 text-sm font-medium text-ink-primary">
+              <span class="break-words">{{ gasto.item }}</span>
+              <span v-if="estadoInfo(gasto)" :class="estadoInfo(gasto).clase">
                 {{ estadoInfo(gasto).label }}
               </span>
             </p>
-            <p class="text-sm text-ink-tertiary">Vence {{ formatDate(gasto.fechaLimite) }}</p>
+            <p class="text-[13px] text-ink-tertiary mt-1">
+              Vence {{ formatDate(gasto.fechaLimite) }} · Pagó {{ gasto.pagador.nombre }}
+            </p>
           </div>
-          <div class="flex items-center gap-3">
-            <span class="text-ink-primary font-medium">{{ formatCurrency(gasto.valorTotal) }}</span>
+          <span
+            class="shrink-0 text-right text-sm font-medium text-ink-primary"
+            :class="{ 'opacity-60': !esEditable(gasto) }"
+          >
+            {{ formatCurrency(gasto.valorTotal) }}
+          </span>
+        </div>
+
+        <div
+          v-if="!esEditable(gasto) || editandoRepartoId !== gasto.id"
+          class="mt-2 flex flex-wrap items-center justify-between gap-x-4 gap-y-2"
+        >
+          <p class="min-w-0 text-[13px] text-ink-tertiary" :class="{ 'opacity-60': !esEditable(gasto) }">
+            Reparto: {{ formatReparto(gasto.repartos) }}
+          </p>
+          <div v-if="esEditable(gasto)" class="flex items-center gap-1.5 ml-auto">
+            <label :for="`pagador-${gasto.id}`" class="sr-only">Quién pagó {{ gasto.item }}</label>
             <select
-              v-if="esEditable(gasto)"
-              class="field !w-auto text-sm"
+              :id="`pagador-${gasto.id}`"
+              class="field !w-auto !py-1.5 !pl-2.5 !pr-8 !text-[13px] !rounded-lg"
               :value="gasto.pagoUsuarioId"
               @change="onCambiarPagador(gasto, $event.target.value)"
             >
               <option v-for="m in miembros" :key="m.id" :value="m.id">{{ m.nombre }}</option>
             </select>
-            <span v-else class="text-sm text-ink-tertiary">{{ gasto.pagador.nombre }}</span>
+            <button class="btn-ghost btn-sm" @click="onIniciarEditarReparto(gasto)">
+              <AppIcon name="edit" class="h-3.5 w-3.5" />
+              Editar reparto
+            </button>
             <button
-              v-if="esEditable(gasto)"
-              class="text-sm text-ink-tertiary hover:text-negative transition-colors opacity-0 group-hover:opacity-100"
+              class="btn-icon !p-1.5 hover:!text-negative hover:!bg-negative/10"
+              :aria-label="`Eliminar ${gasto.item}`"
+              title="Eliminar"
               :disabled="eliminandoId === gasto.id"
               @click="onEliminar(gasto)"
             >
-              Eliminar
+              <AppIcon name="trash" class="h-4 w-4" />
             </button>
           </div>
         </div>
 
-        <div v-if="!esEditable(gasto) || editandoRepartoId !== gasto.id" class="flex items-center justify-between mt-2">
-          <p class="text-sm text-ink-tertiary">
-            Pagó {{ gasto.pagador.nombre }} · Reparto: {{ formatReparto(gasto.repartos) }}
-          </p>
-          <button
-            v-if="esEditable(gasto)"
-            class="text-sm text-accent hover:text-accent-hover shrink-0"
-            @click="onIniciarEditarReparto(gasto)"
-          >
-            Editar reparto
-          </button>
-        </div>
-
-        <div v-else class="mt-3 p-4 bg-surface-raised rounded-xl space-y-3">
+        <div v-else class="panel-sunken mt-3 p-4 space-y-3">
+          <p class="text-[13px] font-medium text-ink-secondary">Reparto de este gasto</p>
           <div v-for="m in miembros" :key="m.id" class="flex items-center justify-between gap-4">
-            <span class="text-sm text-ink-secondary">{{ m.nombre }}</span>
+            <label :for="`reparto-${gasto.id}-${m.id}`" class="text-sm text-ink-primary truncate">{{ m.nombre }}</label>
             <input
+              :id="`reparto-${gasto.id}-${m.id}`"
               v-model="repartoEdicion[m.id]"
               type="number"
-              class="field w-32 text-right"
+              inputmode="numeric"
+              class="field !w-36 text-right"
             />
           </div>
-          <div class="flex items-center justify-between pt-1">
+          <div class="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-border">
             <span
-              class="text-sm"
+              class="text-[13px] font-medium"
               :class="sumaRepartoEdicion() === gasto.valorTotal ? 'text-positive' : 'text-negative'"
             >
               Suma: {{ formatCurrency(sumaRepartoEdicion()) }} de {{ formatCurrency(gasto.valorTotal) }}
             </span>
-            <div class="flex gap-2">
-              <button class="btn-ghost !px-3 !py-1.5 text-sm" @click="onCancelarEditarReparto">
+            <div class="flex gap-2 ml-auto">
+              <button class="btn-ghost btn-sm" @click="onCancelarEditarReparto">
                 Cancelar
               </button>
               <button
-                class="btn-primary !px-3 !py-1.5 text-sm"
+                class="btn-primary btn-sm"
                 :disabled="guardandoRepartoId === gasto.id || sumaRepartoEdicion() !== gasto.valorTotal"
                 @click="onGuardarReparto(gasto)"
               >
@@ -327,5 +344,5 @@ onMounted(cargar);
         </div>
       </li>
     </ul>
-  </div>
+  </section>
 </template>

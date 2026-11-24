@@ -10,6 +10,7 @@ import AppLayout from '../components/AppLayout.vue';
 import FormField from '../components/FormField.vue';
 import AlertError from '../components/AlertError.vue';
 import AppModal from '../components/AppModal.vue';
+import AppIcon from '../components/AppIcon.vue';
 import ConfiguracionPersonalSection from '../components/personal/ConfiguracionPersonalSection.vue';
 import ResumenPersonalSection from '../components/personal/ResumenPersonalSection.vue';
 import AhorrosPersonalesSection from '../components/personal/AhorrosPersonalesSection.vue';
@@ -213,219 +214,365 @@ async function cargarTodo() {
 }
 
 onMounted(cargarTodo);
+
+// --- Presentación (no cambia datos) ---
+const mostrarRegistro = ref(false);
+const tipoRegistro = ref('gasto');
+const tabMovimientos = ref('gastos');
+const LIMITE_LISTA = 8;
+const verTodo = ref(false);
+
+function abrirRegistro(tipo = 'gasto') {
+  tipoRegistro.value = tipo;
+  error.value = '';
+  mostrarRegistro.value = true;
+}
+
+async function guardarRegistro() {
+  if (tipoRegistro.value === 'gasto') await onAgregarGasto();
+  else await onAgregarIngreso();
+  if (!error.value) {
+    tabMovimientos.value = tipoRegistro.value === 'gasto' ? 'gastos' : 'ingresos';
+    mostrarRegistro.value = false;
+  }
+}
+
+function cambiarTab(tab) {
+  tabMovimientos.value = tab;
+  verTodo.value = false;
+}
+
+const listaVisible = computed(() => {
+  const lista = tabMovimientos.value === 'gastos' ? gastos.value : ingresos.value;
+  return verTodo.value ? lista : lista.slice(0, LIMITE_LISTA);
+});
+const totalLista = computed(() => (tabMovimientos.value === 'gastos' ? gastos.value : ingresos.value).length);
 </script>
 
 <template>
   <AppLayout title="Personal" subtitle="Tu dinero: disponible, compromisos, límites y ahorros.">
+    <template #actions>
+      <button type="button" class="btn-secondary" aria-label="Configuración personal" @click="abrirConfig()">
+        <AppIcon name="sliders" class="h-4 w-4" />
+        <span class="hidden sm:inline">Configuración</span>
+      </button>
+      <button type="button" class="btn-primary" @click="abrirRegistro('gasto')">
+        <AppIcon name="plus" class="h-4 w-4" :stroke-width="2.2" />
+        Registrar movimiento
+      </button>
+    </template>
+
     <div class="space-y-6">
       <ResumenPersonalSection ref="resumenRef" />
 
-      <section class="card p-6 sm:p-8">
-        <div class="flex flex-wrap items-center justify-between gap-3 mb-5">
-          <h2 class="text-base font-semibold text-ink-primary">Límites</h2>
-          <button class="btn-secondary" @click="abrirConfig('limites')">Configurar límites</button>
-        </div>
-        <LimitesPersonalesSection ref="limitesRef" />
-      </section>
-
-      <section class="card p-6 sm:p-8">
-        <div class="flex flex-wrap items-center justify-between gap-3 mb-5">
-          <h2 class="text-base font-semibold text-ink-primary">Ahorros</h2>
-          <button class="btn-secondary" @click="abrirConfig('ahorros')">Configurar metas</button>
-        </div>
-        <AhorrosPersonalesSection ref="ahorrosRef" />
-      </section>
-
-      <AlertError :message="error" />
-
-      <section class="card p-6 sm:p-8">
-        <div class="flex flex-wrap items-center justify-between gap-3 mb-5">
-          <h2 class="text-base font-semibold text-ink-primary">Registrar gasto</h2>
-          <button class="btn-secondary" @click="abrirConfig()">Configuración personal</button>
-        </div>
-
-        <form class="grid grid-cols-1 sm:grid-cols-2 gap-4" @submit.prevent="onAgregarGasto">
-          <FormField v-model="gMonto" type="number" label="Monto (COP)" required placeholder="30000" />
-          <FormField v-model="gFecha" type="date" label="Fecha" required />
-          <FormField v-model="gDescripcion" label="Descripción (opcional)" placeholder="Detalle breve" />
-          <div>
-            <label class="label">Categoría (opcional)</label>
-            <select v-model="gCategoriaId" class="field">
-              <option value="">Sin definir</option>
-              <option v-for="c in categoriasParaGasto" :key="c.id" :value="c.id">{{ c.nombre }}</option>
-            </select>
-          </div>
-          <div>
-            <label class="label">Método de pago (opcional)</label>
-            <select v-model="gMetodoPagoId" class="field">
-              <option value="">Sin definir</option>
-              <option v-for="m in metodos" :key="m.id" :value="m.id">{{ m.nombre }}</option>
-            </select>
-          </div>
-          <div>
-            <label class="label">Estado</label>
-            <select v-model="gEstado" class="field">
-              <option value="pagado">Ya pagado</option>
-              <option value="pendiente">Pendiente</option>
-            </select>
-          </div>
-          <div class="sm:col-span-2 flex items-center gap-2">
-            <label class="inline-flex items-center gap-2 text-sm text-ink-secondary">
-              <input v-model="gEsObligatorio" type="checkbox" /> Es un gasto obligatorio
-            </label>
-          </div>
-
-          <div class="sm:col-span-2">
-            <button type="submit" class="btn-primary w-full sm:w-auto" :disabled="guardandoGasto">
-              {{ guardandoGasto ? 'Guardando…' : 'Agregar gasto' }}
-            </button>
-          </div>
-        </form>
-      </section>
-
-      <section class="card p-6 sm:p-8">
-        <h2 class="text-base font-semibold text-ink-primary mb-5">Gastos recientes</h2>
-
-        <p v-if="loading" class="text-sm text-ink-secondary">Cargando…</p>
-        <p v-else-if="!gastos.length" class="text-sm text-ink-secondary">
-          Aún no has registrado gastos personales.
-        </p>
-
-        <ul v-else class="divide-y divide-border">
-          <li v-for="gasto in gastos" :key="gasto.id" class="py-4 group">
-            <div class="flex items-center justify-between gap-4">
+      <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        <section class="card card-pad">
+          <div class="flex items-start justify-between gap-3 mb-5">
+            <div class="flex items-center gap-3">
+              <span class="grid h-9 w-9 place-items-center rounded-xl bg-surface-sunken text-ink-secondary">
+                <AppIcon name="gauge" class="h-[18px] w-[18px]" />
+              </span>
               <div>
-                <p class="text-ink-primary font-medium flex items-center gap-2 flex-wrap">
-                  {{ gasto.descripcion || gasto.categoria?.nombre || 'Gasto personal' }}
-                  <span
-                    v-if="gasto.estado === 'pendiente'"
-                    class="text-xs font-semibold uppercase px-2 py-0.5 rounded-full bg-negative/10 text-negative"
-                  >
-                    Pendiente
-                  </span>
-                  <span v-if="gasto.esObligatorio" class="text-xs text-accent">obligatorio</span>
-                  <span v-if="gasto.origenConfigId" class="text-xs text-ink-tertiary">(fijo)</span>
-                  <span v-if="gasto.origenCorteId" class="text-xs text-ink-tertiary">(hogar)</span>
-                </p>
-                <p class="text-sm text-ink-tertiary">
-                  {{ formatDate(gasto.fecha) }}
-                  <template v-if="gasto.descripcion && gasto.categoria"> · {{ gasto.categoria.nombre }}</template>
-                  <template v-if="gasto.metodoPago"> · {{ gasto.metodoPago.nombre }}</template>
-                </p>
-              </div>
-
-              <div class="flex items-center gap-3 shrink-0">
-                <span class="text-ink-primary font-medium">{{ formatCurrency(gasto.monto) }}</span>
-                <button
-                  class="text-sm text-accent hover:text-accent-hover"
-                  :disabled="cambiandoEstadoGastoId === gasto.id"
-                  @click="onToggleEstadoGasto(gasto)"
-                >
-                  {{ gasto.estado === 'pagado' ? 'Marcar pendiente' : 'Marcar pagado' }}
-                </button>
-                <button
-                  v-if="!gasto.origenConfigId && !gasto.origenCorteId"
-                  class="text-sm text-ink-tertiary hover:text-negative transition-colors opacity-0 group-hover:opacity-100"
-                  :disabled="eliminandoGastoId === gasto.id"
-                  @click="onEliminarGasto(gasto.id)"
-                >
-                  Eliminar
-                </button>
+                <h2 class="section-title">Límites</h2>
+                <p class="section-hint">Topes de gasto del ciclo actual.</p>
               </div>
             </div>
-          </li>
-        </ul>
-      </section>
-
-      <section class="card p-6 sm:p-8">
-        <h2 class="text-base font-semibold text-ink-primary mb-5">Registrar ingreso</h2>
-
-        <form class="grid grid-cols-1 sm:grid-cols-2 gap-4" @submit.prevent="onAgregarIngreso">
-          <FormField v-model="iMonto" type="number" label="Monto (COP)" required placeholder="3000000" />
-          <FormField v-model="iFecha" type="date" label="Fecha" required />
-          <FormField v-model="iDescripcion" label="Descripción (opcional)" placeholder="Ej. Salario, freelance" />
-          <div>
-            <label class="label">Categoría (opcional)</label>
-            <select v-model="iCategoriaId" class="field">
-              <option value="">Sin definir</option>
-              <option v-for="c in categoriasParaIngreso" :key="c.id" :value="c.id">{{ c.nombre }}</option>
-            </select>
+            <button type="button" class="btn-ghost btn-sm" @click="abrirConfig('limites')">Configurar</button>
           </div>
-          <div>
-            <label class="label">Método de pago (opcional)</label>
-            <select v-model="iMetodoPagoId" class="field">
-              <option value="">Sin definir</option>
-              <option v-for="m in metodos" :key="m.id" :value="m.id">{{ m.nombre }}</option>
-            </select>
-          </div>
-          <div>
-            <label class="label">Estado</label>
-            <select v-model="iEstado" class="field">
-              <option value="recibido">Ya recibido</option>
-              <option value="pendiente">Pendiente</option>
-            </select>
-          </div>
+          <LimitesPersonalesSection ref="limitesRef" />
+        </section>
 
-          <div class="sm:col-span-2">
-            <button type="submit" class="btn-primary w-full sm:w-auto" :disabled="guardandoIngreso">
-              {{ guardandoIngreso ? 'Guardando…' : 'Agregar ingreso' }}
-            </button>
-          </div>
-        </form>
-      </section>
-
-      <section class="card p-6 sm:p-8">
-        <h2 class="text-base font-semibold text-ink-primary mb-5">Ingresos recientes</h2>
-
-        <p v-if="loading" class="text-sm text-ink-secondary">Cargando…</p>
-        <p v-else-if="!ingresos.length" class="text-sm text-ink-secondary">
-          Aún no has registrado ingresos personales.
-        </p>
-
-        <ul v-else class="divide-y divide-border">
-          <li v-for="ingreso in ingresos" :key="ingreso.id" class="py-4 group">
-            <div class="flex items-center justify-between gap-4">
+        <section class="card card-pad">
+          <div class="flex items-start justify-between gap-3 mb-5">
+            <div class="flex items-center gap-3">
+              <span class="grid h-9 w-9 place-items-center rounded-xl bg-surface-sunken text-ink-secondary">
+                <AppIcon name="piggy" class="h-[18px] w-[18px]" />
+              </span>
               <div>
-                <p class="text-ink-primary font-medium flex items-center gap-2 flex-wrap">
-                  {{ ingreso.descripcion || ingreso.categoria?.nombre || 'Ingreso personal' }}
-                  <span
-                    v-if="ingreso.estado === 'pendiente'"
-                    class="text-xs font-semibold uppercase px-2 py-0.5 rounded-full bg-negative/10 text-negative"
-                  >
-                    Pendiente
-                  </span>
-                  <span v-if="ingreso.origenConfigId" class="text-xs text-ink-tertiary">(fijo)</span>
-                </p>
-                <p class="text-sm text-ink-tertiary">
-                  {{ formatDate(ingreso.fecha) }}
-                  <template v-if="ingreso.descripcion && ingreso.categoria"> · {{ ingreso.categoria.nombre }}</template>
-                  <template v-if="ingreso.metodoPago"> · {{ ingreso.metodoPago.nombre }}</template>
-                </p>
-              </div>
-
-              <div class="flex items-center gap-3 shrink-0">
-                <span class="text-ink-primary font-medium">{{ formatCurrency(ingreso.monto) }}</span>
-                <button
-                  class="text-sm text-accent hover:text-accent-hover"
-                  :disabled="cambiandoEstadoIngresoId === ingreso.id"
-                  @click="onToggleEstadoIngreso(ingreso)"
-                >
-                  {{ ingreso.estado === 'recibido' ? 'Marcar pendiente' : 'Marcar recibido' }}
-                </button>
-                <button
-                  v-if="!ingreso.origenConfigId"
-                  class="text-sm text-ink-tertiary hover:text-negative transition-colors opacity-0 group-hover:opacity-100"
-                  :disabled="eliminandoIngresoId === ingreso.id"
-                  @click="onEliminarIngreso(ingreso.id)"
-                >
-                  Eliminar
-                </button>
+                <h2 class="section-title">Ahorros</h2>
+                <p class="section-hint">Metas y aportes del ciclo.</p>
               </div>
             </div>
-          </li>
-        </ul>
+            <button type="button" class="btn-ghost btn-sm" @click="abrirConfig('ahorros')">Configurar</button>
+          </div>
+          <AhorrosPersonalesSection ref="ahorrosRef" />
+        </section>
+      </div>
+
+      <AlertError v-if="!mostrarRegistro" :message="error" />
+
+      <!-- Movimientos -->
+      <section class="card">
+        <div class="flex flex-wrap items-center justify-between gap-3 px-5 sm:px-6 pt-5 sm:pt-6 pb-4">
+          <div>
+            <h2 class="section-title">Movimientos</h2>
+            <p class="section-hint">Registrados a mano, generados por tus fijos y los que trae cada corte del hogar.</p>
+          </div>
+          <div class="tabs" role="tablist" aria-label="Tipo de movimiento">
+            <button
+              type="button"
+              role="tab"
+              class="tab"
+              :class="{ 'tab-active': tabMovimientos === 'gastos' }"
+              :aria-selected="tabMovimientos === 'gastos'"
+              @click="cambiarTab('gastos')"
+            >
+              Gastos <span class="ml-1 text-ink-tertiary">{{ gastos.length }}</span>
+            </button>
+            <button
+              type="button"
+              role="tab"
+              class="tab"
+              :class="{ 'tab-active': tabMovimientos === 'ingresos' }"
+              :aria-selected="tabMovimientos === 'ingresos'"
+              @click="cambiarTab('ingresos')"
+            >
+              Ingresos <span class="ml-1 text-ink-tertiary">{{ ingresos.length }}</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="px-5 sm:px-6 pb-2">
+          <div v-if="loading" class="space-y-3 py-3" aria-busy="true">
+            <div v-for="n in 4" :key="n" class="h-10 rounded-lg bg-surface-sunken animate-pulse" />
+          </div>
+
+          <div v-else-if="!totalLista" class="empty py-10">
+            <AppIcon name="receipt" class="mx-auto mb-2 h-6 w-6" />
+            {{ tabMovimientos === 'gastos' ? 'Aún no has registrado gastos personales.' : 'Aún no has registrado ingresos personales.' }}
+            <div class="mt-4">
+              <button
+                type="button"
+                class="btn-secondary btn-sm"
+                @click="abrirRegistro(tabMovimientos === 'gastos' ? 'gasto' : 'ingreso')"
+              >
+                <AppIcon name="plus" class="h-3.5 w-3.5" />
+                {{ tabMovimientos === 'gastos' ? 'Registrar gasto' : 'Registrar ingreso' }}
+              </button>
+            </div>
+          </div>
+
+          <!-- Gastos -->
+          <ul v-else-if="tabMovimientos === 'gastos'" class="list">
+            <li v-for="gasto in listaVisible" :key="gasto.id" class="list-row group">
+              <div class="flex min-w-0 items-center gap-3">
+                <span class="hidden sm:grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-surface-sunken text-ink-secondary">
+                  <AppIcon :name="gasto.origenCorteId ? 'home' : gasto.origenConfigId ? 'repeat' : 'receipt'" class="h-4 w-4" />
+                </span>
+                <div class="min-w-0">
+                  <p class="flex flex-wrap items-center gap-1.5 text-sm font-medium text-ink-primary">
+                    <span class="truncate">{{ gasto.descripcion || gasto.categoria?.nombre || 'Gasto personal' }}</span>
+                    <span v-if="gasto.estado === 'pendiente'" class="badge-warning">Pendiente</span>
+                    <span v-if="gasto.esObligatorio" class="badge-accent">Obligatorio</span>
+                    <span v-if="gasto.origenConfigId" class="badge-neutral">Fijo</span>
+                    <span v-if="gasto.origenCorteId" class="badge-neutral">Hogar</span>
+                  </p>
+                  <p class="mt-0.5 text-[13px] text-ink-tertiary">
+                    {{ formatDate(gasto.fecha) }}
+                    <template v-if="gasto.descripcion && gasto.categoria"> · {{ gasto.categoria.nombre }}</template>
+                    <template v-if="gasto.metodoPago"> · {{ gasto.metodoPago.nombre }}</template>
+                  </p>
+                </div>
+              </div>
+
+              <div class="flex shrink-0 flex-col items-end gap-1 sm:flex-row sm:items-center sm:gap-2">
+                <span class="text-sm font-semibold text-ink-primary sm:mr-1">−{{ formatCurrency(gasto.monto) }}</span>
+                <div class="flex items-center gap-1">
+                  <button
+                    type="button"
+                    class="btn-ghost btn-sm"
+                    :class="gasto.estado === 'pendiente' ? '!text-accent' : ''"
+                    :disabled="cambiandoEstadoGastoId === gasto.id"
+                    @click="onToggleEstadoGasto(gasto)"
+                  >
+                    <AppIcon v-if="gasto.estado === 'pendiente'" name="check" class="h-3.5 w-3.5" :stroke-width="2.2" />
+                    {{ gasto.estado === 'pagado' ? 'Marcar pendiente' : 'Marcar pagado' }}
+                  </button>
+                  <button
+                    v-if="!gasto.origenConfigId && !gasto.origenCorteId"
+                    type="button"
+                    class="btn-icon !p-1.5 hover:!text-negative sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100"
+                    :disabled="eliminandoGastoId === gasto.id"
+                    aria-label="Eliminar gasto"
+                    title="Eliminar"
+                    @click="onEliminarGasto(gasto.id)"
+                  >
+                    <AppIcon name="trash" class="h-4 w-4" />
+                  </button>
+                  <span v-else class="hidden sm:block w-7" aria-hidden="true" />
+                </div>
+              </div>
+            </li>
+          </ul>
+
+          <!-- Ingresos -->
+          <ul v-else class="list">
+            <li v-for="ingreso in listaVisible" :key="ingreso.id" class="list-row group">
+              <div class="flex min-w-0 items-center gap-3">
+                <span class="hidden sm:grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-positive/10 text-positive">
+                  <AppIcon :name="ingreso.origenConfigId ? 'repeat' : 'arrowDownLeft'" class="h-4 w-4" />
+                </span>
+                <div class="min-w-0">
+                  <p class="flex flex-wrap items-center gap-1.5 text-sm font-medium text-ink-primary">
+                    <span class="truncate">{{ ingreso.descripcion || ingreso.categoria?.nombre || 'Ingreso personal' }}</span>
+                    <span v-if="ingreso.estado === 'pendiente'" class="badge-warning">Pendiente</span>
+                    <span v-if="ingreso.origenConfigId" class="badge-neutral">Fijo</span>
+                  </p>
+                  <p class="mt-0.5 text-[13px] text-ink-tertiary">
+                    {{ formatDate(ingreso.fecha) }}
+                    <template v-if="ingreso.descripcion && ingreso.categoria"> · {{ ingreso.categoria.nombre }}</template>
+                    <template v-if="ingreso.metodoPago"> · {{ ingreso.metodoPago.nombre }}</template>
+                  </p>
+                </div>
+              </div>
+
+              <div class="flex shrink-0 flex-col items-end gap-1 sm:flex-row sm:items-center sm:gap-2">
+                <span class="text-sm font-semibold text-positive sm:mr-1">+{{ formatCurrency(ingreso.monto) }}</span>
+                <div class="flex items-center gap-1">
+                  <button
+                    type="button"
+                    class="btn-ghost btn-sm"
+                    :class="ingreso.estado === 'pendiente' ? '!text-accent' : ''"
+                    :disabled="cambiandoEstadoIngresoId === ingreso.id"
+                    @click="onToggleEstadoIngreso(ingreso)"
+                  >
+                    <AppIcon v-if="ingreso.estado === 'pendiente'" name="check" class="h-3.5 w-3.5" :stroke-width="2.2" />
+                    {{ ingreso.estado === 'recibido' ? 'Marcar pendiente' : 'Marcar recibido' }}
+                  </button>
+                  <button
+                    v-if="!ingreso.origenConfigId"
+                    type="button"
+                    class="btn-icon !p-1.5 hover:!text-negative sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100"
+                    :disabled="eliminandoIngresoId === ingreso.id"
+                    aria-label="Eliminar ingreso"
+                    title="Eliminar"
+                    @click="onEliminarIngreso(ingreso.id)"
+                  >
+                    <AppIcon name="trash" class="h-4 w-4" />
+                  </button>
+                  <span v-else class="hidden sm:block w-7" aria-hidden="true" />
+                </div>
+              </div>
+            </li>
+          </ul>
+        </div>
+
+        <div v-if="!loading && totalLista > LIMITE_LISTA" class="border-t border-border px-5 sm:px-6 py-3">
+          <button type="button" class="btn-ghost btn-sm -ml-3" @click="verTodo = !verTodo">
+            <AppIcon name="chevronDown" class="h-4 w-4 transition-transform" :class="{ 'rotate-180': verTodo }" />
+            {{ verTodo ? 'Ver menos' : 'Ver los ' + totalLista }}
+          </button>
+        </div>
       </section>
     </div>
+
+    <!-- Registrar movimiento -->
+    <AppModal v-if="mostrarRegistro" title="Registrar movimiento" @close="mostrarRegistro = false">
+      <div class="tabs w-full mb-5" role="tablist" aria-label="Tipo de movimiento">
+        <button
+          type="button"
+          role="tab"
+          class="tab flex-1"
+          :class="{ 'tab-active': tipoRegistro === 'gasto' }"
+          :aria-selected="tipoRegistro === 'gasto'"
+          @click="tipoRegistro = 'gasto'"
+        >
+          Gasto
+        </button>
+        <button
+          type="button"
+          role="tab"
+          class="tab flex-1"
+          :class="{ 'tab-active': tipoRegistro === 'ingreso' }"
+          :aria-selected="tipoRegistro === 'ingreso'"
+          @click="tipoRegistro = 'ingreso'"
+        >
+          Ingreso
+        </button>
+      </div>
+
+      <form v-if="tipoRegistro === 'gasto'" class="grid grid-cols-1 sm:grid-cols-2 gap-4" @submit.prevent="guardarRegistro">
+        <FormField v-model="gMonto" type="number" label="Monto (COP)" required placeholder="30000" />
+        <FormField v-model="gFecha" type="date" label="Fecha" required />
+        <div class="sm:col-span-2">
+          <FormField v-model="gDescripcion" label="Descripción (opcional)" placeholder="Ej. Mercado, Netflix…" />
+        </div>
+        <div>
+          <label class="label" for="g-categoria">Categoría (opcional)</label>
+          <select id="g-categoria" v-model="gCategoriaId" class="field">
+            <option value="">Sin definir</option>
+            <option v-for="c in categoriasParaGasto" :key="c.id" :value="c.id">{{ c.nombre }}</option>
+          </select>
+        </div>
+        <div>
+          <label class="label" for="g-metodo">Método de pago (opcional)</label>
+          <select id="g-metodo" v-model="gMetodoPagoId" class="field">
+            <option value="">Sin definir</option>
+            <option v-for="m in metodos" :key="m.id" :value="m.id">{{ m.nombre }}</option>
+          </select>
+        </div>
+        <div>
+          <label class="label" for="g-estado">Estado</label>
+          <select id="g-estado" v-model="gEstado" class="field">
+            <option value="pagado">Ya pagado</option>
+            <option value="pendiente">Pendiente</option>
+          </select>
+        </div>
+        <label
+          class="flex items-center gap-2.5 self-end rounded-xl border border-border px-3.5 py-2.5 text-sm text-ink-secondary cursor-pointer hover:border-border-strong"
+        >
+          <input v-model="gEsObligatorio" type="checkbox" class="checkbox" />
+          Es un gasto obligatorio
+        </label>
+
+        <div v-if="error" class="sm:col-span-2"><AlertError :message="error" /></div>
+
+        <div class="sm:col-span-2 flex justify-end gap-2 pt-1">
+          <button type="button" class="btn-ghost" @click="mostrarRegistro = false">Cancelar</button>
+          <button type="submit" class="btn-primary" :disabled="guardandoGasto">
+            {{ guardandoGasto ? 'Guardando…' : 'Agregar gasto' }}
+          </button>
+        </div>
+      </form>
+
+      <form v-else class="grid grid-cols-1 sm:grid-cols-2 gap-4" @submit.prevent="guardarRegistro">
+        <FormField v-model="iMonto" type="number" label="Monto (COP)" required placeholder="3000000" />
+        <FormField v-model="iFecha" type="date" label="Fecha" required />
+        <div class="sm:col-span-2">
+          <FormField v-model="iDescripcion" label="Descripción (opcional)" placeholder="Ej. Salario, freelance…" />
+        </div>
+        <div>
+          <label class="label" for="i-categoria">Categoría (opcional)</label>
+          <select id="i-categoria" v-model="iCategoriaId" class="field">
+            <option value="">Sin definir</option>
+            <option v-for="c in categoriasParaIngreso" :key="c.id" :value="c.id">{{ c.nombre }}</option>
+          </select>
+        </div>
+        <div>
+          <label class="label" for="i-metodo">Método de pago (opcional)</label>
+          <select id="i-metodo" v-model="iMetodoPagoId" class="field">
+            <option value="">Sin definir</option>
+            <option v-for="m in metodos" :key="m.id" :value="m.id">{{ m.nombre }}</option>
+          </select>
+        </div>
+        <div class="sm:col-span-2">
+          <label class="label" for="i-estado">Estado</label>
+          <select id="i-estado" v-model="iEstado" class="field">
+            <option value="recibido">Ya recibido</option>
+            <option value="pendiente">Pendiente</option>
+          </select>
+        </div>
+
+        <div v-if="error" class="sm:col-span-2"><AlertError :message="error" /></div>
+
+        <div class="sm:col-span-2 flex justify-end gap-2 pt-1">
+          <button type="button" class="btn-ghost" @click="mostrarRegistro = false">Cancelar</button>
+          <button type="submit" class="btn-primary" :disabled="guardandoIngreso">
+            {{ guardandoIngreso ? 'Guardando…' : 'Agregar ingreso' }}
+          </button>
+        </div>
+      </form>
+    </AppModal>
 
     <AppModal v-if="mostrarConfig" title="Configuración personal" size="lg" @close="cerrarConfig">
       <ConfiguracionPersonalSection :tab-inicial="configTab" />

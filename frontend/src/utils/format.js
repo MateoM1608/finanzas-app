@@ -18,7 +18,8 @@ const localDateFormatter = new Intl.DateTimeFormat('es-CO', {
 });
 
 export function formatCurrency(monto) {
-  return currencyFormatter.format(monto);
+  // Signo menos tipográfico (−) en vez del guion: se lee mejor en montos.
+  return currencyFormatter.format(monto).replace('-', '−');
 }
 
 /**

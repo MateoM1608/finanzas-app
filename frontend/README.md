@@ -16,7 +16,16 @@ Proyecto de Vercel con carpeta raíz `frontend`, preset Vite. `vercel.json` hace
 
 ## Diseño
 
-Paleta clara minimalista tipo fintech premium: fondo blanco/gris muy claro (`canvas` `#F7F8FA`), tarjetas blancas con sombra suave (`surface`), un único color de acento azul (`accent` `#2F6FED`) para las acciones principales y enlaces, y verde/rojo (`positive`/`negative`) reservados para semántica financiera. Tipografía Inter. Todo definido en `tailwind.config.js` y las clases base en `src/assets/main.css` (`.card`, `.btn-primary`, `.field`, etc.) para mantener consistencia entre vistas.
+Rediseño completo con **tema claro y oscuro** (botón en la barra lateral y en la barra móvil; la preferencia se guarda en `localStorage` y, sin preferencia, sigue al sistema).
+
+- **Tokens:** todos los colores son variables CSS en canales RGB definidas en `src/assets/main.css` para `:root` (claro: base neutra cálida, cobalto como único acento de acción) y `.dark` (grafito azulado, acento aclarado). `tailwind.config.js` los expone como `canvas`, `surface(-hover|-raised|-sunken)`, `border(-strong)`, `ink-primary|secondary|tertiary`, `accent` (+ `accent-on` para texto sobre acento), `positive`, `negative`, `warning`. **No usar colores fijos** (hex, `text-white`, `gray-*`…): rompen el modo oscuro.
+- **Clases base** (`main.css`): `.card`/`.card-pad`, `.panel-sunken`, botones `.btn-primary|secondary|ghost|danger` + `.btn-sm`/`.btn-icon`, `.field`/`.label`/`.checkbox`, `.page-title`, `.section-title`/`.section-hint`, `.stat-label`/`.stat-value`, `.list`/`.list-row`, `.badge-neutral|accent|positive|negative|warning`, pestañas segmentadas `.tabs`/`.tab`/`.tab-active`, `.empty`.
+- **Tipografía:** Geist, con cifras tabulares en todo el `body` (los montos se alinean).
+- **Estructura:** `AppLayout.vue` (barra lateral en escritorio; barra superior y navegación inferior en móvil; título/subtítulo/acciones de página), `AppIcon.vue` (íconos de trazo propios, sin dependencias), `AppModal.vue` (`size="lg"`, Esc, hoja inferior en móvil), `ThemeToggle.vue`, `ConfirmDialog.vue` + `useConfirm()` (reemplaza los `confirm()` nativos: `if (!(await confirmar('…'))) return;`).
+- **Gráficos:** `useChartTheme()` entrega paleta y opciones de Chart.js como `computed`, así cambian solos con el tema.
+- **Accesibilidad:** foco visible global, `aria-label` en botones de solo ícono, labels asociados en `FormField`, `prefers-reduced-motion` respetado.
+
+En desarrollo, `vite.config.js` reenvía `/api` al backend local (`localhost:3001`), igual que el rewrite de Vercel en producción.
 
 ## Estructura
 

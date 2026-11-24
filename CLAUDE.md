@@ -82,7 +82,7 @@ Detalle de endpoints y decisiones de diseño de cada fase: `backend/README.md` y
 - **Índices de base de datos:** revisar que los campos usados en filtros frecuentes de `iniciarCorte`/`buscarPendientes` (`hogarId`, `estado`, `fechaNominal`, `fechaLimite`) tengan índice explícito en `prisma/schema.prisma`, no solo los que Prisma crea automáticamente por relaciones/unique constraints.
 - **Badges/estado repetidos:** más allá del formateo de reparto (ya unificado en `formatReparto`), `PanelVariablesSection.vue` y `CortesView.vue` siguen resolviendo por su lado el badge de estado (pendiente/en corte/liquidado) — extraer si aparece una tercera vista con el mismo patrón.
 - **Cálculo de balances duplicado:** la lógica de `previewBalances` en `CortesView.vue` (balance en vivo del corte abierto) sigue reimplementando en el cliente lo mismo que `confirmarCorte` calcula en el backend — mantenerlos sincronizados a mano es frágil; considerar exponer un endpoint de preview o extraer la función a un util compartible.
-- **Revisión de diseño visual:** sigue pendiente una pasada de consistencia visual entre las vistas (Panel personal, Settings, Panel del hogar, Cortes, Dashboard) — quedaron implementadas en momentos distintos y no ha habido un pulido final de UI/UX sobre el conjunto.
+- **Rediseño visual ✅ (2026-11-24):** sistema de diseño con tokens claro/oscuro, layout con barra lateral/navegación móvil y todas las vistas rediseñadas (ver `frontend/README.md`, sección Diseño). Pendiente menor: el panel de marca de Login/Registro/Onboarding está repetido en las tres vistas — extraer a un `AuthLayout.vue`.
 
 ## Notas de la base de datos de desarrollo
 

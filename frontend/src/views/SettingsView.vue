@@ -2,6 +2,7 @@
 import { ref, computed } from 'vue';
 import { useAuthStore } from '../stores/auth.js';
 import AppLayout from '../components/AppLayout.vue';
+import AppIcon from '../components/AppIcon.vue';
 import SettingsHogarSection from '../components/settings/SettingsHogarSection.vue';
 import SettingsMiembrosSection from '../components/settings/SettingsMiembrosSection.vue';
 import SettingsConceptosSection from '../components/settings/SettingsConceptosSection.vue';
@@ -10,10 +11,10 @@ import SettingsSplitSection from '../components/settings/SettingsSplitSection.vu
 const auth = useAuthStore();
 
 const tabs = [
-  { id: 'hogar', label: 'Hogar' },
-  { id: 'miembros', label: 'Miembros' },
-  { id: 'conceptos', label: 'Conceptos' },
-  { id: 'split', label: 'Reparto' },
+  { id: 'hogar', label: 'Hogar', icono: 'home' },
+  { id: 'miembros', label: 'Miembros', icono: 'users' },
+  { id: 'conceptos', label: 'Conceptos', icono: 'repeat' },
+  { id: 'split', label: 'Reparto', icono: 'sliders' },
 ];
 
 const tabActivo = ref('hogar');
@@ -24,17 +25,18 @@ const canEdit = computed(() => Boolean(auth.usuario?.esAdmin || auth.usuario?.pu
 <template>
   <AppLayout title="Configuración del hogar" subtitle="Frecuencia de corte, miembros, conceptos recurrentes y reparto de gastos.">
     <div class="space-y-6 max-w-3xl">
-      <div class="tabs" role="tablist">
+      <div class="tabs" role="tablist" aria-label="Secciones de configuración">
         <button
           v-for="tab in tabs"
           :key="tab.id"
           type="button"
           role="tab"
-          class="tab"
+          class="tab inline-flex items-center gap-2"
           :class="tabActivo === tab.id ? 'tab-active' : ''"
           :aria-selected="tabActivo === tab.id"
           @click="tabActivo = tab.id"
         >
+          <AppIcon :name="tab.icono" class="h-4 w-4 shrink-0" />
           {{ tab.label }}
         </button>
       </div>

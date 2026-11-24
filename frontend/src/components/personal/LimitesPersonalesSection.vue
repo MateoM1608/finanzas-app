@@ -22,46 +22,69 @@ async function cargar() {
 }
 onMounted(cargar);
 defineExpose({ recargar: cargar });
+
+// Solo presentación: porcentaje gastado del límite, acotado a 0–100 para la barra.
+function pctGastado(actual) {
+  const lim = Number(actual.limiteCalculado) || 0;
+  if (lim <= 0) return Number(actual.montoGastado) > 0 ? 100 : 0;
+  return Math.min(100, Math.max(0, (Number(actual.montoGastado) / lim) * 100));
+}
 </script>
 
 <template>
   <div>
     <AlertError :message="error" />
-    <p v-if="loading" class="text-sm text-ink-secondary">Cargando…</p>
+    <p v-if="loading" class="empty">Cargando…</p>
 
     <template v-else>
-      <p v-if="!resumen.limites.length" class="text-sm text-ink-secondary">
-        Aún no tienes límites configurados — créalos con "Configurar límites".
+      <p v-if="!resumen.limites.length" class="empty">
+        Aún no tienes límites. Créalos con «Configurar».
       </p>
 
-      <div v-else class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div v-else class="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div
           v-for="limite in resumen.limites"
           :key="limite.id"
-          class="rounded-xl border px-4 py-3.5"
-          :class="
-            limite.actual.estado === 'excedido'
-              ? 'border-negative/30 bg-negative/10'
-              : 'border-positive/30 bg-positive/10'
-          "
+          class="panel-sunken p-4 min-w-0"
+          :class="limite.actual.estado === 'excedido' ? 'border-negative/30' : ''"
         >
-          <p class="text-ink-primary font-medium flex items-center justify-between gap-2">
-            {{ limite.nombre }}
-            <span
-              class="text-xs font-semibold uppercase px-2 py-0.5 rounded-full"
-              :class="limite.actual.estado === 'excedido' ? 'text-negative bg-negative/10' : 'text-positive bg-positive/10'"
-            >
+          <div class="flex items-start justify-between gap-3">
+            <p class="text-sm font-medium text-ink-primary truncate">{{ limite.nombre }}</p>
+            <span :class="limite.actual.estado === 'excedido' ? 'badge-negative' : 'badge-positive'" class="shrink-0">
               {{ limite.actual.estado === 'excedido' ? 'Excedido' : 'Dentro' }}
             </span>
+          </div>
+
+          <p class="mt-3 text-[13px] text-ink-tertiary">
+            <span class="text-base font-semibold tracking-tight text-ink-primary">{{
+              formatCurrency(limite.actual.montoGastado)
+            }}</span>
+            de {{ formatCurrency(limite.actual.limiteCalculado) }}
           </p>
-          <p class="text-sm text-ink-secondary mt-1">
-            {{ formatCurrency(limite.actual.montoGastado) }} de {{ formatCurrency(limite.actual.limiteCalculado) }}
-          </p>
-          <p class="text-xs text-ink-tertiary mt-0.5">
+
+          <div
+            class="mt-2.5 h-1.5 rounded-full bg-surface-sunken overflow-hidden"
+            role="progressbar"
+            :aria-valuenow="Math.round(pctGastado(limite.actual))"
+            aria-valuemin="0"
+            aria-valuemax="100"
+            :aria-label="`Gastado de ${limite.nombre}`"
+          >
+            <div
+              class="h-full rounded-full transition-[width] duration-500 ease-out"
+              :class="limite.actual.estado === 'excedido' ? 'bg-negative' : 'bg-positive'"
+              :style="{ width: pctGastado(limite.actual) + '%' }"
+            />
+          </div>
+
+          <p
+            class="mt-2 text-[13px] font-medium"
+            :class="limite.actual.estado === 'excedido' ? 'text-negative' : 'text-positive'"
+          >
             <template v-if="limite.actual.estado === 'excedido'">
               Te pasaste por {{ formatCurrency(-limite.actual.disponibleRestante) }}
             </template>
-            <template v-else> Disponible: {{ formatCurrency(limite.actual.disponibleRestante) }} </template>
+            <template v-else>Disponible: {{ formatCurrency(limite.actual.disponibleRestante) }}</template>
           </p>
         </div>
       </div>

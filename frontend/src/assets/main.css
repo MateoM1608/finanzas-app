@@ -236,8 +236,16 @@
     @apply inline-flex gap-1 rounded-xl bg-surface-sunken p-1 overflow-x-auto max-w-full;
   }
 
+  .tabs {
+    scrollbar-width: none;
+  }
+
+  .tabs::-webkit-scrollbar {
+    display: none;
+  }
+
   .tab {
-    @apply whitespace-nowrap rounded-lg px-3.5 py-1.5 text-[13px] font-medium text-ink-secondary
+    @apply shrink-0 whitespace-nowrap rounded-lg px-3.5 py-1.5 text-[13px] font-medium text-ink-secondary
       transition-colors duration-150 hover:text-ink-primary;
   }
 

@@ -1,4 +1,5 @@
 <script setup>
+import { confirmar } from '../../composables/useConfirm.js';
 import { ref, reactive, onMounted } from 'vue';
 import { obtenerHogarActual, listarMiembros } from '../../api/hogares.js';
 import {
@@ -12,6 +13,7 @@ import { extractErrorMessage } from '../../api/client.js';
 import { formatCurrency } from '../../utils/format.js';
 import FormField from '../FormField.vue';
 import AlertError from '../AlertError.vue';
+import AppIcon from '../AppIcon.vue';
 
 const props = defineProps({
   canEdit: { type: Boolean, default: false },
@@ -128,7 +130,7 @@ async function onGuardarEdicion(concepto) {
 }
 
 async function onEliminar(concepto) {
-  if (!confirm(`¿Eliminar "${concepto.nombre}"? Esta acción no se puede deshacer.`)) return;
+  if (!(await confirmar(`¿Eliminar "${concepto.nombre}"? Esta acción no se puede deshacer.`))) return;
   error.value = '';
   eliminandoId.value = concepto.id;
   try {
@@ -195,13 +197,22 @@ onMounted(cargar);
   <div class="space-y-6">
     <AlertError :message="error" />
 
-    <div v-if="canEdit" class="card p-6 sm:p-8">
-      <h3 class="text-base font-semibold text-ink-primary mb-5">Nuevo concepto recurrente</h3>
-      <form class="grid grid-cols-1 sm:grid-cols-3 gap-4" @submit.prevent="onCrearConcepto">
+    <section v-if="canEdit" class="card card-pad">
+      <header class="mb-5 flex items-start gap-3">
+        <span class="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-accent/10 text-accent">
+          <AppIcon name="plus" class="h-[18px] w-[18px]" />
+        </span>
+        <div>
+          <h3 class="section-title">Nuevo concepto recurrente</h3>
+          <p class="section-hint">Gastos que se repiten en cada corte, como arriendo o servicios.</p>
+        </div>
+      </header>
+
+      <form class="grid grid-cols-1 gap-4 sm:grid-cols-2" @submit.prevent="onCrearConcepto">
         <FormField v-model="nombre" label="Nombre" required placeholder="Arriendo, Mercado…" />
         <div>
-          <label class="label">Tipo de monto</label>
-          <select v-model="tipoMonto" class="field">
+          <label class="label" for="concepto-nuevo-tipo">Tipo de monto</label>
+          <select id="concepto-nuevo-tipo" v-model="tipoMonto" class="field">
             <option value="variable">Variable</option>
             <option value="fijo">Fijo</option>
           </select>
@@ -214,36 +225,42 @@ onMounted(cargar);
           required
         />
         <div>
-          <label class="label">Pagador por defecto (opcional)</label>
-          <select v-model="pagadorDefaultUsuarioId" class="field">
+          <label class="label" for="concepto-nuevo-pagador">Pagador por defecto (opcional)</label>
+          <select id="concepto-nuevo-pagador" v-model="pagadorDefaultUsuarioId" class="field">
             <option value="">Sin definir</option>
             <option v-for="m in miembros" :key="m.id" :value="m.id">{{ m.nombre }}</option>
           </select>
         </div>
-        <div class="sm:col-span-3">
+        <div class="flex justify-end sm:col-span-2">
           <button type="submit" class="btn-primary" :disabled="creando">
+            <AppIcon v-if="!creando" name="plus" class="h-4 w-4" />
             {{ creando ? 'Creando…' : 'Agregar concepto' }}
           </button>
         </div>
       </form>
-    </div>
+    </section>
 
-    <div class="card p-6 sm:p-8">
-      <h3 class="text-base font-semibold text-ink-primary mb-5">Conceptos del hogar</h3>
+    <section class="card card-pad">
+      <header class="mb-2 flex items-start justify-between gap-3">
+        <div>
+          <h3 class="section-title">Conceptos del hogar</h3>
+          <p class="section-hint">Su monto y pagador de cada período se completan en el corte.</p>
+        </div>
+        <span v-if="!loading && conceptos.length" class="badge-neutral shrink-0">{{ conceptos.length }}</span>
+      </header>
 
-      <p v-if="loading" class="text-sm text-ink-secondary">Cargando…</p>
-      <p v-else-if="!conceptos.length" class="text-sm text-ink-secondary">
-        Aún no hay conceptos recurrentes configurados.
-      </p>
+      <p v-if="loading" class="empty">Cargando…</p>
+      <p v-else-if="!conceptos.length" class="empty">Aún no hay conceptos recurrentes configurados.</p>
 
-      <ul v-else class="divide-y divide-border">
+      <ul v-else class="list">
         <li v-for="concepto in conceptos" :key="concepto.id" class="py-4">
-          <div v-if="editandoId === concepto.id" class="space-y-3">
-            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <!-- Edición en línea -->
+          <div v-if="editandoId === concepto.id" class="panel-sunken space-y-4 p-4">
+            <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <FormField v-model="edicion.nombre" label="Nombre" required />
               <div>
-                <label class="label">Tipo de monto</label>
-                <select v-model="edicion.tipoMonto" class="field">
+                <label class="label" :for="`concepto-${concepto.id}-tipo`">Tipo de monto</label>
+                <select :id="`concepto-${concepto.id}-tipo`" v-model="edicion.tipoMonto" class="field">
                   <option value="variable">Variable</option>
                   <option value="fijo">Fijo</option>
                 </select>
@@ -256,88 +273,124 @@ onMounted(cargar);
                 required
               />
             </div>
-            <div class="flex gap-2">
+            <div class="flex justify-end gap-2">
+              <button type="button" class="btn-ghost btn-sm" @click="onCancelarEdicion">Cancelar</button>
               <button
-                class="btn-primary !px-3 !py-1.5 text-sm"
+                type="button"
+                class="btn-primary btn-sm"
                 :disabled="guardandoId === concepto.id"
                 @click="onGuardarEdicion(concepto)"
               >
                 {{ guardandoId === concepto.id ? 'Guardando…' : 'Guardar' }}
               </button>
-              <button class="btn-ghost !px-3 !py-1.5 text-sm" @click="onCancelarEdicion">
-                Cancelar
-              </button>
             </div>
           </div>
 
-          <div v-else class="flex items-center justify-between gap-4">
-            <div>
-              <p class="text-ink-primary font-medium" :class="{ 'opacity-50': !concepto.activo }">
-                {{ concepto.nombre }}
+          <!-- Vista normal -->
+          <div v-else class="flex items-start gap-3">
+            <span
+              class="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-surface-sunken text-ink-secondary"
+              :class="{ 'opacity-50': !concepto.activo }"
+              aria-hidden="true"
+            >
+              <AppIcon name="repeat" class="h-4 w-4" />
+            </span>
+
+            <div class="min-w-0 flex-1" :class="{ 'opacity-60': !concepto.activo }">
+              <p class="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <span class="truncate text-sm font-medium text-ink-primary">{{ concepto.nombre }}</span>
+                <span :class="concepto.tipoMonto === 'fijo' ? 'badge-accent' : 'badge-neutral'">
+                  {{ concepto.tipoMonto === 'fijo' ? 'Fijo' : 'Variable' }}
+                </span>
+                <span v-if="!concepto.activo" class="badge-warning">Inactivo</span>
               </p>
-              <p class="text-sm text-ink-tertiary">
+              <p class="mt-0.5 text-[13px] text-ink-secondary">
                 {{ concepto.tipoMonto === 'fijo' ? formatCurrency(concepto.montoDefault) : 'Monto variable' }}
               </p>
             </div>
-            <div class="flex items-center gap-3 shrink-0">
-              <template v-if="canEdit">
-                <button class="text-sm text-accent hover:text-accent-hover" @click="onIniciarEdicion(concepto)">
-                  Editar
-                </button>
-                <button
-                  class="text-sm text-ink-tertiary hover:text-negative transition-colors"
-                  :disabled="eliminandoId === concepto.id"
-                  @click="onEliminar(concepto)"
-                >
-                  Eliminar
-                </button>
-              </template>
-              <label v-if="canEdit" class="inline-flex items-center gap-2 text-sm text-ink-secondary">
+
+            <div v-if="canEdit" class="flex shrink-0 items-center gap-1">
+              <label
+                class="mr-1 inline-flex cursor-pointer items-center gap-2 text-[13px] text-ink-secondary hover:text-ink-primary"
+              >
                 <input
                   type="checkbox"
+                  class="checkbox"
                   :checked="concepto.activo"
                   :disabled="guardandoId === concepto.id"
                   @change="onToggleActivo(concepto)"
                 />
-                Activo
+                <span class="sr-only sm:not-sr-only">Activo</span>
               </label>
+              <button
+                type="button"
+                class="btn-icon"
+                :aria-label="`Editar ${concepto.nombre}`"
+                :title="`Editar ${concepto.nombre}`"
+                @click="onIniciarEdicion(concepto)"
+              >
+                <AppIcon name="edit" class="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                class="btn-icon hover:!text-negative hover:!bg-negative/10"
+                :aria-label="`Eliminar ${concepto.nombre}`"
+                :title="`Eliminar ${concepto.nombre}`"
+                :disabled="eliminandoId === concepto.id"
+                @click="onEliminar(concepto)"
+              >
+                <AppIcon name="trash" class="h-4 w-4" />
+              </button>
             </div>
           </div>
 
-          <div v-if="canEdit" class="flex items-center gap-2 mt-3">
-            <span class="text-sm text-ink-tertiary shrink-0">Pagador por defecto:</span>
-            <select
-              class="field !w-auto !py-1.5 text-sm"
-              :value="concepto.pagadorDefaultUsuarioId ?? ''"
-              :disabled="guardandoId === concepto.id"
-              @change="onCambiarPagadorDefault(concepto, $event.target.value)"
-            >
-              <option value="">Sin definir</option>
-              <option v-for="m in miembros" :key="m.id" :value="m.id">{{ m.nombre }}</option>
-            </select>
-          </div>
-          <p v-else-if="concepto.pagadorDefaultUsuarioId" class="text-sm text-ink-tertiary mt-2">
-            Pagador por defecto: {{ nombrePagador(concepto.pagadorDefaultUsuarioId) }}
-          </p>
-
-          <div v-if="canEdit && puntosCorte.length > 1" class="flex flex-wrap gap-4 mt-3">
-            <span class="text-sm text-ink-tertiary">Aplica a:</span>
-            <label
-              v-for="punto in puntosCorte"
-              :key="punto.id"
-              class="inline-flex items-center gap-2 text-sm text-ink-secondary"
-            >
-              <input
-                type="checkbox"
-                :checked="concepto.puntosCorte.length === 0 || aplicaAPunto(concepto, punto.id)"
+          <!-- Pagador y puntos de corte -->
+          <div
+            v-if="canEdit"
+            class="mt-3 grid grid-cols-1 gap-3 sm:ml-12"
+            :class="puntosCorte.length > 1 ? 'sm:grid-cols-2' : ''"
+          >
+            <div class="flex min-w-0 items-center gap-2">
+              <label class="shrink-0 text-[13px] text-ink-tertiary" :for="`concepto-${concepto.id}-pagador`">
+                Pagador por defecto
+              </label>
+              <select
+                :id="`concepto-${concepto.id}-pagador`"
+                class="field !w-auto min-w-0 flex-1 !py-1.5 text-[13px] sm:flex-none"
+                :value="concepto.pagadorDefaultUsuarioId ?? ''"
                 :disabled="guardandoId === concepto.id"
-                @change="onTogglePunto(concepto, punto.id)"
-              />
-              {{ punto.referencia }}
-            </label>
+                @change="onCambiarPagadorDefault(concepto, $event.target.value)"
+              >
+                <option value="">Sin definir</option>
+                <option v-for="m in miembros" :key="m.id" :value="m.id">{{ m.nombre }}</option>
+              </select>
+            </div>
+
+            <fieldset v-if="puntosCorte.length > 1" class="flex flex-wrap items-center gap-x-4 gap-y-2">
+              <legend class="sr-only">Puntos de corte a los que aplica</legend>
+              <span class="text-[13px] text-ink-tertiary" aria-hidden="true">Aplica a</span>
+              <label
+                v-for="punto in puntosCorte"
+                :key="punto.id"
+                class="inline-flex cursor-pointer items-center gap-2 text-[13px] text-ink-secondary hover:text-ink-primary"
+              >
+                <input
+                  type="checkbox"
+                  class="checkbox"
+                  :checked="concepto.puntosCorte.length === 0 || aplicaAPunto(concepto, punto.id)"
+                  :disabled="guardandoId === concepto.id"
+                  @change="onTogglePunto(concepto, punto.id)"
+                />
+                {{ punto.referencia }}
+              </label>
+            </fieldset>
           </div>
+          <p v-else-if="concepto.pagadorDefaultUsuarioId" class="ml-12 mt-2 text-[13px] text-ink-tertiary">
+            Pagador por defecto:
+            <span class="text-ink-secondary">{{ nombrePagador(concepto.pagadorDefaultUsuarioId) }}</span>
+          </p>
         </li>
       </ul>
-    </div>
+    </section>
   </div>
 </template>

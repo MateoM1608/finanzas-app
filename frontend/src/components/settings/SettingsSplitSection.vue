@@ -4,6 +4,7 @@ import { listarMiembros } from '../../api/hogares.js';
 import { obtenerSplit, actualizarSplit } from '../../api/splitPorcentaje.js';
 import { extractErrorMessage } from '../../api/client.js';
 import AlertError from '../AlertError.vue';
+import AppIcon from '../AppIcon.vue';
 
 const props = defineProps({
   canEdit: { type: Boolean, default: false },
@@ -68,7 +69,7 @@ async function onGuardar() {
       contextoActivo.value,
     );
     usandoFallbackGeneral.value = false;
-    exito.value = 'Split actualizado';
+    exito.value = 'Reparto actualizado';
   } catch (e) {
     error.value = extractErrorMessage(e);
   } finally {
@@ -78,79 +79,154 @@ async function onGuardar() {
 
 watch(contextoActivo, cargar);
 onMounted(cargar);
+
+// Iniciales para el avatar (solo presentación).
+function iniciales(nombre = '') {
+  return nombre
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((p) => p[0] ?? '')
+    .join('')
+    .toUpperCase();
+}
 </script>
 
 <template>
-  <div class="card p-6 sm:p-8 space-y-6">
-    <div>
-      <h3 class="text-base font-semibold text-ink-primary mb-1">Split de gastos compartidos</h3>
-      <p class="text-sm text-ink-secondary">Debe sumar 100% entre todos los miembros.</p>
-    </div>
+  <section class="card card-pad space-y-6">
+    <header class="flex items-start gap-3">
+      <span class="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-accent/10 text-accent">
+        <AppIcon name="sliders" class="h-[18px] w-[18px]" />
+      </span>
+      <div>
+        <h3 class="section-title">Reparto de gastos compartidos</h3>
+        <p class="section-hint">Qué porcentaje asume cada miembro. Debe sumar 100%.</p>
+      </div>
+    </header>
 
-    <div class="flex gap-1 bg-surface-raised rounded-xl p-1">
+    <div class="tabs w-full sm:w-auto" role="tablist" aria-label="Contexto del reparto">
       <button
         v-for="c in contextos"
         :key="c.id"
         type="button"
-        class="flex-1 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors"
-        :class="contextoActivo === c.id ? 'bg-accent text-white' : 'text-ink-secondary hover:text-ink-primary'"
+        role="tab"
+        class="tab flex-1 sm:flex-none"
+        :class="contextoActivo === c.id ? 'tab-active' : ''"
+        :aria-selected="contextoActivo === c.id"
         @click="contextoActivo = c.id"
       >
         {{ c.label }}
       </button>
     </div>
 
-    <p v-if="contextoActivo === 'gastos_variables'" class="text-sm text-ink-tertiary -mt-2">
-      Este split solo aplica a gastos variables puntuales. Si no lo configuras, se usa el split
-      general del hogar.
+    <p
+      v-if="contextoActivo === 'gastos_variables'"
+      class="-mt-2 flex items-start gap-2 text-[13px] text-ink-tertiary"
+    >
+      <AppIcon name="info" class="mt-0.5 h-4 w-4 shrink-0" />
+      <span>
+        Este reparto solo aplica a gastos variables puntuales. Si no lo configuras, se usa el reparto
+        general del hogar.
+      </span>
     </p>
 
     <AlertError :message="error" />
-    <p v-if="exito" class="text-sm text-positive bg-positive/10 border border-positive/20 rounded-xl px-3.5 py-2.5">
-      {{ exito }}
+    <p
+      v-if="exito"
+      role="status"
+      class="flex items-start gap-2.5 rounded-xl border border-positive/20 bg-positive/10 px-3.5 py-2.5 text-sm text-positive"
+    >
+      <AppIcon name="check" class="mt-0.5 h-4 w-4 shrink-0" />
+      <span>{{ exito }}</span>
     </p>
     <p
       v-if="usandoFallbackGeneral && !loading"
-      class="text-sm text-accent bg-accent-muted border border-accent/20 rounded-xl px-3.5 py-2.5"
+      class="flex items-start gap-2.5 rounded-xl border border-accent/20 bg-accent/10 px-3.5 py-2.5 text-sm text-accent"
     >
-      Todavía no tienes un split propio para gastos variables — estos valores son los del split
-      general. Guárdalos (o edítalos) para dejar uno independiente.
+      <AppIcon name="info" class="mt-0.5 h-4 w-4 shrink-0" />
+      <span>
+        Todavía no tienes un reparto propio para gastos variables: estos valores son los del reparto
+        general. Guárdalos (o edítalos) para dejar uno independiente.
+      </span>
     </p>
 
-    <p v-if="loading" class="text-sm text-ink-secondary">Cargando…</p>
+    <p v-if="loading" class="empty">Cargando…</p>
 
     <template v-else>
-      <div class="space-y-4">
-        <div v-for="fila in filas" :key="fila.usuarioId" class="flex items-center justify-between gap-4">
-          <span class="text-ink-primary">{{ fila.nombre }}</span>
-          <div class="flex items-center gap-2">
-            <input
-              v-model="fila.porcentaje"
-              type="number"
-              step="0.1"
-              min="0"
-              max="100"
-              class="field w-28 text-right"
-              :disabled="!canEdit"
+      <p v-if="!filas.length" class="empty">No hay miembros en el hogar.</p>
+
+      <ul v-else class="space-y-5">
+        <li v-for="fila in filas" :key="fila.usuarioId">
+          <div class="flex items-center gap-3">
+            <span
+              class="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-surface-sunken text-xs font-semibold text-ink-secondary"
+              aria-hidden="true"
+            >
+              {{ iniciales(fila.nombre) }}
+            </span>
+            <label :for="`split-${fila.usuarioId}`" class="min-w-0 flex-1 truncate text-sm font-medium text-ink-primary">
+              {{ fila.nombre }}
+            </label>
+            <div class="relative shrink-0">
+              <input
+                :id="`split-${fila.usuarioId}`"
+                v-model="fila.porcentaje"
+                type="number"
+                inputmode="decimal"
+                step="0.1"
+                min="0"
+                max="100"
+                class="field w-24 pr-8 text-right sm:w-28"
+                :disabled="!canEdit"
+              />
+              <span class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm text-ink-tertiary">
+                %
+              </span>
+            </div>
+          </div>
+          <div class="ml-12 mt-2.5 h-1.5 overflow-hidden rounded-full bg-surface-sunken" aria-hidden="true">
+            <div
+              class="h-full rounded-full bg-accent transition-[width] duration-300 ease-out"
+              :style="{ width: `${Math.min(Math.max(Number(fila.porcentaje) || 0, 0), 100)}%` }"
             />
-            <span class="text-ink-secondary">%</span>
+          </div>
+        </li>
+      </ul>
+
+      <div class="flex flex-col gap-4 border-t border-border pt-5 sm:flex-row sm:items-center sm:justify-between">
+        <div class="flex items-center gap-3">
+          <span
+            class="grid h-8 w-8 shrink-0 place-items-center rounded-full"
+            :class="sumaValida ? 'bg-positive/10 text-positive' : 'bg-negative/10 text-negative'"
+            aria-hidden="true"
+          >
+            <AppIcon :name="sumaValida ? 'check' : 'alert'" class="h-4 w-4" />
+          </span>
+          <div aria-live="polite">
+            <p class="text-sm font-semibold" :class="sumaValida ? 'text-positive' : 'text-negative'">
+              Total: {{ suma.toFixed(1) }}%
+            </p>
+            <p class="text-[13px] text-ink-tertiary">
+              {{
+                sumaValida
+                  ? 'El reparto está completo.'
+                  : suma > 100
+                    ? `Sobra ${(suma - 100).toFixed(1)}% por encima del 100%.`
+                    : `Falta ${(100 - suma).toFixed(1)}% para llegar a 100%.`
+              }}
+            </p>
           </div>
         </div>
-      </div>
-
-      <div class="flex items-center justify-between pt-2 border-t border-border">
-        <span class="text-sm" :class="sumaValida ? 'text-positive' : 'text-negative'">
-          Suma: {{ suma.toFixed(1) }}%
-        </span>
         <button
           v-if="canEdit"
+          type="button"
           class="btn-primary"
           :disabled="guardando || !sumaValida"
           @click="onGuardar"
         >
-          {{ guardando ? 'Guardando…' : 'Guardar split' }}
+          {{ guardando ? 'Guardando…' : 'Guardar reparto' }}
         </button>
       </div>
     </template>
-  </div>
+  </section>
 </template>

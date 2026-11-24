@@ -1,4 +1,5 @@
 <script setup>
+import { confirmar } from '../../composables/useConfirm.js';
 import { ref, reactive, computed, onMounted } from 'vue';
 import {
   listarMetodosPago,
@@ -41,6 +42,7 @@ import { extractErrorMessage } from '../../api/client.js';
 import { formatCurrency, hoyISO } from '../../utils/format.js';
 import FormField from '../FormField.vue';
 import AlertError from '../AlertError.vue';
+import AppIcon from '../AppIcon.vue';
 
 const TABS = [
   { key: 'ciclo', label: 'Ciclo personal' },
@@ -127,7 +129,7 @@ async function onCrearMetodo() {
 }
 
 async function onEliminarMetodo(metodo) {
-  if (!confirm(`¿Eliminar "${metodo.nombre}"?`)) return;
+  if (!(await confirmar(`¿Eliminar "${metodo.nombre}"?`))) return;
   error.value = '';
   eliminandoId.value = metodo.id;
   try {
@@ -193,7 +195,7 @@ async function onCrearCategoria() {
 }
 
 async function onEliminarCategoria(categoria) {
-  if (!confirm(`¿Eliminar "${categoria.nombre}"?`)) return;
+  if (!(await confirmar(`¿Eliminar "${categoria.nombre}"?`))) return;
   error.value = '';
   eliminandoId.value = categoria.id;
   try {
@@ -295,7 +297,7 @@ async function onToggleActivoGastoFijo(config) {
 }
 
 async function onEliminarGastoFijo(config) {
-  if (!confirm(`¿Eliminar "${config.nombre}"? Esta acción no se puede deshacer.`)) return;
+  if (!(await confirmar(`¿Eliminar "${config.nombre}"? Esta acción no se puede deshacer.`))) return;
   error.value = '';
   eliminandoId.value = config.id;
   try {
@@ -406,7 +408,7 @@ async function onToggleActivoIngresoFijo(config) {
 }
 
 async function onEliminarIngresoFijo(config) {
-  if (!confirm(`¿Eliminar "${config.nombre}"? Esta acción no se puede deshacer.`)) return;
+  if (!(await confirmar(`¿Eliminar "${config.nombre}"? Esta acción no se puede deshacer.`))) return;
   error.value = '';
   eliminandoId.value = config.id;
   try {
@@ -514,7 +516,7 @@ async function onToggleActivoAhorro(meta) {
 }
 
 async function onEliminarAhorro(meta) {
-  if (!confirm(`¿Eliminar "${meta.nombre}"? Esta acción no se puede deshacer.`)) return;
+  if (!(await confirmar(`¿Eliminar "${meta.nombre}"? Esta acción no se puede deshacer.`))) return;
   error.value = '';
   eliminandoId.value = meta.id;
   try {
@@ -623,7 +625,7 @@ async function onToggleActivoLimite(limite) {
 }
 
 async function onEliminarLimite(limite) {
-  if (!confirm(`¿Eliminar "${limite.nombre}"?`)) return;
+  if (!(await confirmar(`¿Eliminar "${limite.nombre}"?`))) return;
   error.value = '';
   eliminandoId.value = limite.id;
   try {
@@ -695,23 +697,30 @@ const categoriasParaAhorro = computed(() => categorias.value.filter((c) => c.apl
   <div>
     <AlertError :message="error" />
 
-    <div class="flex flex-wrap gap-2 mb-6">
-      <button
-        v-for="tab in TABS"
-        :key="tab.key"
-        class="!px-3 !py-1.5 text-sm"
-        :class="tabActiva === tab.key ? 'btn-primary' : 'btn-ghost'"
-        @click="tabActiva = tab.key"
-      >
-        {{ tab.label }}
-      </button>
+    <!-- Pestañas: el scroll horizontal queda contenido en esta fila. -->
+    <div class="mb-6 overflow-x-auto">
+      <div class="tabs" role="tablist" aria-label="Secciones de configuración">
+        <button
+          v-for="tab in TABS"
+          :key="tab.key"
+          type="button"
+          role="tab"
+          class="tab"
+          :class="{ 'tab-active': tabActiva === tab.key }"
+          :aria-selected="tabActiva === tab.key"
+          @click="tabActiva = tab.key"
+        >
+          {{ tab.label }}
+        </button>
+      </div>
     </div>
 
-    <p v-if="loading" class="text-sm text-ink-secondary">Cargando…</p>
+    <p v-if="loading" class="empty">Cargando…</p>
 
     <template v-else>
-      <div v-if="tabActiva === 'ciclo'" class="space-y-6">
-        <form class="grid grid-cols-1 sm:grid-cols-2 gap-4" @submit.prevent="onGuardarCiclo">
+      <!-- Ciclo personal -->
+      <div v-if="tabActiva === 'ciclo'" class="space-y-4">
+        <form class="panel-sunken p-4 grid grid-cols-1 sm:grid-cols-2 gap-4" @submit.prevent="onGuardarCiclo">
           <div>
             <label class="label">Frecuencia</label>
             <select v-model="frecuenciaCicloPersonal" class="field">
@@ -720,139 +729,157 @@ const categoriasParaAhorro = computed(() => categorias.value.filter((c) => c.apl
               <option value="mensual">Mensual</option>
             </select>
           </div>
-          <div class="sm:col-span-2">
-            <button type="submit" class="btn-primary" :disabled="guardandoCiclo">
+          <div class="flex items-end">
+            <button type="submit" class="btn-primary w-full sm:w-auto" :disabled="guardandoCiclo">
+              <AppIcon name="check" class="h-4 w-4" />
               {{ guardandoCiclo ? 'Guardando…' : 'Guardar frecuencia' }}
             </button>
           </div>
         </form>
-        <p class="text-xs text-ink-tertiary">
-          Define los períodos que usan "Disponible" y el resto del panel personal (ej. quincenal =
-          del 1 al 15 y del 16 a fin de mes) — independiente de la frecuencia de corte del hogar.
+        <p class="flex items-start gap-2 text-[13px] text-ink-tertiary">
+          <AppIcon name="info" class="mt-0.5 h-4 w-4 shrink-0" />
+          <span>
+            Define los períodos que usan "Disponible" y el resto del panel personal (ej. quincenal = del 1 al 15 y
+            del 16 a fin de mes) — independiente de la frecuencia de corte del hogar.
+          </span>
         </p>
       </div>
 
-      <div v-else-if="tabActiva === 'metodos'" class="space-y-6">
-        <form class="flex gap-3" @submit.prevent="onCrearMetodo">
+      <!-- Métodos de pago -->
+      <div v-else-if="tabActiva === 'metodos'" class="space-y-5">
+        <form class="panel-sunken p-4 grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-4" @submit.prevent="onCrearMetodo">
           <FormField v-model="nuevoMetodoNombre" label="Nuevo método" placeholder="Nequi, Efectivo…" required />
-          <button type="submit" class="btn-primary self-end" :disabled="creandoMetodo">
-            {{ creandoMetodo ? 'Agregando…' : 'Agregar' }}
-          </button>
+          <div class="flex items-end">
+            <button type="submit" class="btn-primary w-full sm:w-auto" :disabled="creandoMetodo">
+              <AppIcon name="plus" class="h-4 w-4" />
+              {{ creandoMetodo ? 'Agregando…' : 'Agregar' }}
+            </button>
+          </div>
         </form>
 
-        <p v-if="!metodos.length" class="text-sm text-ink-secondary">No hay métodos de pago todavía.</p>
-        <ul v-else class="divide-y divide-border">
-          <li v-for="m in metodos" :key="m.id" class="py-3">
-            <div v-if="editandoMetodoId === m.id" class="flex items-end gap-3">
+        <p v-if="!metodos.length" class="empty">No hay métodos de pago todavía.</p>
+        <ul v-else class="list">
+          <li v-for="m in metodos" :key="m.id" :class="editandoMetodoId === m.id ? 'py-3' : 'list-row'">
+            <div v-if="editandoMetodoId === m.id" class="panel-sunken p-4 space-y-4">
               <FormField v-model="editMetodoNombre" label="Nombre" required />
-              <button
-                class="btn-primary !px-3 !py-1.5 text-sm"
-                :disabled="guardandoId === m.id"
-                @click="onGuardarEditarMetodo(m)"
-              >
-                Guardar
-              </button>
-              <button class="btn-ghost !px-3 !py-1.5 text-sm" @click="onCancelarEditarMetodo">Cancelar</button>
-            </div>
-            <div v-else class="flex items-center justify-between">
-              <span class="text-ink-primary">{{ m.nombre }}</span>
-              <div class="flex items-center gap-3">
-                <button class="text-sm text-accent hover:text-accent-hover" @click="onEditarMetodo(m)">
-                  Editar
-                </button>
-                <button
-                  class="text-sm text-ink-tertiary hover:text-negative"
-                  :disabled="eliminandoId === m.id"
-                  @click="onEliminarMetodo(m)"
-                >
-                  Eliminar
+              <div class="flex items-center justify-end gap-2">
+                <button class="btn-ghost btn-sm" @click="onCancelarEditarMetodo">Cancelar</button>
+                <button class="btn-primary btn-sm" :disabled="guardandoId === m.id" @click="onGuardarEditarMetodo(m)">
+                  Guardar
                 </button>
               </div>
             </div>
+            <template v-else>
+              <div class="flex min-w-0 items-center gap-3">
+                <span class="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-surface-sunken text-ink-secondary">
+                  <AppIcon name="wallet" class="h-4 w-4" />
+                </span>
+                <span class="truncate text-sm font-medium text-ink-primary">{{ m.nombre }}</span>
+              </div>
+              <div class="flex shrink-0 items-center gap-1">
+                <button class="btn-icon" :aria-label="`Editar ${m.nombre}`" @click="onEditarMetodo(m)">
+                  <AppIcon name="edit" class="h-4 w-4" />
+                </button>
+                <button
+                  class="btn-icon hover:text-negative hover:bg-negative/10"
+                  :aria-label="`Eliminar ${m.nombre}`"
+                  :disabled="eliminandoId === m.id"
+                  @click="onEliminarMetodo(m)"
+                >
+                  <AppIcon name="trash" class="h-4 w-4" />
+                </button>
+              </div>
+            </template>
           </li>
         </ul>
       </div>
 
-      <div v-else-if="tabActiva === 'categorias'" class="space-y-6">
-        <form class="grid grid-cols-1 sm:grid-cols-2 gap-4" @submit.prevent="onCrearCategoria">
+      <!-- Categorías -->
+      <div v-else-if="tabActiva === 'categorias'" class="space-y-5">
+        <form class="panel-sunken p-4 grid grid-cols-1 sm:grid-cols-2 gap-4" @submit.prevent="onCrearCategoria">
           <FormField v-model="nuevaCategoriaNombre" label="Nueva categoría" placeholder="Ocio, Sueldo…" required />
           <div>
-            <label class="label">Aplica a</label>
-            <div class="flex gap-4 mt-2">
+            <span class="label">Aplica a</span>
+            <div class="flex flex-wrap gap-x-4 gap-y-2 pt-2.5">
               <label class="inline-flex items-center gap-2 text-sm text-ink-secondary">
-                <input v-model="nuevaCategoriaAplicaA.gasto" type="checkbox" /> Gasto
+                <input v-model="nuevaCategoriaAplicaA.gasto" type="checkbox" class="checkbox" /> Gasto
               </label>
               <label class="inline-flex items-center gap-2 text-sm text-ink-secondary">
-                <input v-model="nuevaCategoriaAplicaA.ingreso" type="checkbox" /> Ingreso
+                <input v-model="nuevaCategoriaAplicaA.ingreso" type="checkbox" class="checkbox" /> Ingreso
               </label>
               <label class="inline-flex items-center gap-2 text-sm text-ink-secondary">
-                <input v-model="nuevaCategoriaAplicaA.ahorro" type="checkbox" /> Ahorro
+                <input v-model="nuevaCategoriaAplicaA.ahorro" type="checkbox" class="checkbox" /> Ahorro
               </label>
             </div>
           </div>
-          <div class="sm:col-span-2">
-            <button type="submit" class="btn-primary" :disabled="creandoCategoria">
+          <div class="sm:col-span-2 flex justify-end">
+            <button type="submit" class="btn-primary w-full sm:w-auto" :disabled="creandoCategoria">
+              <AppIcon name="plus" class="h-4 w-4" />
               {{ creandoCategoria ? 'Agregando…' : 'Agregar categoría' }}
             </button>
           </div>
         </form>
 
-        <p v-if="!categorias.length" class="text-sm text-ink-secondary">No hay categorías todavía.</p>
-        <ul v-else class="divide-y divide-border">
-          <li v-for="c in categorias" :key="c.id" class="py-3">
-            <div v-if="editandoCategoriaId === c.id" class="space-y-3">
+        <p v-if="!categorias.length" class="empty">No hay categorías todavía.</p>
+        <ul v-else class="list">
+          <li v-for="c in categorias" :key="c.id" :class="editandoCategoriaId === c.id ? 'py-3' : 'list-row'">
+            <div v-if="editandoCategoriaId === c.id" class="panel-sunken p-4 space-y-4">
               <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <FormField v-model="editCategoriaNombre" label="Nombre" required />
                 <div>
-                  <label class="label">Aplica a</label>
-                  <div class="flex gap-4 mt-2">
+                  <span class="label">Aplica a</span>
+                  <div class="flex flex-wrap gap-x-4 gap-y-2 pt-2.5">
                     <label class="inline-flex items-center gap-2 text-sm text-ink-secondary">
-                      <input v-model="editCategoriaAplicaA.gasto" type="checkbox" /> Gasto
+                      <input v-model="editCategoriaAplicaA.gasto" type="checkbox" class="checkbox" /> Gasto
                     </label>
                     <label class="inline-flex items-center gap-2 text-sm text-ink-secondary">
-                      <input v-model="editCategoriaAplicaA.ingreso" type="checkbox" /> Ingreso
+                      <input v-model="editCategoriaAplicaA.ingreso" type="checkbox" class="checkbox" /> Ingreso
                     </label>
                     <label class="inline-flex items-center gap-2 text-sm text-ink-secondary">
-                      <input v-model="editCategoriaAplicaA.ahorro" type="checkbox" /> Ahorro
+                      <input v-model="editCategoriaAplicaA.ahorro" type="checkbox" class="checkbox" /> Ahorro
                     </label>
                   </div>
                 </div>
               </div>
-              <div class="flex items-center gap-3">
+              <div class="flex items-center justify-end gap-2">
+                <button class="btn-ghost btn-sm" @click="onCancelarEditarCategoria">Cancelar</button>
                 <button
-                  class="btn-primary !px-3 !py-1.5 text-sm"
+                  class="btn-primary btn-sm"
                   :disabled="guardandoId === c.id"
                   @click="onGuardarEditarCategoria(c)"
                 >
                   Guardar
                 </button>
-                <button class="btn-ghost !px-3 !py-1.5 text-sm" @click="onCancelarEditarCategoria">Cancelar</button>
               </div>
             </div>
-            <div v-else class="flex items-center justify-between">
-              <span class="text-ink-primary">
-                {{ c.nombre }}
-                <span class="text-xs text-ink-tertiary font-normal">({{ c.aplicaA.join(', ') }})</span>
-              </span>
-              <div class="flex items-center gap-3">
-                <button class="text-sm text-accent hover:text-accent-hover" @click="onEditarCategoria(c)">
-                  Editar
+            <template v-else>
+              <div class="min-w-0">
+                <p class="truncate text-sm font-medium text-ink-primary">{{ c.nombre }}</p>
+                <div class="mt-1 flex flex-wrap gap-1">
+                  <span v-for="a in c.aplicaA" :key="a" class="badge-neutral capitalize">{{ a }}</span>
+                </div>
+              </div>
+              <div class="flex shrink-0 items-center gap-1">
+                <button class="btn-icon" :aria-label="`Editar ${c.nombre}`" @click="onEditarCategoria(c)">
+                  <AppIcon name="edit" class="h-4 w-4" />
                 </button>
                 <button
-                  class="text-sm text-ink-tertiary hover:text-negative"
+                  class="btn-icon hover:text-negative hover:bg-negative/10"
+                  :aria-label="`Eliminar ${c.nombre}`"
                   :disabled="eliminandoId === c.id"
                   @click="onEliminarCategoria(c)"
                 >
-                  Eliminar
+                  <AppIcon name="trash" class="h-4 w-4" />
                 </button>
               </div>
-            </div>
+            </template>
           </li>
         </ul>
       </div>
 
-      <div v-else-if="tabActiva === 'gastosFijos'" class="space-y-6">
-        <form class="grid grid-cols-1 sm:grid-cols-2 gap-4" @submit.prevent="onCrearGastoFijo">
+      <!-- Gastos fijos -->
+      <div v-else-if="tabActiva === 'gastosFijos'" class="space-y-5">
+        <form class="panel-sunken p-4 grid grid-cols-1 sm:grid-cols-2 gap-4" @submit.prevent="onCrearGastoFijo">
           <FormField v-model="gf.nombre" label="Nombre" placeholder="Netflix, Arriendo…" required />
           <FormField v-model="gf.monto" type="number" label="Monto (COP)" required />
           <div>
@@ -885,22 +912,23 @@ const categoriasParaAhorro = computed(() => categorias.value.filter((c) => c.apl
               <option v-for="c in categoriasParaGasto" :key="c.id" :value="c.id">{{ c.nombre }}</option>
             </select>
           </div>
-          <div class="flex items-end">
+          <div class="flex items-end sm:pb-2.5">
             <label class="inline-flex items-center gap-2 text-sm text-ink-secondary">
-              <input v-model="gf.esObligatorio" type="checkbox" /> Es obligatorio
+              <input v-model="gf.esObligatorio" type="checkbox" class="checkbox" /> Es obligatorio
             </label>
           </div>
-          <div class="sm:col-span-2">
-            <button type="submit" class="btn-primary" :disabled="creandoGastoFijo">
+          <div class="sm:col-span-2 flex justify-end">
+            <button type="submit" class="btn-primary w-full sm:w-auto" :disabled="creandoGastoFijo">
+              <AppIcon name="plus" class="h-4 w-4" />
               {{ creandoGastoFijo ? 'Agregando…' : 'Agregar gasto fijo' }}
             </button>
           </div>
         </form>
 
-        <p v-if="!gastosFijos.length" class="text-sm text-ink-secondary">No hay gastos fijos todavía.</p>
-        <ul v-else class="divide-y divide-border">
-          <li v-for="c in gastosFijos" :key="c.id" class="py-3">
-            <div v-if="editandoGastoFijoId === c.id" class="space-y-3">
+        <p v-if="!gastosFijos.length" class="empty">No hay gastos fijos todavía.</p>
+        <ul v-else class="list">
+          <li v-for="c in gastosFijos" :key="c.id" :class="editandoGastoFijoId === c.id ? 'py-3' : 'list-row'">
+            <div v-if="editandoGastoFijoId === c.id" class="panel-sunken p-4 space-y-4">
               <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <FormField v-model="editGf.nombre" label="Nombre" required />
                 <FormField v-model="editGf.monto" type="number" label="Monto (COP)" required />
@@ -933,62 +961,68 @@ const categoriasParaAhorro = computed(() => categorias.value.filter((c) => c.apl
                     <option v-for="cat in categoriasParaGasto" :key="cat.id" :value="cat.id">{{ cat.nombre }}</option>
                   </select>
                 </div>
-                <div class="flex items-end">
+                <div class="flex items-end sm:pb-2.5">
                   <label class="inline-flex items-center gap-2 text-sm text-ink-secondary">
-                    <input v-model="editGf.esObligatorio" type="checkbox" /> Es obligatorio
+                    <input v-model="editGf.esObligatorio" type="checkbox" class="checkbox" /> Es obligatorio
                   </label>
                 </div>
               </div>
-              <div class="flex items-center gap-3">
+              <div class="flex items-center justify-end gap-2">
+                <button class="btn-ghost btn-sm" @click="onCancelarEditarGastoFijo">Cancelar</button>
                 <button
-                  class="btn-primary !px-3 !py-1.5 text-sm"
+                  class="btn-primary btn-sm"
                   :disabled="guardandoId === c.id"
                   @click="onGuardarEditarGastoFijo(c)"
                 >
                   Guardar
                 </button>
-                <button class="btn-ghost !px-3 !py-1.5 text-sm" @click="onCancelarEditarGastoFijo">Cancelar</button>
               </div>
             </div>
-            <div v-else class="flex items-center justify-between gap-4">
-              <div>
-                <p class="text-ink-primary font-medium" :class="{ 'opacity-50': !c.activo }">
-                  {{ c.nombre }}
-                  <span v-if="c.esObligatorio" class="text-xs text-accent font-normal">· obligatorio</span>
-                </p>
-                <p class="text-sm text-ink-tertiary">
-                  {{ formatCurrency(c.monto) }} · {{ c.frecuencia }} ·
-                  {{ c.modoCobro === 'automatico' ? 'automático' : 'manual' }}
-                </p>
+            <template v-else>
+              <div class="min-w-0" :class="{ 'opacity-50': !c.activo }">
+                <p class="truncate text-sm font-medium text-ink-primary">{{ c.nombre }}</p>
+                <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <span class="text-[13px] text-ink-tertiary">
+                    {{ formatCurrency(c.monto) }} · <span class="capitalize">{{ c.frecuencia }}</span>
+                  </span>
+                  <span :class="c.modoCobro === 'automatico' ? 'badge-accent' : 'badge-neutral'">
+                    {{ c.modoCobro === 'automatico' ? 'Automático' : 'Manual' }}
+                  </span>
+                  <span v-if="c.esObligatorio" class="badge-warning">Obligatorio</span>
+                  <span v-if="!c.activo" class="badge-neutral">Inactivo</span>
+                </div>
               </div>
-              <div class="flex items-center gap-3 shrink-0">
-                <label class="inline-flex items-center gap-2 text-sm text-ink-secondary">
+              <div class="flex shrink-0 items-center gap-1">
+                <label class="mr-1 inline-flex items-center gap-1.5 text-[13px] text-ink-secondary">
                   <input
                     type="checkbox"
+                    class="checkbox"
                     :checked="c.activo"
                     :disabled="guardandoId === c.id"
                     @change="onToggleActivoGastoFijo(c)"
                   />
                   Activo
                 </label>
-                <button class="text-sm text-accent hover:text-accent-hover" @click="onEditarGastoFijo(c)">
-                  Editar
+                <button class="btn-icon" :aria-label="`Editar ${c.nombre}`" @click="onEditarGastoFijo(c)">
+                  <AppIcon name="edit" class="h-4 w-4" />
                 </button>
                 <button
-                  class="text-sm text-ink-tertiary hover:text-negative"
+                  class="btn-icon hover:text-negative hover:bg-negative/10"
+                  :aria-label="`Eliminar ${c.nombre}`"
                   :disabled="eliminandoId === c.id"
                   @click="onEliminarGastoFijo(c)"
                 >
-                  Eliminar
+                  <AppIcon name="trash" class="h-4 w-4" />
                 </button>
               </div>
-            </div>
+            </template>
           </li>
         </ul>
       </div>
 
-      <div v-else-if="tabActiva === 'ingresosFijos'" class="space-y-6">
-        <form class="grid grid-cols-1 sm:grid-cols-2 gap-4" @submit.prevent="onCrearIngresoFijo">
+      <!-- Ingresos fijos -->
+      <div v-else-if="tabActiva === 'ingresosFijos'" class="space-y-5">
+        <form class="panel-sunken p-4 grid grid-cols-1 sm:grid-cols-2 gap-4" @submit.prevent="onCrearIngresoFijo">
           <FormField v-model="inf.nombre" label="Nombre" placeholder="Sueldo, Arriendo que recibo…" required />
           <FormField v-model="inf.monto" type="number" label="Monto (COP)" required />
           <div>
@@ -1014,17 +1048,18 @@ const categoriasParaAhorro = computed(() => categorias.value.filter((c) => c.apl
               <option v-for="c in categoriasParaIngreso" :key="c.id" :value="c.id">{{ c.nombre }}</option>
             </select>
           </div>
-          <div class="sm:col-span-2">
-            <button type="submit" class="btn-primary" :disabled="creandoIngresoFijo">
+          <div class="sm:col-span-2 flex justify-end">
+            <button type="submit" class="btn-primary w-full sm:w-auto" :disabled="creandoIngresoFijo">
+              <AppIcon name="plus" class="h-4 w-4" />
               {{ creandoIngresoFijo ? 'Agregando…' : 'Agregar ingreso fijo' }}
             </button>
           </div>
         </form>
 
-        <p v-if="!ingresosFijos.length" class="text-sm text-ink-secondary">No hay ingresos fijos todavía.</p>
-        <ul v-else class="divide-y divide-border">
-          <li v-for="c in ingresosFijos" :key="c.id" class="py-3">
-            <div v-if="editandoIngresoFijoId === c.id" class="space-y-3">
+        <p v-if="!ingresosFijos.length" class="empty">No hay ingresos fijos todavía.</p>
+        <ul v-else class="list">
+          <li v-for="c in ingresosFijos" :key="c.id" :class="editandoIngresoFijoId === c.id ? 'py-3' : 'list-row'">
+            <div v-if="editandoIngresoFijoId === c.id" class="panel-sunken p-4 space-y-4">
               <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <FormField v-model="editInf.nombre" label="Nombre" required />
                 <FormField v-model="editInf.monto" type="number" label="Monto (COP)" required />
@@ -1051,53 +1086,62 @@ const categoriasParaAhorro = computed(() => categorias.value.filter((c) => c.apl
                   </select>
                 </div>
               </div>
-              <div class="flex items-center gap-3">
+              <div class="flex items-center justify-end gap-2">
+                <button class="btn-ghost btn-sm" @click="onCancelarEditarIngresoFijo">Cancelar</button>
                 <button
-                  class="btn-primary !px-3 !py-1.5 text-sm"
+                  class="btn-primary btn-sm"
                   :disabled="guardandoId === c.id"
                   @click="onGuardarEditarIngresoFijo(c)"
                 >
                   Guardar
                 </button>
-                <button class="btn-ghost !px-3 !py-1.5 text-sm" @click="onCancelarEditarIngresoFijo">Cancelar</button>
               </div>
             </div>
-            <div v-else class="flex items-center justify-between gap-4">
-              <div>
-                <p class="text-ink-primary font-medium" :class="{ 'opacity-50': !c.activo }">{{ c.nombre }}</p>
-                <p class="text-sm text-ink-tertiary">
-                  {{ formatCurrency(c.monto) }} · {{ c.frecuencia }} ·
-                  {{ c.modo === 'automatico' ? 'automático' : 'manual' }}
-                </p>
+            <template v-else>
+              <div class="min-w-0" :class="{ 'opacity-50': !c.activo }">
+                <p class="truncate text-sm font-medium text-ink-primary">{{ c.nombre }}</p>
+                <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <span class="text-[13px] text-ink-tertiary">
+                    <span class="text-positive">{{ formatCurrency(c.monto) }}</span> ·
+                    <span class="capitalize">{{ c.frecuencia }}</span>
+                  </span>
+                  <span :class="c.modo === 'automatico' ? 'badge-accent' : 'badge-neutral'">
+                    {{ c.modo === 'automatico' ? 'Automático' : 'Manual' }}
+                  </span>
+                  <span v-if="!c.activo" class="badge-neutral">Inactivo</span>
+                </div>
               </div>
-              <div class="flex items-center gap-3 shrink-0">
-                <label class="inline-flex items-center gap-2 text-sm text-ink-secondary">
+              <div class="flex shrink-0 items-center gap-1">
+                <label class="mr-1 inline-flex items-center gap-1.5 text-[13px] text-ink-secondary">
                   <input
                     type="checkbox"
+                    class="checkbox"
                     :checked="c.activo"
                     :disabled="guardandoId === c.id"
                     @change="onToggleActivoIngresoFijo(c)"
                   />
                   Activo
                 </label>
-                <button class="text-sm text-accent hover:text-accent-hover" @click="onEditarIngresoFijo(c)">
-                  Editar
+                <button class="btn-icon" :aria-label="`Editar ${c.nombre}`" @click="onEditarIngresoFijo(c)">
+                  <AppIcon name="edit" class="h-4 w-4" />
                 </button>
                 <button
-                  class="text-sm text-ink-tertiary hover:text-negative"
+                  class="btn-icon hover:text-negative hover:bg-negative/10"
+                  :aria-label="`Eliminar ${c.nombre}`"
                   :disabled="eliminandoId === c.id"
                   @click="onEliminarIngresoFijo(c)"
                 >
-                  Eliminar
+                  <AppIcon name="trash" class="h-4 w-4" />
                 </button>
               </div>
-            </div>
+            </template>
           </li>
         </ul>
       </div>
 
-      <div v-else-if="tabActiva === 'ahorros'" class="space-y-6">
-        <form class="grid grid-cols-1 sm:grid-cols-2 gap-4" @submit.prevent="onCrearAhorro">
+      <!-- Metas de ahorro -->
+      <div v-else-if="tabActiva === 'ahorros'" class="space-y-5">
+        <form class="panel-sunken p-4 grid grid-cols-1 sm:grid-cols-2 gap-4" @submit.prevent="onCrearAhorro">
           <FormField v-model="ah.nombre" label="Nombre" placeholder="Viaje a España…" required />
           <FormField v-model="ah.montoMetaTotal" type="number" label="Monto meta (opcional)" />
           <div>
@@ -1134,17 +1178,18 @@ const categoriasParaAhorro = computed(() => categorias.value.filter((c) => c.apl
               <option v-for="c in categoriasParaAhorro" :key="c.id" :value="c.id">{{ c.nombre }}</option>
             </select>
           </div>
-          <div class="sm:col-span-2">
-            <button type="submit" class="btn-primary" :disabled="creandoAhorro">
+          <div class="sm:col-span-2 flex justify-end">
+            <button type="submit" class="btn-primary w-full sm:w-auto" :disabled="creandoAhorro">
+              <AppIcon name="plus" class="h-4 w-4" />
               {{ creandoAhorro ? 'Agregando…' : 'Agregar meta' }}
             </button>
           </div>
         </form>
 
-        <p v-if="!ahorros.length" class="text-sm text-ink-secondary">No hay metas de ahorro todavía.</p>
-        <ul v-else class="divide-y divide-border">
-          <li v-for="meta in ahorros" :key="meta.id" class="py-3">
-            <div v-if="editandoAhorroId === meta.id" class="space-y-3">
+        <p v-if="!ahorros.length" class="empty">No hay metas de ahorro todavía.</p>
+        <ul v-else class="list">
+          <li v-for="meta in ahorros" :key="meta.id" :class="editandoAhorroId === meta.id ? 'py-3' : 'list-row'">
+            <div v-if="editandoAhorroId === meta.id" class="panel-sunken p-4 space-y-4">
               <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <FormField v-model="editAh.nombre" label="Nombre" required />
                 <FormField v-model="editAh.montoMetaTotal" type="number" label="Monto meta (opcional)" />
@@ -1183,55 +1228,68 @@ const categoriasParaAhorro = computed(() => categorias.value.filter((c) => c.apl
                   </select>
                 </div>
               </div>
-              <div class="flex items-center gap-3">
+              <div class="flex items-center justify-end gap-2">
+                <button class="btn-ghost btn-sm" @click="onCancelarEditarAhorro">Cancelar</button>
                 <button
-                  class="btn-primary !px-3 !py-1.5 text-sm"
+                  class="btn-primary btn-sm"
                   :disabled="guardandoId === meta.id"
                   @click="onGuardarEditarAhorro(meta)"
                 >
                   Guardar
                 </button>
-                <button class="btn-ghost !px-3 !py-1.5 text-sm" @click="onCancelarEditarAhorro">Cancelar</button>
               </div>
             </div>
-            <div v-else class="flex items-center justify-between gap-4">
-              <div>
-                <p class="text-ink-primary font-medium" :class="{ 'opacity-50': !meta.activo }">{{ meta.nombre }}</p>
-                <p class="text-sm text-ink-tertiary">
-                  {{ meta.reglaTipo === 'porcentaje' ? `${meta.reglaValor}%` : formatCurrency(meta.reglaValor) }} ·
-                  {{ meta.baseCalculo === 'disponible_total' ? 'disponible total' : 'ingreso menos obligatorios' }} ·
-                  {{ meta.modoTransaccion === 'automatico' ? 'automático' : 'manual' }}
-                  <template v-if="meta.montoMetaTotal"> · meta {{ formatCurrency(meta.montoMetaTotal) }}</template>
-                </p>
+            <template v-else>
+              <div class="flex min-w-0 items-start gap-3" :class="{ 'opacity-50': !meta.activo }">
+                <span class="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-accent/10 text-accent">
+                  <AppIcon name="piggy" class="h-4 w-4" />
+                </span>
+                <div class="min-w-0">
+                  <p class="truncate text-sm font-medium text-ink-primary">{{ meta.nombre }}</p>
+                  <p class="mt-0.5 text-[13px] text-ink-tertiary">
+                    {{ meta.reglaTipo === 'porcentaje' ? `${meta.reglaValor}%` : formatCurrency(meta.reglaValor) }} ·
+                    {{ meta.baseCalculo === 'disponible_total' ? 'Disponible total' : 'Ingreso menos obligatorios' }}
+                    <template v-if="meta.montoMetaTotal"> · Meta {{ formatCurrency(meta.montoMetaTotal) }}</template>
+                  </p>
+                  <div class="mt-1 flex flex-wrap gap-1">
+                    <span :class="meta.modoTransaccion === 'automatico' ? 'badge-accent' : 'badge-neutral'">
+                      {{ meta.modoTransaccion === 'automatico' ? 'Automático' : 'Manual' }}
+                    </span>
+                    <span v-if="!meta.activo" class="badge-neutral">Inactiva</span>
+                  </div>
+                </div>
               </div>
-              <div class="flex items-center gap-3 shrink-0">
-                <label class="inline-flex items-center gap-2 text-sm text-ink-secondary">
+              <div class="flex shrink-0 items-center gap-1">
+                <label class="mr-1 inline-flex items-center gap-1.5 text-[13px] text-ink-secondary">
                   <input
                     type="checkbox"
+                    class="checkbox"
                     :checked="meta.activo"
                     :disabled="guardandoId === meta.id"
                     @change="onToggleActivoAhorro(meta)"
                   />
                   Activo
                 </label>
-                <button class="text-sm text-accent hover:text-accent-hover" @click="onEditarAhorro(meta)">
-                  Editar
+                <button class="btn-icon" :aria-label="`Editar ${meta.nombre}`" @click="onEditarAhorro(meta)">
+                  <AppIcon name="edit" class="h-4 w-4" />
                 </button>
                 <button
-                  class="text-sm text-ink-tertiary hover:text-negative"
+                  class="btn-icon hover:text-negative hover:bg-negative/10"
+                  :aria-label="`Eliminar ${meta.nombre}`"
                   :disabled="eliminandoId === meta.id"
                   @click="onEliminarAhorro(meta)"
                 >
-                  Eliminar
+                  <AppIcon name="trash" class="h-4 w-4" />
                 </button>
               </div>
-            </div>
+            </template>
           </li>
         </ul>
       </div>
 
-      <div v-else class="space-y-6">
-        <form class="grid grid-cols-1 sm:grid-cols-2 gap-4" @submit.prevent="onCrearLimite">
+      <!-- Límites -->
+      <div v-else class="space-y-5">
+        <form class="panel-sunken p-4 grid grid-cols-1 sm:grid-cols-2 gap-4" @submit.prevent="onCrearLimite">
           <FormField v-model="li.nombre" label="Nombre" placeholder="Comida, Gastos hormiga…" required />
           <div>
             <label class="label">Aplica a</label>
@@ -1262,17 +1320,18 @@ const categoriasParaAhorro = computed(() => categorias.value.filter((c) => c.apl
             :label="li.reglaTipo === 'porcentaje' ? 'Porcentaje (%)' : 'Monto (COP)'"
             required
           />
-          <div class="sm:col-span-2">
-            <button type="submit" class="btn-primary" :disabled="creandoLimite">
+          <div class="sm:col-span-2 flex justify-end">
+            <button type="submit" class="btn-primary w-full sm:w-auto" :disabled="creandoLimite">
+              <AppIcon name="plus" class="h-4 w-4" />
               {{ creandoLimite ? 'Agregando…' : 'Agregar límite' }}
             </button>
           </div>
         </form>
 
-        <p v-if="!limites.length" class="text-sm text-ink-secondary">No hay límites configurados todavía.</p>
-        <ul v-else class="divide-y divide-border">
-          <li v-for="limite in limites" :key="limite.id" class="py-3">
-            <div v-if="editandoLimiteId === limite.id" class="space-y-3">
+        <p v-if="!limites.length" class="empty">No hay límites configurados todavía.</p>
+        <ul v-else class="list">
+          <li v-for="limite in limites" :key="limite.id" :class="editandoLimiteId === limite.id ? 'py-3' : 'list-row'">
+            <div v-if="editandoLimiteId === limite.id" class="panel-sunken p-4 space-y-4">
               <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <FormField v-model="editLi.nombre" label="Nombre" required />
                 <div>
@@ -1305,51 +1364,63 @@ const categoriasParaAhorro = computed(() => categorias.value.filter((c) => c.apl
                   required
                 />
               </div>
-              <div class="flex items-center gap-3">
+              <div class="flex items-center justify-end gap-2">
+                <button class="btn-ghost btn-sm" @click="onCancelarEditarLimite">Cancelar</button>
                 <button
-                  class="btn-primary !px-3 !py-1.5 text-sm"
+                  class="btn-primary btn-sm"
                   :disabled="guardandoId === limite.id"
                   @click="onGuardarEditarLimite(limite)"
                 >
                   Guardar
                 </button>
-                <button class="btn-ghost !px-3 !py-1.5 text-sm" @click="onCancelarEditarLimite">Cancelar</button>
               </div>
             </div>
-            <div v-else class="flex items-center justify-between gap-4">
-              <div>
-                <p class="text-ink-primary font-medium" :class="{ 'opacity-50': !limite.activo }">
-                  {{ limite.nombre }}
-                </p>
-                <p class="text-sm text-ink-tertiary">
-                  {{ TIPO_OBJETIVO_LABEL[limite.tipoObjetivo] }}
-                  <template v-if="limite.categoria"> ({{ limite.categoria.nombre }})</template>
-                  ·
-                  {{ limite.reglaTipo === 'porcentaje' ? `${limite.reglaValor}%` : formatCurrency(limite.reglaValor) }}
-                </p>
+            <template v-else>
+              <div class="flex min-w-0 items-start gap-3" :class="{ 'opacity-50': !limite.activo }">
+                <span class="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-surface-sunken text-ink-secondary">
+                  <AppIcon name="gauge" class="h-4 w-4" />
+                </span>
+                <div class="min-w-0">
+                  <p class="truncate text-sm font-medium text-ink-primary">{{ limite.nombre }}</p>
+                  <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <span class="text-[13px] text-ink-tertiary">
+                      {{
+                        limite.reglaTipo === 'porcentaje'
+                          ? `${limite.reglaValor}% del ingreso`
+                          : formatCurrency(limite.reglaValor)
+                      }}
+                    </span>
+                    <span class="badge-neutral">
+                      {{ limite.categoria ? limite.categoria.nombre : TIPO_OBJETIVO_LABEL[limite.tipoObjetivo] }}
+                    </span>
+                    <span v-if="!limite.activo" class="badge-neutral">Inactivo</span>
+                  </div>
+                </div>
               </div>
-              <div class="flex items-center gap-3 shrink-0">
-                <label class="inline-flex items-center gap-2 text-sm text-ink-secondary">
+              <div class="flex shrink-0 items-center gap-1">
+                <label class="mr-1 inline-flex items-center gap-1.5 text-[13px] text-ink-secondary">
                   <input
                     type="checkbox"
+                    class="checkbox"
                     :checked="limite.activo"
                     :disabled="guardandoId === limite.id"
                     @change="onToggleActivoLimite(limite)"
                   />
                   Activo
                 </label>
-                <button class="text-sm text-accent hover:text-accent-hover" @click="onEditarLimite(limite)">
-                  Editar
+                <button class="btn-icon" :aria-label="`Editar ${limite.nombre}`" @click="onEditarLimite(limite)">
+                  <AppIcon name="edit" class="h-4 w-4" />
                 </button>
                 <button
-                  class="text-sm text-ink-tertiary hover:text-negative"
+                  class="btn-icon hover:text-negative hover:bg-negative/10"
+                  :aria-label="`Eliminar ${limite.nombre}`"
                   :disabled="eliminandoId === limite.id"
                   @click="onEliminarLimite(limite)"
                 >
-                  Eliminar
+                  <AppIcon name="trash" class="h-4 w-4" />
                 </button>
               </div>
-            </div>
+            </template>
           </li>
         </ul>
       </div>
