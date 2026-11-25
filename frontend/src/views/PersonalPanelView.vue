@@ -18,6 +18,7 @@ import AppLayout from '../components/AppLayout.vue';
 import FormField from '../components/FormField.vue';
 import AlertError from '../components/AlertError.vue';
 import AppModal from '../components/AppModal.vue';
+import ExportarDatos from '../components/ExportarDatos.vue';
 import AppIcon from '../components/AppIcon.vue';
 import ConfiguracionPersonalSection from '../components/personal/ConfiguracionPersonalSection.vue';
 import ResumenPersonalSection from '../components/personal/ResumenPersonalSection.vue';
@@ -422,6 +423,8 @@ const gastosALaFecha = computed(() => {
 });
 
 // --- Filtro por fechas (Todos, Gastos, Ingresos) ---
+// Exportar con el rango de fechas que tenga puesto el filtro.
+const exportando = ref(false);
 const filtroDesde = ref('');
 const filtroHasta = ref('');
 const hayFiltro = computed(() => Boolean(filtroDesde.value || filtroHasta.value));
@@ -699,6 +702,9 @@ function saldoCompra(compra) {
             <button type="button" class="btn-ghost btn-sm" @click="aplicarRango('mesAnterior')">Mes anterior</button>
             <button type="button" class="btn-ghost btn-sm" @click="aplicarRango('30dias')">Últimos 30 días</button>
             <button v-if="hayFiltro" type="button" class="btn-ghost btn-sm" @click="aplicarRango('todo')">Quitar filtro</button>
+            <button type="button" class="btn-ghost btn-sm" @click="exportando = true">
+              <AppIcon name="arrowDownLeft" class="h-4 w-4" /> Exportar
+            </button>
           </div>
           <p class="ml-auto text-[13px] text-ink-secondary">
             <span v-if="tabMovimientos !== 'gastos'" class="whitespace-nowrap">
@@ -1139,6 +1145,9 @@ function saldoCompra(compra) {
 
     <AppModal v-if="mostrarConfig" title="Configuración personal" size="lg" @close="cerrarConfig">
       <ConfiguracionPersonalSection :tab-inicial="configTab" />
+    </AppModal>
+    <AppModal v-if="exportando" title="Exportar" @close="exportando = false">
+      <ExportarDatos :desde-inicial="filtroDesde" :hasta-inicial="filtroHasta" />
     </AppModal>
   </AppLayout>
 </template>

@@ -7,6 +7,7 @@ import SettingsHogarSection from '../components/settings/SettingsHogarSection.vu
 import SettingsMiembrosSection from '../components/settings/SettingsMiembrosSection.vue';
 import SettingsConceptosSection from '../components/settings/SettingsConceptosSection.vue';
 import SettingsSplitSection from '../components/settings/SettingsSplitSection.vue';
+import ExportarDatos from '../components/ExportarDatos.vue';
 
 const auth = useAuthStore();
 
@@ -15,6 +16,7 @@ const tabs = [
   { id: 'miembros', label: 'Miembros', icono: 'users' },
   { id: 'conceptos', label: 'Cuentas fijas', icono: 'repeat' },
   { id: 'split', label: 'Reparto', icono: 'sliders' },
+  { id: 'exportar', label: 'Exportar', icono: 'arrowDownLeft' },
 ];
 
 const tabActivo = ref('hogar');
@@ -45,6 +47,11 @@ const canEdit = computed(() => Boolean(auth.usuario?.esAdmin || auth.usuario?.pu
       <SettingsMiembrosSection v-else-if="tabActivo === 'miembros'" />
       <SettingsConceptosSection v-else-if="tabActivo === 'conceptos'" :can-edit="canEdit" />
       <SettingsSplitSection v-else-if="tabActivo === 'split'" :can-edit="canEdit" />
+      <section v-else-if="tabActivo === 'exportar'" class="card card-pad">
+        <h2 class="section-title">Exportar tus datos</h2>
+        <p class="section-hint mb-4">Descarga tus movimientos y los del hogar para guardarlos o analizarlos en una hoja de cálculo.</p>
+        <ExportarDatos />
+      </section>
     </div>
   </AppLayout>
 </template>
