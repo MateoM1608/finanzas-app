@@ -35,6 +35,7 @@ const form = reactive({
   conInteres: (c.tasaMensual ?? 0) > 0,
   tasaMensual: c.tasaMensual || '',
   sistemaInteres: c.sistemaInteres ?? 'capital_fijo',
+  cuotasPagadasAntes: c.cuotasPagadasAntes ?? 0,
 });
 
 // Las activas, más la que ya tenía (aunque se haya desactivado).
@@ -52,7 +53,8 @@ const cambiaCuotas = computed(
     form.modoCobro !== c.modoCobro ||
     (form.conInteres ? Number(form.tasaMensual) || 0 : 0) !== (c.tasaMensual ?? 0) ||
     (form.conInteres && form.sistemaInteres !== c.sistemaInteres) ||
-    (props.tipo === 'hogar' && form.pagoUsuarioId !== c.pagoUsuarioId),
+    (props.tipo === 'hogar' && form.pagoUsuarioId !== c.pagoUsuarioId) ||
+    Number(form.cuotasPagadasAntes) !== (c.cuotasPagadasAntes ?? 0),
 );
 
 function onSubmit() {
@@ -63,6 +65,7 @@ function onSubmit() {
     modoCobro: form.modoCobro,
     tasaMensual: form.conInteres ? Number(form.tasaMensual) || 0 : 0,
     sistemaInteres: form.sistemaInteres,
+    cuotasPagadasAntes: Number(form.cuotasPagadasAntes) || 0,
   };
   if (props.tipo === 'personal') {
     Object.assign(payload, {
@@ -92,7 +95,18 @@ function onSubmit() {
     <FormField v-model="form.montoTotal" type="number" label="Valor total (COP)" required />
     <FormField v-model="form.numeroCuotas" type="number" label="Número de cuotas" required />
     <FormField v-if="tipo === 'hogar'" v-model="form.fechaCompra" type="date" label="Fecha de la compra" required />
-    <FormField v-model="form.fechaPrimeraCuota" type="date" label="Primera cuota" required />
+    <FormField
+      v-model="form.cuotasPagadasAntes"
+      type="number"
+      label="Cuotas pagadas antes de registrarla"
+      hint="0 si la registraste desde la primera cuota."
+    />
+    <FormField
+      v-model="form.fechaPrimeraCuota"
+      type="date"
+      :label="Number(form.cuotasPagadasAntes) > 0 ? 'Fecha de la próxima cuota' : 'Primera cuota'"
+      required
+    />
     <div>
       <label class="label" :for="`compra-${compra.id}-modo`">Cómo se paga cada cuota</label>
       <select :id="`compra-${compra.id}-modo`" v-model="form.modoCobro" class="field">

@@ -33,12 +33,76 @@ export async function calcularDeudaTarjetas(usuarioId) {
   return deuda;
 }
 
+/**
+ * Punto de partida de cada método: el saldo con que se empezó a usar la app
+ * en una cuenta (IngresoPersonal origen saldo_inicial: sube el Disponible sin
+ * ser ingreso real) o la deuda que ya traía una tarjeta de crédito
+ * (GastoPersonal origen saldo_inicial con la tarjeta: sube su deuda sin ser
+ * consumo). Uno por método.
+ */
+async function saldosIniciales(usuarioId, metodoPagoId) {
+  const where = { usuarioId, origen: 'saldo_inicial', ...(metodoPagoId ? { metodoPagoId } : {}) };
+  const select = { id: true, metodoPagoId: true, monto: true, fecha: true };
+  const [ingresos, gastos] = await Promise.all([
+    prisma.ingresoPersonal.findMany({ where, select }),
+    prisma.gastoPersonal.findMany({ where, select }),
+  ]);
+  const mapa = new Map();
+  for (const s of [...ingresos.map((x) => ({ ...x, tabla: 'ingreso' })), ...gastos.map((x) => ({ ...x, tabla: 'gasto' }))]) {
+    mapa.set(s.metodoPagoId, s);
+  }
+  return mapa;
+}
+
+const publico = (s) => (s ? { monto: s.monto, fecha: s.fecha } : null);
+
 export async function listarMetodosPago(usuarioActual) {
-  const [metodos, deuda] = await Promise.all([
+  const [metodos, deuda, iniciales] = await Promise.all([
     prisma.metodoPagoPersonal.findMany({ where: { usuarioId: usuarioActual.id }, orderBy: { nombre: 'asc' } }),
     calcularDeudaTarjetas(usuarioActual.id),
+    saldosIniciales(usuarioActual.id),
   ]);
-  return metodos.map((m) => (m.tipo === 'tarjeta_credito' ? { ...m, deuda: deuda.get(m.id) ?? 0 } : m));
+  return metodos.map((m) => ({
+    ...m,
+    saldoInicial: publico(iniciales.get(m.id)),
+    ...(m.tipo === 'tarjeta_credito' ? { deuda: deuda.get(m.id) ?? 0 } : {}),
+  }));
+}
+
+/**
+ * Guarda (o quita, con monto 0) el punto de partida de un método. En una
+ * tarjeta de crédito es lo que se debe hoy sin las cuotas que todavía no se
+ * cobran (esas van en su compra a cuotas en curso). Un crédito de almacén no
+ * lleva: sus compras se registran como compras a cuotas en curso.
+ */
+const errorSaldoAlmacen = () =>
+  new HttpError(400, 'Un crédito de almacén no lleva saldo inicial: registra lo que debes como una compra a cuotas en curso');
+
+export async function guardarSaldoInicial(usuarioActual, metodoId, { monto, fecha }) {
+  const usuarioId = usuarioActual.id;
+  const metodo = await requireMetodoDelUsuario(usuarioId, metodoId);
+  const actuales = await Promise.all([
+    prisma.ingresoPersonal.findMany({ where: { usuarioId, metodoPagoId: metodoId, origen: 'saldo_inicial' }, select: { id: true } }),
+    prisma.gastoPersonal.findMany({ where: { usuarioId, metodoPagoId: metodoId, origen: 'saldo_inicial' }, select: { id: true } }),
+  ]);
+  if (monto > 0 && metodo.tipo === 'credito_almacen') throw errorSaldoAlmacen();
+  const esTarjeta = metodo.tipo === 'tarjeta_credito';
+  await prisma.$transaction(async (tx) => {
+    await tx.ingresoPersonal.deleteMany({ where: { id: { in: actuales[0].map((x) => x.id) } } });
+    await tx.gastoPersonal.deleteMany({ where: { id: { in: actuales[1].map((x) => x.id) } } });
+    if (!monto) return;
+    const comun = { usuarioId, metodoPagoId: metodoId, monto, fecha, origen: 'saldo_inicial' };
+    if (esTarjeta) {
+      await tx.gastoPersonal.create({
+        data: { ...comun, descripcion: `Deuda inicial de ${metodo.nombre}`, estado: 'pagado', esObligatorio: false },
+      });
+    } else {
+      await tx.ingresoPersonal.create({
+        data: { ...comun, descripcion: `Saldo inicial de ${metodo.nombre}`, estado: 'recibido' },
+      });
+    }
+  });
+  return publico((await saldosIniciales(usuarioId, metodoId)).get(metodoId));
 }
 
 /**
@@ -92,23 +156,43 @@ function datosMetodo(data, actual = {}) {
   };
 }
 
-export function crearMetodoPago(usuarioActual, data) {
-  return prisma.metodoPagoPersonal.create({
+export async function crearMetodoPago(usuarioActual, data) {
+  // Se valida antes de crear, para no dejar la cuenta creada si el saldo no aplica.
+  if (data.saldoInicial?.monto > 0 && data.tipo === 'credito_almacen') throw errorSaldoAlmacen();
+  const metodo = await prisma.metodoPagoPersonal.create({
     data: { usuarioId: usuarioActual.id, ...datosMetodo(data) },
   });
+  if (data.saldoInicial?.monto) {
+    return { ...metodo, saldoInicial: await guardarSaldoInicial(usuarioActual, metodo.id, data.saldoInicial) };
+  }
+  return { ...metodo, saldoInicial: null };
 }
 
 export async function actualizarMetodoPago(usuarioActual, id, data) {
   const actual = await requireMetodoDelUsuario(usuarioActual.id, id);
-  return prisma.metodoPagoPersonal.update({ where: { id }, data: datosMetodo(data, actual) });
+  const metodo = await prisma.metodoPagoPersonal.update({ where: { id }, data: datosMetodo(data, actual) });
+  // Si cambia de cuenta a tarjeta (o al revés), el punto de partida cambia de
+  // sentido (saldo ↔ deuda): se vuelve a guardar con el tipo nuevo.
+  const inicial = (await saldosIniciales(usuarioActual.id, id)).get(id);
+  const eraTarjeta = actual.tipo === 'tarjeta_credito';
+  const esTarjeta = metodo.tipo === 'tarjeta_credito';
+  if (inicial && (eraTarjeta !== esTarjeta || metodo.tipo === 'credito_almacen')) {
+    await guardarSaldoInicial(usuarioActual, id, {
+      monto: metodo.tipo === 'credito_almacen' ? 0 : inicial.monto,
+      fecha: inicial.fecha,
+    });
+  }
+  return { ...metodo, saldoInicial: publico((await saldosIniciales(usuarioActual.id, id)).get(id)) };
 }
 
 export async function eliminarMetodoPago(usuarioActual, id) {
   await requireMetodoDelUsuario(usuarioActual.id, id);
+  // El punto de partida no cuenta como uso: se borra con el método.
+  const sinOtrosMovimientos = { origen: { not: 'saldo_inicial' } };
 
   const [gastos, ingresos, gastosFijos, compras, comprasHogar, extractos, prestamos, movsAhorro] = await Promise.all([
-    prisma.gastoPersonal.count({ where: { metodoPagoId: id } }),
-    prisma.ingresoPersonal.count({ where: { metodoPagoId: id } }),
+    prisma.gastoPersonal.count({ where: { metodoPagoId: id, ...sinOtrosMovimientos } }),
+    prisma.ingresoPersonal.count({ where: { metodoPagoId: id, ...sinOtrosMovimientos } }),
     prisma.gastoFijoConfig.count({ where: { metodoPagoIdDefault: id } }),
     prisma.compraCuotasPersonal.count({ where: { metodoPagoId: id } }),
     prisma.compraCuotasHogar.count({ where: { metodoPagoId: id } }),
@@ -124,5 +208,9 @@ export async function eliminarMetodoPago(usuarioActual, id) {
     throw new HttpError(409, 'Este método de pago ya está en uso — no se puede eliminar');
   }
 
-  await prisma.metodoPagoPersonal.delete({ where: { id } });
+  await prisma.$transaction([
+    prisma.ingresoPersonal.deleteMany({ where: { metodoPagoId: id, origen: 'saldo_inicial' } }),
+    prisma.gastoPersonal.deleteMany({ where: { metodoPagoId: id, origen: 'saldo_inicial' } }),
+    prisma.metodoPagoPersonal.delete({ where: { id } }),
+  ]);
 }

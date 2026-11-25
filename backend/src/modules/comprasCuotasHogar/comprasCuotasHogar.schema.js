@@ -17,6 +17,11 @@ export const crearCompraHogarSchema = z.object({
     .array(z.object({ usuarioId: z.string().uuid(), monto: z.number().int().nonnegative() }))
     .max(50)
     .optional(),
+  // Compra que ya venía en curso: cuántas cuotas se pagaron antes de registrarla.
+  cuotasPagadasAntes: z.number().int().min(0).max(71).optional(),
+}).refine((d) => (d.cuotasPagadasAntes ?? 0) < d.numeroCuotas, {
+  message: 'Las cuotas ya pagadas deben ser menos que el total de cuotas',
+  path: ['cuotasPagadasAntes'],
 });
 
 export const actualizarCompraHogarSchema = z.object({
@@ -35,4 +40,5 @@ export const actualizarCompraHogarSchema = z.object({
     .array(z.object({ usuarioId: z.string().uuid(), monto: z.number().int().nonnegative() }))
     .max(50)
     .optional(),
+  cuotasPagadasAntes: z.number().int().min(0).max(71).optional(),
 });

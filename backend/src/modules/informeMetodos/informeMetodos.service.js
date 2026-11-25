@@ -52,12 +52,12 @@ export async function obtenerInforme(usuarioActual, metodoId, periodo) {
 
   const [gastosMes, ingresosMes] = await Promise.all([
     prisma.gastoPersonal.findMany({
-      where: { usuarioId, metodoPagoId: metodoId, estado: 'pagado', fecha: rango },
+      where: { usuarioId, metodoPagoId: metodoId, estado: 'pagado', fecha: rango, origen: { not: 'saldo_inicial' } },
       select: SELECT_MOV,
       orderBy: { fecha: 'desc' },
     }),
     prisma.ingresoPersonal.findMany({
-      where: { usuarioId, metodoPagoId: metodoId, estado: 'recibido', fecha: rango },
+      where: { usuarioId, metodoPagoId: metodoId, estado: 'recibido', fecha: rango, origen: { not: 'saldo_inicial' } },
       select: { id: true, fecha: true, monto: true, descripcion: true, origen: true },
       orderBy: { fecha: 'desc' },
     }),
@@ -86,9 +86,9 @@ export async function obtenerInforme(usuarioActual, metodoId, periodo) {
       select: {
         ...SELECT_MOV,
         compraId: true,
-        compra: { select: { id: true, descripcion: true, numeroCuotas: true, tasaMensual: true } },
+        compra: { select: { id: true, descripcion: true, numeroCuotas: true, tasaMensual: true, cuotasPagadasAntes: true } },
         pagoGastoHogar: {
-          select: { compra: { select: { id: true, item: true, numeroCuotas: true, tasaMensual: true } } },
+          select: { compra: { select: { id: true, item: true, numeroCuotas: true, tasaMensual: true, cuotasPagadasAntes: true } } },
         },
       },
       orderBy: { fecha: 'asc' },
@@ -112,7 +112,7 @@ export async function obtenerInforme(usuarioActual, metodoId, periodo) {
       origen: compraPersonal ? 'personal' : 'hogar',
       numeroCuotas: (compraPersonal ?? compraHogar).numeroCuotas,
       tasaMensual: (compraPersonal ?? compraHogar).tasaMensual,
-      cuotasCobradas: 0,
+      cuotasCobradas: (compraPersonal ?? compraHogar).cuotasPagadasAntes ?? 0,
       saldoPendiente: 0,
       interesPendiente: 0,
       proximaCuota: null,

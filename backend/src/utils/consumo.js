@@ -24,6 +24,8 @@ export const ORIGENES_NO_CONSUMO = [
   'aporte_inversion',
   'aporte_meta_hogar',
   'aporte_ahorro',
+  // Deuda que ya traía una tarjeta al empezar: se gastó antes de usar la app.
+  'saldo_inicial',
 ];
 
 // Entradas de caja que no son ingreso real: reintegros de cuadres, desembolsos
@@ -34,6 +36,8 @@ export const ORIGENES_NO_INGRESO = [
   'retiro_inversion',
   'retiro_meta_hogar',
   'retiro_ahorro',
+  // Lo que ya había en una cuenta al empezar a usar la app.
+  'saldo_inicial',
 ];
 
 const CATEGORIA_HOGAR = 'Hogar';

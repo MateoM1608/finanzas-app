@@ -29,6 +29,9 @@ async function evaluarSiObligatorioPagado(gasto) {
  * aquí los desincronizaría de su origen.
  */
 function requireNoEsDelHogar(gasto) {
+  if (gasto.origen === 'saldo_inicial') {
+    throw new HttpError(409, 'Este es el saldo inicial de una cuenta: cámbialo en Personal → Configuración → Métodos de pago');
+  }
   if (gasto.origen === 'pago_hogar') {
     throw new HttpError(409, 'Este movimiento es el pago de un gasto del hogar: cámbialo desde Hogar');
   }
@@ -126,6 +129,9 @@ export async function cambiarMetodoGastoPersonal(usuarioId, gastoId, metodoPagoI
   const gasto = await prisma.gastoPersonal.findUnique({ where: { id: gastoId } });
   if (!gasto || gasto.usuarioId !== usuarioId) {
     throw new HttpError(404, 'Gasto no encontrado');
+  }
+  if (gasto.origen === 'saldo_inicial') {
+    throw new HttpError(409, 'Este es el saldo inicial de una cuenta: cámbialo en Personal → Configuración → Métodos de pago');
   }
   const metodo = await requireMetodoPropio(usuarioId, metodoPagoId);
   return prisma.$transaction(async (tx) => {

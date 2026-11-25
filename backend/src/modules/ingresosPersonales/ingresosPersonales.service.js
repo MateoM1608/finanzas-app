@@ -27,6 +27,9 @@ export async function crearIngresoPersonal(usuarioId, data) {
 
 /** Los retiros de inversiones y metas del hogar se manejan desde allí. */
 function requireNoEsRetiro(ingreso) {
+  if (ingreso.origen === 'saldo_inicial') {
+    throw new HttpError(409, 'Este es el saldo inicial de una cuenta: cámbialo en Personal → Configuración → Métodos de pago');
+  }
   if (['retiro_inversion', 'retiro_meta_hogar', 'retiro_ahorro'].includes(ingreso.origen)) {
     throw new HttpError(409, 'Este ingreso es un retiro de un ahorro, inversión o meta: quítalo desde allí');
   }
@@ -83,6 +86,9 @@ export async function cambiarMetodoIngresoPersonal(usuarioId, ingresoId, metodoP
   const ingreso = await prisma.ingresoPersonal.findUnique({ where: { id: ingresoId } });
   if (!ingreso || ingreso.usuarioId !== usuarioId) {
     throw new HttpError(404, 'Ingreso no encontrado');
+  }
+  if (ingreso.origen === 'saldo_inicial') {
+    throw new HttpError(409, 'Este es el saldo inicial de una cuenta: cámbialo en Personal → Configuración → Métodos de pago');
   }
   const metodo = await requireMetodoPropio(usuarioId, metodoPagoId);
   return prisma.ingresoPersonal.update({ where: { id: ingresoId }, data: { metodoPagoId: metodo }, include: INCLUDE_INGRESO });

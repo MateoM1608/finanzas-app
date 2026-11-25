@@ -39,16 +39,22 @@ export async function sugerirPrimeraCuota(usuarioActual, { fechaCompra, metodoPa
   return sugerirFechaPrimeraCuota(fechaCompra ?? hoyUTC(), metodo);
 }
 
-/** Crea las N cuotas (GastoPersonal) de una compra con los datos dados. */
+/**
+ * Crea las cuotas (GastoPersonal) de una compra con los datos dados. Si la
+ * compra ya venía en curso, solo las que faltan: salen del plan completo de
+ * la compra y se numeran desde la siguiente a las ya pagadas; la primera
+ * fecha es la de la próxima cuota.
+ */
 async function generarCuotas(tx, compraId, usuarioId, datos) {
   const hoy = hoyUTC();
-  const cuotas = calcularCuotas(datos.montoTotal, datos.numeroCuotas, datos.tasaMensual, datos.sistemaInteres);
-  const fechas = fechasDeCuotas(datos.fechaPrimeraCuota, datos.numeroCuotas);
+  const antes = datos.cuotasPagadasAntes ?? 0;
+  const cuotas = calcularCuotas(datos.montoTotal, datos.numeroCuotas, datos.tasaMensual, datos.sistemaInteres).slice(antes);
+  const fechas = fechasDeCuotas(datos.fechaPrimeraCuota, datos.numeroCuotas - antes);
   await tx.gastoPersonal.createMany({
     data: fechas.map((fecha, i) => ({
       usuarioId,
       compraId,
-      numeroCuota: i + 1,
+      numeroCuota: antes + i + 1,
       monto: cuotas[i].monto,
       capital: cuotas[i].capital,
       interes: cuotas[i].interes,
@@ -89,18 +95,19 @@ export async function crearCompra(usuarioActual, data) {
     metodoPagoId: data.metodoPagoId ?? null,
     categoriaId: data.categoriaId ?? null,
     esObligatorio: data.esObligatorio ?? true,
+    cuotasPagadasAntes: data.cuotasPagadasAntes ?? 0,
   };
   const compra = await prisma.$transaction(async (tx) => {
     const nueva = await tx.compraCuotasPersonal.create({ data: { usuarioId, ...datos } });
     const primera = await generarCuotas(tx, nueva.id, usuarioId, datos);
     await tx.compraCuotasPersonal.update({ where: { id: nueva.id }, data: { fechaPrimeraCuota: primera } });
     return tx.compraCuotasPersonal.findUnique({ where: { id: nueva.id }, include: INCLUDE_COMPRA });
-  });
+  }, { timeout: 120000, maxWait: 20000 });
   await evaluarCuotasPagadas(usuarioId, compra);
   return compra;
 }
 
-const CAMPOS_ESTRUCTURALES = ['montoTotal', 'numeroCuotas', 'fechaPrimeraCuota', 'modoCobro', 'tasaMensual', 'sistemaInteres'];
+const CAMPOS_ESTRUCTURALES = ['montoTotal', 'numeroCuotas', 'fechaPrimeraCuota', 'modoCobro', 'tasaMensual', 'sistemaInteres', 'cuotasPagadasAntes'];
 
 /**
  * Edita una compra. Descripción, categoría, método y obligatorio se pueden
@@ -133,7 +140,11 @@ export async function actualizarCompra(usuarioActual, compraId, data) {
     metodoPagoId: data.metodoPagoId === undefined ? actual.metodoPagoId : data.metodoPagoId,
     categoriaId: data.categoriaId === undefined ? actual.categoriaId : data.categoriaId,
     esObligatorio: data.esObligatorio ?? actual.esObligatorio,
+    cuotasPagadasAntes: data.cuotasPagadasAntes ?? actual.cuotasPagadasAntes,
   };
+  if (datos.cuotasPagadasAntes >= datos.numeroCuotas) {
+    throw new HttpError(400, 'Las cuotas ya pagadas deben ser menos que el total de cuotas');
+  }
   const cambiaEstructura = CAMPOS_ESTRUCTURALES.some((campo) =>
     campo === 'fechaPrimeraCuota'
       ? new Date(datos[campo]).getTime() !== new Date(actual[campo]).getTime()
@@ -167,7 +178,7 @@ export async function actualizarCompra(usuarioActual, compraId, data) {
     }
     await tx.compraCuotasPersonal.update({ where: { id: compraId }, data: datos });
     return tx.compraCuotasPersonal.findUnique({ where: { id: compraId }, include: INCLUDE_COMPRA });
-  });
+  }, { timeout: 120000, maxWait: 20000 });
   await evaluarCuotasPagadas(usuarioId, compra);
   return compra;
 }

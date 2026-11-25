@@ -70,7 +70,12 @@ async function resolverPorcentajes(hogarId, data) {
     }
     return data.repartos.map((r) => ({ usuarioId: r.usuarioId, porcentaje: (r.monto / data.montoTotal) * 100 }));
   }
-  const split = await obtenerSplitVigenteGastosVariables(hogarId, prisma, data.fechaCompra);
+  let split = await obtenerSplitVigenteGastosVariables(hogarId, prisma, data.fechaCompra);
+  // Una compra que ya venía en curso puede ser de antes del primer reparto
+  // configurado: se usa el reparto de hoy.
+  if (!split.length && data.cuotasPagadasAntes) {
+    split = await obtenerSplitVigenteGastosVariables(hogarId, prisma);
+  }
   if (!split.length) {
     throw new HttpError(409, 'Configura primero el porcentaje de reparto del hogar en Configuración');
   }
@@ -115,20 +120,26 @@ export async function crearCompra(usuarioActual, data) {
         pagoUsuarioId: data.pagoUsuarioId,
         metodoPagoId: data.metodoPagoId ?? null,
         categoriaId: data.categoriaId,
+        cuotasPagadasAntes: data.cuotasPagadasAntes ?? 0,
       },
     });
     const primera = await generarCuotas(tx, nueva.id, hogarId, data, porcentajes);
     await tx.compraCuotasHogar.update({ where: { id: nueva.id }, data: { fechaPrimeraCuota: primera } });
     return tx.compraCuotasHogar.findUnique({ where: { id: nueva.id }, include: INCLUDE_COMPRA });
-  });
+  }, { timeout: 120000, maxWait: 20000 });
   await registrarActividad(usuarioActual, { tipo: 'compra_cuotas', descripcion: `agregó la compra a cuotas ${data.item}`, monto: data.montoTotal });
   return ocultarMetodoAjeno(compra, usuarioActual);
 }
 
-/** Crea las N cuotas (GastoVariablePareja + reparto) de una compra con los datos dados. */
+/**
+ * Crea las cuotas (GastoVariablePareja + reparto) de una compra con los datos
+ * dados. Si ya venía en curso, solo las que faltan, numeradas desde la
+ * siguiente a las ya pagadas (las pagadas antes no entran al saldo).
+ */
 async function generarCuotas(tx, compraId, hogarId, datos, porcentajes) {
-  const cuotas = calcularCuotas(datos.montoTotal, datos.numeroCuotas, datos.tasaMensual, datos.sistemaInteres);
-  const fechas = fechasDeCuotas(datos.fechaPrimeraCuota, datos.numeroCuotas);
+  const antes = datos.cuotasPagadasAntes ?? 0;
+  const cuotas = calcularCuotas(datos.montoTotal, datos.numeroCuotas, datos.tasaMensual, datos.sistemaInteres).slice(antes);
+  const fechas = fechasDeCuotas(datos.fechaPrimeraCuota, datos.numeroCuotas - antes);
   const estadoInicial = datos.modoCobro === 'automatico' ? 'pagado' : 'por_pagar';
   for (let i = 0; i < fechas.length; i += 1) {
     const cuota = await tx.gastoVariablePareja.create({
@@ -142,7 +153,7 @@ async function generarCuotas(tx, compraId, hogarId, datos, porcentajes) {
         fecha: fechas[i],
         estado: estadoInicial,
         compraId,
-        numeroCuota: i + 1,
+        numeroCuota: antes + i + 1,
         categoriaId: datos.categoriaId ?? null,
         // Automáticas: nacen pagadas por quien registró la compra.
         registradoPorId: estadoInicial === 'pagado' ? (datos.registradoPorId ?? null) : null,
@@ -168,7 +179,7 @@ async function porcentajesActuales(compraId) {
   return primera.repartos.map((r) => ({ usuarioId: r.usuarioId, porcentaje: (r.monto / primera.valorTotal) * 100 }));
 }
 
-const CAMPOS_ESTRUCTURALES = ['montoTotal', 'numeroCuotas', 'fechaPrimeraCuota', 'modoCobro', 'pagoUsuarioId', 'tasaMensual', 'sistemaInteres'];
+const CAMPOS_ESTRUCTURALES = ['montoTotal', 'numeroCuotas', 'fechaPrimeraCuota', 'modoCobro', 'pagoUsuarioId', 'tasaMensual', 'sistemaInteres', 'cuotasPagadasAntes'];
 
 /**
  * Edita una compra del hogar. El nombre (y el método de pago, solo su
@@ -200,7 +211,11 @@ export async function actualizarCompra(usuarioActual, compraId, data) {
       data.categoriaId === undefined
         ? actual.categoriaId
         : await validarCategoriaHogar(hogarId, data.categoriaId, actual.categoriaId),
+    cuotasPagadasAntes: data.cuotasPagadasAntes ?? actual.cuotasPagadasAntes,
   };
+  if (datos.cuotasPagadasAntes >= datos.numeroCuotas) {
+    throw new HttpError(400, 'Las cuotas ya pagadas deben ser menos que el total de cuotas');
+  }
   if (datos.pagoUsuarioId !== actual.pagoUsuarioId) {
     const pagador = await prisma.usuario.count({ where: { id: datos.pagoUsuarioId, hogarId } });
     if (!pagador) {
@@ -270,7 +285,7 @@ export async function actualizarCompra(usuarioActual, compraId, data) {
     const cuotas = await tx.gastoVariablePareja.findMany({ where: { compraId }, select: { id: true } });
     for (const c of cuotas) await sincronizarPagoGasto(tx, c.id);
     return tx.compraCuotasHogar.findUnique({ where: { id: compraId }, include: INCLUDE_COMPRA });
-  });
+  }, { timeout: 120000, maxWait: 20000 });
   return ocultarMetodoAjeno(compra, usuarioActual);
 }
 

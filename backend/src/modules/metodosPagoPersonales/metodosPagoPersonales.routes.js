@@ -5,6 +5,7 @@ import {
   getMetodosPago,
   postMetodoPago,
   patchMetodoPago,
+  putSaldoInicial,
   deleteMetodoPago,
 } from './metodosPagoPersonales.controller.js';
 
@@ -16,3 +17,4 @@ metodosPagoPersonalesRouter.post('/', postMetodoPago);
 metodosPagoPersonalesRouter.patch('/:id', patchMetodoPago);
 metodosPagoPersonalesRouter.delete('/:id', deleteMetodoPago);
 metodosPagoPersonalesRouter.post('/:id/pagos', postPagoTarjeta);
+metodosPagoPersonalesRouter.put('/:id/saldo-inicial', putSaldoInicial);

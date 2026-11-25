@@ -1,13 +1,17 @@
 <script setup>
 import { reactive, computed } from 'vue';
 import FormField from '../FormField.vue';
-import { TIPOS_METODO } from '../../utils/format.js';
+import { TIPOS_METODO, hoyISO } from '../../utils/format.js';
 
 /**
  * Formulario de un método de pago personal. Para tarjeta de crédito y
  * crédito de almacén pide los días de corte/pago (sirven para sugerir la
  * fecha de la primera cuota de una compra). Nunca pide el número completo
  * de la tarjeta, el código de seguridad ni la fecha de vencimiento.
+ *
+ * Punto de partida: lo que hay hoy en la cuenta (sube el Disponible sin ser
+ * ingreso) o lo que se debe hoy en la tarjeta (sube su deuda sin ser gasto).
+ * Se emite como `saldoInicial` y la vista lo guarda aparte.
  */
 const props = defineProps({
   inicial: { type: Object, default: null },
@@ -26,12 +30,16 @@ const form = reactive({
   cupo: props.inicial?.cupo ?? '',
   tasaMensual: props.inicial?.tasaMensual || '',
   sistemaInteres: props.inicial?.sistemaInteres ?? 'capital_fijo',
+  saldoMonto: props.inicial?.saldoInicial?.monto ?? '',
+  saldoFecha: props.inicial?.saldoInicial?.fecha?.slice(0, 10) ?? hoyISO(),
 });
 
 const esTarjeta = computed(() => form.tipo === 'tarjeta_credito');
 const esCredito = computed(() => esTarjeta.value || form.tipo === 'credito_almacen');
 const llevaUltimos4 = computed(() => esTarjeta.value || form.tipo === 'debito');
 const ultimos4Valido = computed(() => !form.ultimos4 || /^\d{4}$/.test(form.ultimos4));
+// Un crédito de almacén no lleva saldo inicial: lo que se debe va como compra a cuotas en curso.
+const llevaSaldoInicial = computed(() => form.tipo !== 'credito_almacen');
 
 function numeroONull(v) {
   return v === '' || v == null ? null : Number(v);
@@ -48,6 +56,9 @@ function onSubmit() {
     cupo: esCredito.value ? numeroONull(form.cupo) : null,
     tasaMensual: esCredito.value ? Number(form.tasaMensual) || 0 : 0,
     sistemaInteres: form.sistemaInteres,
+    saldoInicial: llevaSaldoInicial.value
+      ? { monto: Number(form.saldoMonto) || 0, fecha: form.saldoFecha || hoyISO() }
+      : { monto: 0, fecha: hoyISO() },
   });
 }
 </script>
@@ -88,6 +99,27 @@ function onSubmit() {
         <option value="cuota_fija">Cuota fija</option>
       </select>
     </div>
+
+    <template v-if="llevaSaldoInicial">
+      <FormField
+        v-model="form.saldoMonto"
+        type="number"
+        :label="esTarjeta ? 'Lo que debes hoy (opcional, COP)' : 'Saldo de hoy (opcional, COP)'"
+        :hint="
+          esTarjeta
+            ? 'Sin las cuotas que todavía no te cobran: esas van como compra a cuotas en curso.'
+            : 'Lo que hay hoy en esta cuenta. Sube tu Disponible y no cuenta como ingreso.'
+        "
+      />
+      <FormField
+        v-if="Number(form.saldoMonto) > 0"
+        v-model="form.saldoFecha"
+        type="date"
+        :label="esTarjeta ? 'Fecha de esa deuda' : 'Fecha de ese saldo'"
+        required
+        hint="Normalmente hoy, el día que empiezas a usar la app."
+      />
+    </template>
 
     <p v-if="!ultimos4Valido" class="sm:col-span-2 text-[13px] font-medium text-negative">
       Escribe solo los últimos 4 dígitos.

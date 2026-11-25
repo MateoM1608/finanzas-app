@@ -72,6 +72,9 @@ const aCuotas = ref(false);
 const numeroCuotas = ref('3');
 const primeraCuota = ref('');
 const modoCobro = ref('automatico');
+// Compra que ya venía en curso: cuántas cuotas se pagaron antes de registrarla.
+const enCurso = ref(false);
+const cuotasPagadasAntes = ref('');
 const hInteres = ref('sin');
 const hTasa = ref('');
 const hSistema = ref('capital_fijo');
@@ -149,8 +152,9 @@ const valorCuota = computed(() => {
 
 const comprasActivas = computed(() => compras.value.filter((c) => c.cuotas.some((q) => q.estado !== 'cuadrado')));
 
+// Incluye las que se pagaron antes de registrar la compra (en curso).
 function cuotasCuadradas(compra) {
-  return compra.cuotas.filter((q) => q.estado === 'cuadrado').length;
+  return (compra.cuotasPagadasAntes ?? 0) + compra.cuotas.filter((q) => q.estado === 'cuadrado').length;
 }
 
 async function cargarCompras() {
@@ -298,6 +302,7 @@ async function onCrear() {
         fechaCompra: payload.fecha,
         fechaPrimeraCuota: primeraCuota.value,
         modoCobro: modoCobro.value,
+        ...(enCurso.value ? { cuotasPagadasAntes: Number(cuotasPagadasAntes.value) || 0 } : {}),
         ...(hInteres.value === 'tarjeta'
           ? {}
           : { tasaMensual: hInteres.value === 'otra' ? Number(hTasa.value) || 0 : 0, sistemaInteres: hSistema.value }),
@@ -308,6 +313,8 @@ async function onCrear() {
       });
       await Promise.all([cargarCompras(), recargarGastos()]);
       aCuotas.value = false;
+      enCurso.value = false;
+      cuotasPagadasAntes.value = '';
       metodoPagoId.value = '';
     } else {
       if (pagaYo.value && metodoPagoId.value) payload.metodoPagoId = metodoPagoId.value;
@@ -448,8 +455,30 @@ onMounted(cargar);
           </label>
         </div>
         <template v-if="aCuotas">
-          <FormField v-model="numeroCuotas" type="number" label="Número de cuotas" required />
-          <FormField v-model="primeraCuota" type="date" label="Primera cuota" required />
+          <label class="sm:col-span-2 inline-flex items-center gap-2.5 text-sm text-ink-secondary cursor-pointer">
+            <input v-model="enCurso" type="checkbox" class="checkbox" />
+            La compra ya va en curso (ya se pagaron algunas cuotas)
+          </label>
+          <FormField
+            v-model="numeroCuotas"
+            type="number"
+            :label="enCurso ? 'Total de cuotas de la compra' : 'Número de cuotas'"
+            required
+          />
+          <FormField
+            v-if="enCurso"
+            v-model="cuotasPagadasAntes"
+            type="number"
+            label="Cuotas ya pagadas"
+            required
+            hint="No entran al saldo ni a los cuadres. La app crea solo las que faltan."
+          />
+          <FormField
+            v-model="primeraCuota"
+            type="date"
+            :label="enCurso ? 'Fecha de la próxima cuota' : 'Primera cuota'"
+            required
+          />
           <div>
             <label class="label" for="compra-hogar-modo">Cómo se paga cada cuota</label>
             <select id="compra-hogar-modo" v-model="modoCobro" class="field">

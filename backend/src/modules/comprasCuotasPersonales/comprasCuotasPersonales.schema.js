@@ -12,6 +12,11 @@ export const crearCompraPersonalSchema = z.object({
   metodoPagoId: z.string().uuid().nullable().optional(),
   categoriaId: z.string().uuid().nullable().optional(),
   esObligatorio: z.boolean().optional(),
+  // Compra que ya venía en curso: cuántas cuotas se pagaron antes de registrarla.
+  cuotasPagadasAntes: z.number().int().min(0).max(71).optional(),
+}).refine((d) => (d.cuotasPagadasAntes ?? 0) < d.numeroCuotas, {
+  message: 'Las cuotas ya pagadas deben ser menos que el total de cuotas',
+  path: ['cuotasPagadasAntes'],
 });
 
 export const sugerirPrimeraCuotaSchema = z.object({
@@ -30,4 +35,5 @@ export const actualizarCompraPersonalSchema = z.object({
   metodoPagoId: z.string().uuid().nullable().optional(),
   categoriaId: z.string().uuid().nullable().optional(),
   esObligatorio: z.boolean().optional(),
+  cuotasPagadasAntes: z.number().int().min(0).max(71).optional(),
 });

@@ -143,6 +143,9 @@ const gACuotas = ref(false);
 const gNumeroCuotas = ref('3');
 const gPrimeraCuota = ref('');
 const gModoCobro = ref('automatico');
+// Compra que ya venía en curso: cuántas cuotas se pagaron antes de empezar a usar la app.
+const gEnCurso = ref(false);
+const gCuotasPagadas = ref('');
 // Interés de la compra: el de la tarjeta (por defecto si tiene), sin interés u otra tasa.
 const gInteres = ref('sin');
 const gTasa = ref('');
@@ -224,6 +227,7 @@ async function onAgregarCompra() {
     numeroCuotas: Number(gNumeroCuotas.value),
     fechaPrimeraCuota: gPrimeraCuota.value,
     modoCobro: gModoCobro.value,
+    ...(gEnCurso.value ? { cuotasPagadasAntes: Number(gCuotasPagadas.value) || 0 } : {}),
     ...(gInteres.value === 'tarjeta'
       ? {}
       : { tasaMensual: gInteres.value === 'otra' ? Number(gTasa.value) || 0 : 0, sistemaInteres: gSistema.value }),
@@ -232,6 +236,8 @@ async function onAgregarCompra() {
     esObligatorio: gEsObligatorio.value,
   });
   gTasa.value = '';
+  gEnCurso.value = false;
+  gCuotasPagadas.value = '';
   await Promise.all([cargarCompras(), cargarGastos()]);
 }
 
@@ -581,6 +587,7 @@ const ORIGEN_MOVIMIENTO = {
   retiro_meta_hogar: { badge: 'Meta del hogar', icono: 'piggy' },
   aporte_ahorro: { badge: 'Ahorro', icono: 'piggy' },
   retiro_ahorro: { badge: 'Ahorro', icono: 'piggy' },
+  saldo_inicial: { badge: 'Punto de partida', icono: 'wallet' },
 };
 function esDelHogar(mov) {
   return mov.origen === 'pago_hogar' || mov.origen === 'liquidacion_hogar';
@@ -594,6 +601,8 @@ const ORIGENES_DE_OTRA_PANTALLA = [
   'retiro_meta_hogar',
   'aporte_ahorro',
   'retiro_ahorro',
+  // Saldo o deuda inicial: se cambia en Configuración → Métodos de pago.
+  'saldo_inicial',
 ];
 function esDeOtraPantalla(mov) {
   return Boolean(mov.prestamoId) || ORIGENES_DE_OTRA_PANTALLA.includes(mov.origen);
@@ -621,6 +630,10 @@ async function onCambiarMetodo(tipo, mov, metodoPagoId) {
 
 function cuotasPagadas(compra) {
   return compra.cuotas.filter((c) => c.estado === 'pagado').length;
+}
+// Para mostrar: incluye las que se pagaron antes de registrar la compra (en curso).
+function cuotasPagadasTotal(compra) {
+  return (compra.cuotasPagadasAntes ?? 0) + cuotasPagadas(compra);
 }
 function saldoCompra(compra) {
   return compra.cuotas.filter((c) => c.estado !== 'pagado').reduce((acc, c) => acc + c.monto, 0);
@@ -1049,14 +1062,15 @@ function saldoCompra(compra) {
                 <div class="min-w-0">
                   <p class="flex flex-wrap items-center gap-1.5 text-sm font-medium text-ink-primary">
                     <span class="truncate">{{ compra.descripcion }}</span>
-                    <span class="badge-neutral">{{ cuotasPagadas(compra) }}/{{ compra.numeroCuotas }} pagadas</span>
+                    <span class="badge-neutral">{{ cuotasPagadasTotal(compra) }}/{{ compra.numeroCuotas }} pagadas</span>
                     <span :class="compra.modoCobro === 'automatico' ? 'badge-accent' : 'badge-warning'">
                       {{ compra.modoCobro === 'automatico' ? 'Automático' : 'Manual' }}
                     </span>
                   </p>
                   <p class="mt-0.5 text-[13px] text-ink-tertiary">
-                    {{ formatCurrency(compra.montoTotal) }} en {{ compra.numeroCuotas }} cuotas · desde
-                    {{ formatDate(compra.fechaPrimeraCuota) }}
+                    {{ formatCurrency(compra.montoTotal) }} en {{ compra.numeroCuotas }} cuotas ·
+                    <template v-if="compra.cuotasPagadasAntes">registrada en curso, desde la cuota {{ compra.cuotasPagadasAntes + 1 }} ({{ formatDate(compra.fechaPrimeraCuota) }})</template>
+                    <template v-else>desde {{ formatDate(compra.fechaPrimeraCuota) }}</template>
                     <template v-if="compra.metodoPago"> · {{ compra.metodoPago.nombre }}</template>
                   </p>
                 </div>
@@ -1179,13 +1193,30 @@ function saldoCompra(compra) {
           Es una compra a cuotas
         </label>
         <template v-if="gACuotas">
-          <FormField v-model="gNumeroCuotas" type="number" label="Número de cuotas" required />
+          <label class="sm:col-span-2 inline-flex items-center gap-2.5 text-sm text-ink-secondary cursor-pointer">
+            <input v-model="gEnCurso" type="checkbox" class="checkbox" />
+            La compra ya va en curso (ya pagué algunas cuotas)
+          </label>
+          <FormField
+            v-model="gNumeroCuotas"
+            type="number"
+            :label="gEnCurso ? 'Total de cuotas de la compra' : 'Número de cuotas'"
+            required
+          />
+          <FormField
+            v-if="gEnCurso"
+            v-model="gCuotasPagadas"
+            type="number"
+            label="Cuotas que ya pagaste"
+            required
+            hint="No se registran: no bajan tu Disponible ni cuentan como gasto. La app crea solo las que faltan."
+          />
           <FormField
             v-model="gPrimeraCuota"
             type="date"
-            label="Primera cuota"
+            :label="gEnCurso ? 'Fecha de la próxima cuota' : 'Primera cuota'"
             required
-            hint="Sugerida con el día de corte y pago de la tarjeta; puedes cambiarla."
+            :hint="gEnCurso ? 'La de la próxima cuota que vas a pagar.' : 'Sugerida con el día de corte y pago de la tarjeta; puedes cambiarla.'"
           />
           <div>
             <label class="label" for="g-modo-cobro">Cómo se paga cada cuota</label>
@@ -1232,7 +1263,13 @@ function saldoCompra(compra) {
           <button
             type="submit"
             class="btn-primary"
-            :disabled="guardandoGasto || (gACuotas && (!gDescripcion || Number(gNumeroCuotas) < 2))"
+            :disabled="
+              guardandoGasto ||
+              (gACuotas &&
+                (!gDescripcion ||
+                  Number(gNumeroCuotas) < 2 ||
+                  (gEnCurso && !(Number(gCuotasPagadas) >= 1 && Number(gCuotasPagadas) < Number(gNumeroCuotas)))))
+            "
           >
             {{ guardandoGasto ? 'Guardando…' : gACuotas ? 'Agregar compra' : 'Agregar gasto' }}
           </button>

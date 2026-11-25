@@ -5,6 +5,7 @@ import {
   listarMetodosPago,
   crearMetodoPago,
   actualizarMetodoPago,
+  guardarSaldoInicial,
   eliminarMetodoPago,
   registrarPagoTarjeta,
 } from '../../api/metodosPagoPersonales.js';
@@ -40,7 +41,7 @@ import {
   eliminarLimite,
 } from '../../api/limitesPersonales.js';
 import { extractErrorMessage } from '../../api/client.js';
-import { formatCurrency, hoyISO, describirMetodo } from '../../utils/format.js';
+import { formatCurrency, formatDate, hoyISO, describirMetodo } from '../../utils/format.js';
 import FormField from '../FormField.vue';
 import MetodoPagoForm from './MetodoPagoForm.vue';
 import AlertError from '../AlertError.vue';
@@ -116,11 +117,11 @@ onMounted(cargar);
 const creandoMetodo = ref(false);
 const formMetodoKey = ref(0);
 
-async function onCrearMetodo(payload) {
+async function onCrearMetodo({ saldoInicial, ...datos }) {
   error.value = '';
   creandoMetodo.value = true;
   try {
-    const metodo = await crearMetodoPago(payload);
+    const metodo = await crearMetodoPago({ ...datos, ...(saldoInicial.monto > 0 ? { saldoInicial } : {}) });
     metodos.value = [...metodos.value, metodo];
     formMetodoKey.value += 1; // limpia el formulario
   } catch (e) {
@@ -178,13 +179,18 @@ async function onRegistrarPagoTarjeta(tarjeta) {
   }
 }
 
-async function onGuardarEditarMetodo(metodo, payload) {
+async function onGuardarEditarMetodo(metodo, { saldoInicial, ...datos }) {
   error.value = '';
   guardandoId.value = metodo.id;
   try {
-    const actualizado = await actualizarMetodoPago(metodo.id, payload);
-    const idx = metodos.value.findIndex((m) => m.id === metodo.id);
-    metodos.value[idx] = actualizado;
+    await actualizarMetodoPago(metodo.id, datos);
+    const antes = metodo.saldoInicial;
+    const cambiaSaldo =
+      (antes?.monto ?? 0) !== saldoInicial.monto ||
+      (saldoInicial.monto > 0 && antes?.fecha?.slice(0, 10) !== saldoInicial.fecha);
+    if (cambiaSaldo) await guardarSaldoInicial(metodo.id, saldoInicial);
+    // La deuda de una tarjeta cambia con su deuda inicial: se recarga la lista.
+    metodos.value = await listarMetodosPago();
     editandoMetodoId.value = null;
   } catch (e) {
     error.value = extractErrorMessage(e);
@@ -838,6 +844,10 @@ const categoriasParaAhorro = computed(() => categorias.value.filter((c) => c.apl
                   <span class="block truncate text-[13px] text-ink-tertiary">{{ describirMetodo(m) }}</span>
                   <span v-if="m.tipo === 'tarjeta_credito'" class="block text-[13px] text-ink-secondary">
                     Deuda: <span class="font-semibold" :class="m.deuda > 0 ? 'text-warning' : ''">{{ formatCurrency(m.deuda ?? 0) }}</span>
+                  </span>
+                  <span v-if="m.saldoInicial" class="block text-[13px] text-ink-tertiary">
+                    {{ m.tipo === 'tarjeta_credito' ? 'Deuda inicial' : 'Saldo inicial' }}:
+                    {{ formatCurrency(m.saldoInicial.monto) }} · {{ formatDate(m.saldoInicial.fecha) }}
                   </span>
                 </span>
               </div>

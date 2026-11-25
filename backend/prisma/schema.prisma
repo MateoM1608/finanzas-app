@@ -46,6 +46,10 @@ enum OrigenGasto {
   // sube, no es ingreso real).
   aporte_ahorro
   retiro_ahorro
+  // Punto de partida: lo que había en una cuenta el día que se empezó a usar
+  // la app (ingreso: sube el Disponible, no es ingreso real) o lo que ya se
+  // debía en una tarjeta (gasto con la tarjeta: sube su deuda, no es consumo).
+  saldo_inicial
 }
 
 // Frecuencia propia de cada cuenta fija del hogar (ya no hay frecuencia de
@@ -834,20 +838,24 @@ enum SistemaInteres {
 // fecha) o manual (crédito de almacén: alguien la marca pagada).
 
 model CompraCuotasPersonal {
-  id                String           @id @default(uuid())
-  usuarioId         String           @map("usuario_id")
-  descripcion       String
-  montoTotal        Int              @map("monto_total")
-  numeroCuotas      Int              @map("numero_cuotas")
-  fechaPrimeraCuota DateTime         @map("fecha_primera_cuota")
-  modoCobro         ModoFijoPersonal @map("modo_cobro")
-  metodoPagoId      String?          @map("metodo_pago_id")
-  categoriaId       String?          @map("categoria_id")
-  esObligatorio     Boolean          @default(true) @map("es_obligatorio")
+  id                 String           @id @default(uuid())
+  usuarioId          String           @map("usuario_id")
+  descripcion        String
+  montoTotal         Int              @map("monto_total")
+  numeroCuotas       Int              @map("numero_cuotas")
+  fechaPrimeraCuota  DateTime         @map("fecha_primera_cuota")
+  modoCobro          ModoFijoPersonal @map("modo_cobro")
+  metodoPagoId       String?          @map("metodo_pago_id")
+  categoriaId        String?          @map("categoria_id")
+  esObligatorio      Boolean          @default(true) @map("es_obligatorio")
   // Interés: tasa mensual en % (0 = sin interés) y cómo se calcula.
-  tasaMensual       Float            @default(0) @map("tasa_mensual")
-  sistemaInteres    SistemaInteres   @default(capital_fijo) @map("sistema_interes")
-  creadoEn          DateTime         @default(now()) @map("creado_en")
+  tasaMensual        Float            @default(0) @map("tasa_mensual")
+  sistemaInteres     SistemaInteres   @default(capital_fijo) @map("sistema_interes")
+  // Compra que ya venía en curso: cuotas pagadas antes de registrarla. No se
+  // crean (no tocan el Disponible ni el consumo); las demás se numeran desde
+  // la siguiente y salen del mismo plan de la compra original.
+  cuotasPagadasAntes Int              @default(0) @map("cuotas_pagadas_antes")
+  creadoEn           DateTime         @default(now()) @map("creado_en")
 
   usuario    Usuario             @relation(fields: [usuarioId], references: [id])
   metodoPago MetodoPagoPersonal? @relation(fields: [metodoPagoId], references: [id])
@@ -861,20 +869,23 @@ model CompraCuotasPersonal {
 // El método de pago es del pagador (privado): solo se expone a quien pagó.
 // El reparto de todas las cuotas usa el split vigente el día de la compra.
 model CompraCuotasHogar {
-  id                String           @id @default(uuid())
-  hogarId           String           @map("hogar_id")
-  item              String
-  montoTotal        Int              @map("monto_total")
-  numeroCuotas      Int              @map("numero_cuotas")
-  fechaCompra       DateTime         @map("fecha_compra")
-  fechaPrimeraCuota DateTime         @map("fecha_primera_cuota")
-  modoCobro         ModoFijoPersonal @map("modo_cobro")
-  pagoUsuarioId     String           @map("pago_usuario_id")
-  metodoPagoId      String?          @map("metodo_pago_id")
-  tasaMensual       Float            @default(0) @map("tasa_mensual")
-  sistemaInteres    SistemaInteres   @default(capital_fijo) @map("sistema_interes")
-  categoriaId       String?          @map("categoria_id")
-  creadoEn          DateTime         @default(now()) @map("creado_en")
+  id                 String           @id @default(uuid())
+  hogarId            String           @map("hogar_id")
+  item               String
+  montoTotal         Int              @map("monto_total")
+  numeroCuotas       Int              @map("numero_cuotas")
+  fechaCompra        DateTime         @map("fecha_compra")
+  fechaPrimeraCuota  DateTime         @map("fecha_primera_cuota")
+  modoCobro          ModoFijoPersonal @map("modo_cobro")
+  pagoUsuarioId      String           @map("pago_usuario_id")
+  metodoPagoId       String?          @map("metodo_pago_id")
+  tasaMensual        Float            @default(0) @map("tasa_mensual")
+  sistemaInteres     SistemaInteres   @default(capital_fijo) @map("sistema_interes")
+  categoriaId        String?          @map("categoria_id")
+  // Compra que ya venía en curso: cuotas pagadas antes de registrarla (no
+  // entran al saldo ni a los cuadres).
+  cuotasPagadasAntes Int              @default(0) @map("cuotas_pagadas_antes")
+  creadoEn           DateTime         @default(now()) @map("creado_en")
 
   categoria  CategoriaHogar?       @relation(fields: [categoriaId], references: [id])
   hogar      Hogar                 @relation(fields: [hogarId], references: [id])

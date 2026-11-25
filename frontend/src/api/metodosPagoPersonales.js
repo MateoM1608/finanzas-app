@@ -12,6 +12,11 @@ export function actualizarMetodoPago(id, payload) {
   return api.patch(`/api/metodos-pago-personales/${id}`, payload).then((r) => r.data.metodo);
 }
 
+/** Punto de partida: saldo de hoy de una cuenta o deuda de hoy de una tarjeta (0 lo quita). */
+export function guardarSaldoInicial(id, payload) {
+  return api.put(`/api/metodos-pago-personales/${id}/saldo-inicial`, payload).then((r) => r.data.saldoInicial);
+}
+
 export function registrarPagoTarjeta(id, payload) {
   return api.post(`/api/metodos-pago-personales/${id}/pagos`, payload).then((r) => r.data.pago);
 }
