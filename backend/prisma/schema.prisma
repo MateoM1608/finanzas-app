@@ -2,9 +2,13 @@ generator client {
   provider = "prisma-client-js"
 }
 
+// DATABASE_URL: la conexión de la app (en producción, el pooler de Supabase
+// en modo transacción). DIRECT_URL: conexión directa, solo para migraciones.
+// En pruebas (VPS) las dos pueden ser la misma.
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 enum FrecuenciaCorte {

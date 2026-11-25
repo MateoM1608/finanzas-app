@@ -1,6 +1,9 @@
 node_modules/
 .env
 .env.local
+# Archivos locales con claves (p. ej. .env.produccion); el de ejemplo sí se versiona.
+.env.*
+!.env.example
 dist/
 build/
 *.log

@@ -46,6 +46,8 @@ app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('Referrer-Policy', 'no-referrer');
+  // Datos personales: que ningún caché (del navegador o de Vercel) guarde respuestas.
+  res.setHeader('Cache-Control', 'no-store');
   next();
 });
 app.use(cors({ origin: origenesPermitidos, credentials: true }));
