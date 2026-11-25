@@ -566,9 +566,9 @@ function saldoCompra(compra) {
 
       <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
         <section class="card card-pad">
-          <div class="flex items-start justify-between gap-3 mb-5">
+          <div class="flex items-start justify-between gap-3 mb-4 sm:mb-5">
             <div class="flex items-center gap-3">
-              <span class="grid h-9 w-9 place-items-center rounded-xl bg-surface-sunken text-ink-secondary">
+              <span class="hidden sm:grid h-9 w-9 place-items-center rounded-xl bg-surface-sunken text-ink-secondary">
                 <AppIcon name="gauge" class="h-[18px] w-[18px]" />
               </span>
               <div>
@@ -582,9 +582,9 @@ function saldoCompra(compra) {
         </section>
 
         <section class="card card-pad">
-          <div class="flex items-start justify-between gap-3 mb-5">
+          <div class="flex items-start justify-between gap-3 mb-4 sm:mb-5">
             <div class="flex items-center gap-3">
-              <span class="grid h-9 w-9 place-items-center rounded-xl bg-surface-sunken text-ink-secondary">
+              <span class="hidden sm:grid h-9 w-9 place-items-center rounded-xl bg-surface-sunken text-ink-secondary">
                 <AppIcon name="piggy" class="h-[18px] w-[18px]" />
               </span>
               <div>

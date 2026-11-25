@@ -78,9 +78,9 @@ async function onRegistrarAporte(meta) {
     <p v-if="loading" class="empty">Cargando…</p>
 
     <template v-else>
-      <div class="mb-5">
+      <div class="mb-4 sm:mb-5">
         <p class="stat-label">{{ ciclo === 0 ? 'Ahorrado en total' : 'Ahorrado al cierre del ciclo' }}</p>
-        <p class="mt-1 text-3xl font-semibold tracking-tight text-ink-primary">
+        <p class="mt-1 text-2xl sm:text-3xl font-semibold tracking-tight text-ink-primary">
           {{ formatCurrency(resumen.totalAhorradoAcumulado) }}
         </p>
       </div>

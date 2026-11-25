@@ -241,28 +241,28 @@ function progreso(p) {
 
       <template v-else-if="datos">
         <!-- Resumen -->
-        <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <section class="card card-pad relative overflow-hidden">
+        <div class="grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-3">
+          <section class="card card-pad relative overflow-hidden col-span-2 sm:col-span-1">
             <div class="pointer-events-none absolute inset-x-0 top-0 h-1 bg-warning" aria-hidden="true" />
             <p class="stat-label">Debes (personal)</p>
-            <p class="mt-2 text-[1.75rem] leading-none font-semibold tracking-tight text-ink-primary">
+            <p class="stat-value-lg text-ink-primary">
               {{ formatCurrency(datos.resumen.deudaPersonal) }}
             </p>
-            <p class="mt-2 text-xs text-ink-tertiary">Capital que falta de tus préstamos.</p>
+            <p class="stat-hint">Capital que falta de tus préstamos.</p>
           </section>
           <section class="card card-pad">
             <p class="stat-label">Del hogar</p>
-            <p class="mt-2 text-[1.75rem] leading-none font-semibold tracking-tight text-ink-primary">
+            <p class="stat-value text-ink-primary">
               {{ formatCurrency(datos.resumen.deudaHogar) }}
             </p>
-            <p class="mt-2 text-xs text-ink-tertiary">Tu parte: {{ formatCurrency(datos.resumen.miParteHogar) }}</p>
+            <p class="mt-1.5 sm:mt-2 text-[11px] sm:text-xs text-ink-tertiary">Tu parte: {{ formatCurrency(datos.resumen.miParteHogar) }}</p>
           </section>
           <section class="card card-pad">
             <p class="stat-label">Intereses por pagar</p>
-            <p class="mt-2 text-[1.75rem] leading-none font-semibold tracking-tight text-warning">
+            <p class="stat-value text-warning">
               {{ formatCurrency(datos.resumen.interesesPendientes) }}
             </p>
-            <p class="mt-2 text-xs text-ink-tertiary">Si pagas cada cuota como está planeada.</p>
+            <p class="stat-hint">Si pagas cada cuota como está planeada.</p>
           </section>
         </div>
 
@@ -277,7 +277,7 @@ function progreso(p) {
                 <span class="truncate text-ink-primary">{{ o.nombre }}</span>
                 <span v-if="o.ambito === 'hogar'" class="badge-neutral">Hogar</span>
               </span>
-              <span class="shrink-0 text-ink-secondary">{{ formatTasa(Number(o.tasaMensual.toFixed(2))) }} · {{ formatCurrency(o.saldoCapital) }}</span>
+              <span class="shrink-0 text-ink-secondary">{{ formatTasa(Number(o.tasaMensual.toFixed(2))) }}<span class="hidden sm:inline"> · {{ formatCurrency(o.saldoCapital) }}</span></span>
             </li>
           </ol>
         </section>
@@ -297,9 +297,9 @@ function progreso(p) {
         </div>
 
         <section v-for="p in [...activos, ...terminados]" :key="p.id" class="card" :class="{ 'opacity-60': p.terminado }">
-          <button type="button" class="flex w-full items-start justify-between gap-3 p-5 text-left sm:p-6" :aria-expanded="abiertoId === p.id" @click="alternar(p)">
-            <div class="min-w-0">
-              <p class="flex flex-wrap items-center gap-1.5 text-base font-semibold text-ink-primary">
+          <button type="button" class="flex w-full flex-wrap items-start justify-between gap-x-3 gap-y-2 p-4 text-left sm:flex-nowrap sm:p-6" :aria-expanded="abiertoId === p.id" @click="alternar(p)">
+            <div class="min-w-0 flex-1 basis-60">
+              <p class="flex flex-wrap items-center gap-1.5 text-[15px] sm:text-base font-semibold text-ink-primary">
                 <span class="truncate">{{ p.nombre }}</span>
                 <span class="badge-neutral">{{ TIPO[p.tipo] }}</span>
                 <span v-if="p.terminado" class="badge-positive">Pagado</span>
@@ -312,15 +312,15 @@ function progreso(p) {
                 <template v-if="p.ambito === 'hogar'"> · paga {{ p.pagador?.nombre ?? '—' }} · tu parte {{ Math.round(p.miPorcentaje ?? 0) }} %</template>
               </p>
               <div class="mt-3 flex items-center gap-3">
-                <div class="h-1.5 w-40 overflow-hidden rounded-full bg-surface-sunken" role="progressbar" :aria-valuenow="progreso(p)" aria-valuemin="0" aria-valuemax="100" :aria-label="`Cuotas pagadas de ${p.nombre}`">
+                <div class="h-1.5 w-20 sm:w-40 shrink-0 overflow-hidden rounded-full bg-surface-sunken" role="progressbar" :aria-valuenow="progreso(p)" aria-valuemin="0" aria-valuemax="100" :aria-label="`Cuotas pagadas de ${p.nombre}`">
                   <div class="h-full rounded-full bg-positive" :style="{ width: progreso(p) + '%' }" />
                 </div>
                 <span class="text-xs text-ink-tertiary">{{ p.cuotasPagadas }}/{{ p.totalCuotas }} cuotas<template v-if="p.terminaEn"> · termina {{ formatDate(p.terminaEn) }}</template></span>
               </div>
             </div>
-            <span class="flex shrink-0 items-start gap-2 text-right">
+            <span class="flex shrink-0 items-start gap-2 sm:text-right">
               <span>
-                <span class="block text-lg font-semibold text-ink-primary">{{ formatCurrency(p.saldoCapital) }}</span>
+                <span class="block text-base sm:text-lg font-semibold text-ink-primary">{{ formatCurrency(p.saldoCapital) }}</span>
                 <span class="block text-xs text-ink-tertiary">capital que falta</span>
                 <span v-if="p.proximaCuota" class="mt-1 block text-[13px] text-ink-secondary">
                   Próxima {{ formatDate(p.proximaCuota.fecha) }} · {{ formatCurrency(p.proximaCuota.monto) }}
@@ -330,7 +330,7 @@ function progreso(p) {
             </span>
           </button>
 
-          <div v-if="abiertoId === p.id" class="space-y-5 border-t border-border px-5 pb-5 pt-4 sm:px-6">
+          <div v-if="abiertoId === p.id" class="space-y-5 border-t border-border px-4 pb-4 pt-4 sm:px-6 sm:pb-5">
             <div class="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
               <div><p class="stat-label">Intereses pagados</p><p class="mt-1 font-semibold text-ink-primary">{{ formatCurrency(p.interesesPagados) }}</p></div>
               <div><p class="stat-label">Intereses por pagar</p><p class="mt-1 font-semibold text-warning">{{ formatCurrency(p.interesesPendientes) }}</p></div>

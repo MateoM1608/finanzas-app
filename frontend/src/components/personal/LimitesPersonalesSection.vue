@@ -44,22 +44,22 @@ function pctGastado(actual) {
         <template v-else>No había límites en ese ciclo.</template>
       </p>
 
-      <div v-else class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <div v-else class="grid grid-cols-2 gap-2 sm:gap-3">
         <div
           v-for="limite in resumen.limites"
           :key="limite.id"
-          class="panel-sunken p-4 min-w-0"
+          class="panel-sunken p-3 sm:p-4 min-w-0"
           :class="limite.actual.estado === 'excedido' ? 'border-negative/30' : ''"
         >
-          <div class="flex items-start justify-between gap-3">
-            <p class="text-sm font-medium text-ink-primary truncate">{{ limite.nombre }}</p>
+          <div class="flex flex-wrap items-start justify-between gap-1.5 sm:gap-3">
+            <p class="text-[13px] sm:text-sm font-medium text-ink-primary truncate">{{ limite.nombre }}</p>
             <span :class="limite.actual.estado === 'excedido' ? 'badge-negative' : 'badge-positive'" class="shrink-0">
               {{ limite.actual.estado === 'excedido' ? 'Excedido' : 'Dentro' }}
             </span>
           </div>
 
-          <p class="mt-3 text-[13px] text-ink-tertiary">
-            <span class="text-base font-semibold tracking-tight text-ink-primary">{{
+          <p class="mt-2 sm:mt-3 text-xs sm:text-[13px] text-ink-tertiary">
+            <span class="block sm:inline text-sm sm:text-base font-semibold tracking-tight text-ink-primary">{{
               formatCurrency(limite.actual.montoGastado)
             }}</span>
             de {{ formatCurrency(limite.actual.limiteCalculado) }}
@@ -81,7 +81,7 @@ function pctGastado(actual) {
           </div>
 
           <p
-            class="mt-2 text-[13px] font-medium"
+            class="mt-2 text-xs sm:text-[13px] font-medium"
             :class="limite.actual.estado === 'excedido' ? 'text-negative' : 'text-positive'"
           >
             <template v-if="limite.actual.estado === 'excedido'">

@@ -93,8 +93,8 @@ const porCategoriaChart = computed(() => {
     <AlertError :message="error" />
 
     <!-- Esqueleto mientras carga -->
-    <div v-if="loading" class="grid grid-cols-1 sm:grid-cols-3 gap-4" aria-busy="true" aria-label="Cargando resumen">
-      <div v-for="n in 3" :key="n" class="card card-pad h-[132px] animate-pulse">
+    <div v-if="loading" class="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4" aria-busy="true" aria-label="Cargando resumen">
+      <div v-for="n in 3" :key="n" class="card card-pad h-[104px] sm:h-[132px] animate-pulse" :class="{ 'col-span-2 sm:col-span-1': n === 1 }">
         <div class="h-3 w-24 rounded bg-surface-sunken" />
         <div class="mt-4 h-8 w-40 rounded bg-surface-sunken" />
       </div>
@@ -102,8 +102,8 @@ const porCategoriaChart = computed(() => {
 
     <template v-else-if="resumen">
       <!-- Indicadores -->
-      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <section class="card card-pad relative overflow-hidden">
+      <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4">
+        <section class="card card-pad relative overflow-hidden col-span-2 sm:col-span-1">
           <div class="pointer-events-none absolute inset-x-0 top-0 h-1 bg-accent" aria-hidden="true" />
           <div class="flex items-center justify-between">
             <p class="stat-label">{{ esActual ? 'Disponible' : 'Disponible al cierre' }}</p>
@@ -111,13 +111,10 @@ const porCategoriaChart = computed(() => {
               <AppIcon name="wallet" class="h-4 w-4" />
             </span>
           </div>
-          <p
-            class="mt-3 text-[2rem] leading-none font-semibold tracking-tight"
-            :class="resumen.disponible < 0 ? 'text-negative' : 'text-ink-primary'"
-          >
+          <p class="stat-value-lg" :class="resumen.disponible < 0 ? 'text-negative' : 'text-ink-primary'">
             {{ formatCurrency(resumen.disponible) }}
           </p>
-          <p class="mt-2.5 text-xs text-ink-tertiary">
+          <p class="stat-hint">
             <template v-if="esActual">Lo que entró menos lo que salió. Las compras con tarjeta de crédito cuentan al pagar la tarjeta.</template>
             <template v-else>Lo que tenías el último día de ese ciclo.</template>
           </p>
@@ -133,7 +130,10 @@ const porCategoriaChart = computed(() => {
 
         <section class="card card-pad">
           <div class="flex items-center justify-between">
-            <p class="stat-label">{{ esActual ? 'Neto de este ciclo' : 'Neto del ciclo' }}</p>
+            <p class="stat-label">
+              <span class="sm:hidden">Neto</span>
+              <span class="hidden sm:inline">{{ esActual ? 'Neto de este ciclo' : 'Neto del ciclo' }}</span>
+            </p>
             <span
               v-if="resumen.neto.variacionPct != null"
               class="badge"
@@ -143,14 +143,11 @@ const porCategoriaChart = computed(() => {
               {{ resumen.neto.variacionPct >= 0 ? '+' : '' }}{{ resumen.neto.variacionPct.toFixed(0) }}%
             </span>
           </div>
-          <p
-            class="mt-3 text-[2rem] leading-none font-semibold tracking-tight"
-            :class="resumen.neto.actual < 0 ? 'text-negative' : 'text-ink-primary'"
-          >
+          <p class="stat-value" :class="resumen.neto.actual < 0 ? 'text-negative' : 'text-ink-primary'">
             {{ formatCurrency(resumen.neto.actual) }}
           </p>
-          <p class="mt-2.5 text-xs text-ink-tertiary">
-            Ciclo anterior: {{ formatCurrency(resumen.neto.anterior) }}
+          <p class="mt-1.5 sm:mt-2.5 text-[11px] sm:text-xs text-ink-tertiary">
+            <span class="sm:hidden">Anterior:</span><span class="hidden sm:inline">Ciclo anterior:</span> {{ formatCurrency(resumen.neto.anterior) }}
           </p>
         </section>
 
@@ -159,15 +156,15 @@ const porCategoriaChart = computed(() => {
             <p class="stat-label">{{ esActual ? 'Pendientes' : 'Quedaron pendientes' }}</p>
             <span class="badge-neutral">{{ pendientes.total }}</span>
           </div>
-          <div class="mt-3 space-y-1.5">
+          <div class="mt-2 sm:mt-3 space-y-1 sm:space-y-1.5">
             <div class="flex items-baseline justify-between gap-3">
-              <span class="whitespace-nowrap text-[13px] text-ink-secondary">Por pagar</span>
-              <span class="whitespace-nowrap text-base font-semibold tracking-tight text-ink-primary">{{ formatCurrency(pendientes.porPagar) }}</span>
+              <span class="whitespace-nowrap text-xs sm:text-[13px] text-ink-secondary">Por pagar</span>
+              <span class="whitespace-nowrap text-sm sm:text-base font-semibold tracking-tight text-ink-primary">{{ formatCurrency(pendientes.porPagar) }}</span>
             </div>
             <div class="flex items-baseline justify-between gap-3">
-              <span class="whitespace-nowrap text-[13px] text-ink-secondary">Por recibir</span>
+              <span class="whitespace-nowrap text-xs sm:text-[13px] text-ink-secondary">Por recibir</span>
               <span
-                class="whitespace-nowrap text-base font-semibold tracking-tight"
+                class="whitespace-nowrap text-sm sm:text-base font-semibold tracking-tight"
                 :class="pendientes.porRecibir > 0 ? 'text-positive' : 'text-ink-primary'"
               >{{ formatCurrency(pendientes.porRecibir) }}</span>
             </div>

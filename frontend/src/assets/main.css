@@ -105,7 +105,7 @@
   }
 
   .card-pad {
-    @apply p-5 sm:p-6;
+    @apply p-4 sm:p-6;
   }
 
   .panel-sunken {
@@ -166,11 +166,25 @@
 
   /* --- Tipografía de página --- */
   .page-title {
-    @apply text-2xl sm:text-[1.75rem] font-semibold tracking-tight text-ink-primary;
+    @apply text-xl sm:text-[1.75rem] font-semibold tracking-tight text-ink-primary;
   }
 
   .page-subtitle {
-    @apply text-sm text-ink-secondary mt-1;
+    @apply hidden sm:block text-sm text-ink-secondary mt-1;
+  }
+
+  /* Indicadores: grandes en escritorio, compactos en celular (dos por fila). */
+  .stat-value {
+    @apply mt-1.5 sm:mt-2 text-base sm:text-[1.75rem] leading-tight sm:leading-none font-semibold tracking-tight whitespace-nowrap;
+  }
+
+  .stat-value-lg {
+    @apply mt-2 sm:mt-3 text-[1.625rem] sm:text-[2rem] leading-none font-semibold tracking-tight;
+  }
+
+  /* Explicación debajo de un indicador: solo en pantallas grandes. */
+  .stat-hint {
+    @apply hidden sm:block mt-2 text-xs text-ink-tertiary;
   }
 
   .section-title {
@@ -182,7 +196,7 @@
   }
 
   .stat-label {
-    @apply text-[13px] font-medium text-ink-secondary;
+    @apply text-xs sm:text-[13px] font-medium text-ink-secondary;
   }
 
   .stat-value {

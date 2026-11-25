@@ -104,8 +104,8 @@ async function onLogout() {
       </div>
     </header>
 
-    <main class="mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-10 pt-6 sm:pt-8 lg:pt-10 pb-28 lg:pb-16">
-      <div class="flex flex-wrap items-end justify-between gap-4 mb-6 sm:mb-8">
+    <main class="mx-auto w-full max-w-6xl px-3 sm:px-6 lg:px-10 pt-4 sm:pt-8 lg:pt-10 pb-24 lg:pb-16">
+      <div class="flex flex-wrap items-center sm:items-end justify-between gap-3 sm:gap-4 mb-4 sm:mb-8">
         <div class="min-w-0">
           <h1 class="page-title">{{ title }}</h1>
           <p v-if="subtitle" class="page-subtitle">{{ subtitle }}</p>

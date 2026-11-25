@@ -161,36 +161,36 @@ async function onRegistrarPago() {
 
         <template v-if="informe">
           <!-- Indicadores -->
-          <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <section v-if="esTarjeta" class="card card-pad relative overflow-hidden">
+          <div class="grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-3">
+            <section v-if="esTarjeta" class="card card-pad relative overflow-hidden col-span-2 sm:col-span-1">
               <div class="pointer-events-none absolute inset-x-0 top-0 h-1 bg-warning" aria-hidden="true" />
               <p class="stat-label">Deuda hoy</p>
-              <p class="mt-2 text-[1.75rem] leading-none font-semibold tracking-tight" :class="informe.tarjeta.deuda > 0 ? 'text-warning' : 'text-ink-primary'">
+              <p class="stat-value-lg" :class="informe.tarjeta.deuda > 0 ? 'text-warning' : 'text-ink-primary'">
                 {{ formatCurrency(informe.tarjeta.deuda) }}
               </p>
               <button type="button" class="btn-secondary btn-sm mt-3" @click="abrirPago">Registrar pago</button>
             </section>
             <section class="card card-pad">
               <p class="stat-label">{{ esTarjeta ? 'Cargado en' : 'Salió en' }} <span class="capitalize">{{ nombreMes(mes) }}</span></p>
-              <p class="mt-2 text-[1.75rem] leading-none font-semibold tracking-tight text-ink-primary">
+              <p class="stat-value text-ink-primary">
                 {{ formatCurrency(informe.mes.totalGastos) }}
               </p>
-              <p v-if="informe.mes.interesesMes" class="mt-2 text-xs text-ink-tertiary">
+              <p v-if="informe.mes.interesesMes" class="mt-1.5 sm:mt-2 text-[11px] sm:text-xs text-ink-tertiary">
                 Incluye {{ formatCurrency(informe.mes.interesesMes) }} de intereses
               </p>
             </section>
             <section v-if="!esTarjeta" class="card card-pad">
               <p class="stat-label">Entró en <span class="capitalize">{{ nombreMes(mes) }}</span></p>
-              <p class="mt-2 text-[1.75rem] leading-none font-semibold tracking-tight text-positive">
+              <p class="stat-value text-positive">
                 {{ formatCurrency(informe.mes.totalIngresos) }}
               </p>
             </section>
             <section v-if="esTarjeta" class="card card-pad">
               <p class="stat-label">Intereses cobrados</p>
-              <p class="mt-2 text-[1.75rem] leading-none font-semibold tracking-tight text-ink-primary">
+              <p class="stat-value text-ink-primary">
                 {{ formatCurrency(informe.tarjeta.interesesTotales) }}
               </p>
-              <p class="mt-2 text-xs text-ink-tertiary">De las cuotas ya cobradas, desde siempre</p>
+              <p class="stat-hint">De las cuotas ya cobradas, desde siempre</p>
             </section>
           </div>
 
