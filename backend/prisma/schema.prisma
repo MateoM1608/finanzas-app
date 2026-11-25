@@ -123,10 +123,6 @@ model Usuario {
   // Sube al cambiar la contraseña o cerrar las demás sesiones: los tokens con
   // otra versión dejan de servir (requireAuth la compara).
   sesionVersion           Int             @default(0) @map("sesion_version")
-  // Sin uso desde 2026-12-06 (el bloqueo pasó a IntentoAcceso, por conexión).
-  // Se quitan en una migración aparte, después de publicar.
-  intentosFallidos        Int             @default(0) @map("intentos_fallidos")
-  bloqueadoHasta          DateTime?       @map("bloqueado_hasta")
   hogarId                 String?         @map("hogar_id")
   esAdmin                 Boolean         @default(false) @map("es_admin")
   puedeEditarGastos       Boolean         @default(false) @map("puede_editar_gastos")
