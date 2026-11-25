@@ -88,7 +88,7 @@ Detalle de endpoints y decisiones de diseño de cada fase: `backend/README.md` y
 - **Producción (2026-12-08):** la base productiva ya está separada, en Supabase (conexión cifrada, sin puerto propio expuesto, RLS en todas las tablas y sin permisos para `anon`/`authenticated`). Pendiente:
   - **Copias de seguridad** de Supabase (revisar qué cubre el plan y probar restaurar) — y de la VPS si pruebas guarda algo que importe.
   - Decidir si el registro sigue abierto a cualquiera o solo por invitación.
-  - **Pruebas (VPS)** sigue con `sslmode=disable` y el puerto de Postgres expuesto: aceptable para datos de prueba; cuando se borren los datos reales que quedaron ahí, no guardar nada sensible en esa base.
+  - **Pruebas (VPS)** sigue con `sslmode=disable` y el puerto de Postgres expuesto: aceptable para datos de prueba (los reales se borraron el 2026-12-08); no guardar nada sensible en esa base.
 
 - **Índices de base de datos:** los cuadres ya filtran por índices explícitos (`[hogarId, estado]` en cuadres y gastos variables, `[conceptoId, estado]` en cuotas); revisar el resto de filtros frecuentes y que tengan índice explícito en `prisma/schema.prisma`, no solo los que Prisma crea automáticamente por relaciones/unique constraints.
 - **Badges/estado repetidos:** `PanelVariablesSection.vue` y `CuentasFijasHogarSection.vue` resuelven por su lado el badge de estado (sin cuadrar/en cuadre/cuadrado) — extraer si aparece una tercera vista con el mismo patrón.
@@ -97,7 +97,7 @@ Detalle de endpoints y decisiones de diseño de cada fase: `backend/README.md` y
 
 ## Notas de la base de datos de desarrollo
 
-Desde 2026-12-08 hay dos bases. `backend/.env` apunta a la de **pruebas** (`finanzas-db` en la VPS): se puede resetear/limpiar libremente y es la que usan las pruebas con usuarios temporales. `backend/.env.produccion` apunta a **producción** (Supabase), que nació vacía el 2026-12-08 (sin copiar nada de la VPS): ahí no se hacen pruebas ni limpiezas directas. Historia de la base de pruebas: Al cierre de la Fase 5 la base fue reseteada por completo (`prisma migrate reset`) — arranca vacía, sin usuarios/hogares de prueba. El 2026-11-25, tras la entrega B, se volvió a vaciar (TRUNCATE de todas las tablas, conservando estructura e historial de migraciones): arranca sin ningún usuario.
+Desde 2026-12-08 hay dos bases. `backend/.env` apunta a la de **pruebas** (`finanzas-db` en la VPS): se puede resetear/limpiar libremente y es la que usan las pruebas con usuarios temporales. `backend/.env.produccion` apunta a **producción** (Supabase), que nació vacía el 2026-12-08 (sin copiar nada de la VPS): ahí no se hacen pruebas ni limpiezas directas. Historia de la base de pruebas: Al cierre de la Fase 5 la base fue reseteada por completo (`prisma migrate reset`) — arranca vacía, sin usuarios/hogares de prueba. El 2026-11-25, tras la entrega B, se volvió a vaciar (TRUNCATE de todas las tablas, conservando estructura e historial de migraciones): arranca sin ningún usuario. El 2026-12-08, al separar producción, se vació otra vez (se borraron los datos reales que quedaban): pruebas arranca sin usuarios.
 
 ## Convenciones de trabajo
 
