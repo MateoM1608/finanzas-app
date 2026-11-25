@@ -10,5 +10,6 @@ export const actualizarSplitSchema = z.object({
         porcentaje: z.number().min(0).max(100),
       }),
     )
-    .min(1),
+    .min(1)
+    .max(50),
 });

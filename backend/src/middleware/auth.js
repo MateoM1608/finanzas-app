@@ -17,7 +17,8 @@ export const requireAuth = asyncHandler(async (req, res, next) => {
   }
 
   const usuario = await prisma.usuario.findUnique({ where: { id: payload.sub } });
-  if (!usuario) {
+  // Los tokens de antes de las versiones de sesión no traen `v`: cuentan como 0.
+  if (!usuario || usuario.sesionVersion !== (payload.v ?? 0)) {
     throw new HttpError(401, 'Sesión inválida');
   }
 

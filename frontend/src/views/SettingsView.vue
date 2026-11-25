@@ -9,6 +9,7 @@ import SettingsMiembrosSection from '../components/settings/SettingsMiembrosSect
 import SettingsConceptosSection from '../components/settings/SettingsConceptosSection.vue';
 import SettingsSplitSection from '../components/settings/SettingsSplitSection.vue';
 import SettingsCategoriasSection from '../components/settings/SettingsCategoriasSection.vue';
+import SettingsCuentaSection from '../components/settings/SettingsCuentaSection.vue';
 import ExportarDatos from '../components/ExportarDatos.vue';
 
 const auth = useAuthStore();
@@ -20,6 +21,7 @@ const tabs = [
   { id: 'categorias', label: 'Categorías y topes', icono: 'gauge' },
   { id: 'split', label: 'Reparto', icono: 'sliders' },
   { id: 'exportar', label: 'Exportar', icono: 'arrowDownLeft' },
+  { id: 'cuenta', label: 'Tu cuenta', icono: 'settings' },
 ];
 
 // ?tab=categorias abre esa pestaña (desde las tarjetas de topes del hogar).
@@ -56,6 +58,7 @@ const canEdit = computed(() => Boolean(auth.usuario?.esAdmin || auth.usuario?.pu
       <SettingsConceptosSection v-else-if="tabActivo === 'conceptos'" :can-edit="canEdit" />
       <SettingsCategoriasSection v-else-if="tabActivo === 'categorias'" :can-edit="canEdit" />
       <SettingsSplitSection v-else-if="tabActivo === 'split'" :can-edit="canEdit" />
+      <SettingsCuentaSection v-else-if="tabActivo === 'cuenta'" />
       <section v-else-if="tabActivo === 'exportar'" class="card card-pad">
         <h2 class="section-title">Exportar tus datos</h2>
         <p class="section-hint mb-4">Descarga tus movimientos y los del hogar para guardarlos o analizarlos en una hoja de cálculo.</p>

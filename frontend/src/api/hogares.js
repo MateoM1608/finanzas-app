@@ -35,3 +35,12 @@ export function transferirAdmin(nuevoAdminId) {
 export function listarActividadHogar(limite = 40) {
   return api.get('/api/hogares/actividad', { params: { limite } }).then((r) => r.data.actividad);
 }
+
+// Salir del hogar (cualquier miembro) o quitar a un miembro (solo el admin).
+export function salirDelHogar() {
+  return api.post('/api/hogares/salir');
+}
+
+export function quitarMiembro(id) {
+  return api.delete(`/api/hogares/miembros/${id}`);
+}

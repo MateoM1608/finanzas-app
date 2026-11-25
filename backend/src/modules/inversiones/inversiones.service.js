@@ -15,6 +15,8 @@ import { validarMovimiento, crearCaja } from '../../utils/movimientosAhorro.js';
 
 const ORIGENES = { aporte: 'aporte_inversion', retiro: 'retiro_inversion' };
 
+const pesosTexto = (n) => `$${Math.round(n).toLocaleString('es-CO')}`;
+
 function requirePermisoEdicion(usuarioActual) {
   if (!usuarioActual.esAdmin && !usuarioActual.puedeEditarGastos) {
     throw new HttpError(403, 'No tienes permiso para editar las finanzas del hogar');
@@ -186,6 +188,20 @@ async function registrar(tx, inversion, usuarioId, mov) {
 export async function registrarMovimiento(usuarioActual, id, data) {
   const inversion = await requireInversion(usuarioActual, id);
   await validarMovimiento(usuarioActual.id, data);
+  // Un retiro no puede pasar de lo que vale hoy (personal) ni de tu parte (hogar):
+  // cada uno retira solo lo suyo.
+  if (data.tipo === 'retiro') {
+    const actual = await obtener(usuarioActual, id);
+    const tope = inversion.hogarId ? actual.miParte : actual.valorActual;
+    if (data.monto > tope) {
+      throw new HttpError(
+        400,
+        inversion.hogarId
+          ? `No puedes retirar más de tu parte de esta inversión (${pesosTexto(tope)})`
+          : `No puedes retirar más de lo que vale la inversión (${pesosTexto(tope)})`,
+      );
+    }
+  }
   await prisma.$transaction(
     (tx) => registrar(tx, inversion, usuarioActual.id, { ...data, fecha: data.fecha ?? hoyUTC() }),
     { timeout: 120000, maxWait: 20000 },

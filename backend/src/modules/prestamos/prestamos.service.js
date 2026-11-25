@@ -260,7 +260,8 @@ function vistaPrestamo(prestamo, cuotas, abonos, usuarioActual, hoy) {
       pagoUsuarioId: c.pagoUsuarioId ?? null,
       miParte: prestamo.hogarId ? (c.repartos?.find((r) => r.usuarioId === usuarioActual.id)?.monto ?? 0) : montoCuota(c),
     })),
-    abonos: abonos.map((a) => ({ ...a, metodoPagoId: verMetodo || a.pagoUsuarioId === usuarioActual.id ? a.metodoPagoId : null })),
+    // La cuenta de un abono solo la ve quien lo pagó (en uno personal, el dueño).
+    abonos: abonos.map((a) => ({ ...a, metodoPagoId: !prestamo.hogarId || a.pagoUsuarioId === usuarioActual.id ? a.metodoPagoId : null })),
   };
 }
 

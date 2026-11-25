@@ -120,7 +120,11 @@ model Usuario {
   nombre                  String
   usuario                 String          @unique
   passwordHash            String          @map("password_hash")
-  // Bloqueo por contraseñas erradas seguidas (login).
+  // Sube al cambiar la contraseña o cerrar las demás sesiones: los tokens con
+  // otra versión dejan de servir (requireAuth la compara).
+  sesionVersion           Int             @default(0) @map("sesion_version")
+  // Sin uso desde 2026-12-06 (el bloqueo pasó a IntentoAcceso, por conexión).
+  // Se quitan en una migración aparte, después de publicar.
   intentosFallidos        Int             @default(0) @map("intentos_fallidos")
   bloqueadoHasta          DateTime?       @map("bloqueado_hasta")
   hogarId                 String?         @map("hogar_id")
@@ -1293,4 +1297,17 @@ model TopeHogarMes {
 
   @@unique([topeId, mes])
   @@map("topes_hogar_mes")
+}
+
+// Límite de intentos (seguridad, 2026-12-06): contador por clave, p. ej.
+// "login:ip:1.2.3.4", "login:mateo:1.2.3.4" o "registro:ip:…", con su ventana
+// y bloqueo. Lo maneja src/utils/limiteIntentos.js. El bloqueo por usuario va
+// junto con la conexión (IP), para que nadie pueda bloquearte la cuenta desde otra.
+model IntentoAcceso {
+  clave          String    @id
+  conteo         Int       @default(0)
+  ventanaInicio  DateTime  @map("ventana_inicio")
+  bloqueadoHasta DateTime? @map("bloqueado_hasta")
+
+  @@map("intentos_acceso")
 }

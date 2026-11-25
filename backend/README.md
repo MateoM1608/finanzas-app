@@ -26,8 +26,12 @@ Dentro de una transacción interactiva toda lectura debe usar `tx`, no el client
 - `POST /login` — `{ usuario, password }`
 - `POST /logout`
 - `GET /me` — requiere sesión activa
+- `POST /cambiar-password` — `{ actual, nueva }` (sesión activa). Contraseña actual errada → 400 (no 401, que en la app significa "sesión terminada"); usa los mismos límites del login. Cierra las demás sesiones y le da a esta un token nuevo.
+- `POST /cerrar-otras-sesiones` — (sesión activa) cierra la sesión en todos los demás dispositivos; esta sigue.
 
-La sesión se maneja con una cookie httpOnly (`finanzas_session`) firmada con JWT, con vigencia de ~1 año.
+La sesión se maneja con una cookie httpOnly, `secure` en producción y `sameSite: lax` (`finanzas_session`), firmada con JWT HS256 (`algorithms` fijado al verificar), con vigencia de ~1 año. El token lleva `v` = `Usuario.sesionVersion`; `requireAuth` lo compara con la base en cada petición, así que subir la versión (cambio de contraseña o "cerrar las demás") invalida los demás tokens al instante. Los tokens de antes (sin `v`) cuentan como versión 0. Si `JWT_SECRET` tiene menos de 32 caracteres, el arranque deja un aviso en el log.
+
+**Límites de intentos** (`src/utils/limiteIntentos.js`, tabla `IntentoAcceso`, por IP con `x-real-ip` / `x-forwarded-for`): 5 contraseñas erradas seguidas de un usuario desde una misma conexión la bloquean 15 min **solo para esa conexión** (nadie puede bloquearte la cuenta desde otra); 30 erradas en 15 min desde una conexión a cualquier usuario la bloquean 15 min; registro: 10 por conexión por hora; `POST /api/hogares/join`: 10 códigos errados por conexión por hora. Responden 429. Los contadores viejos se borran al iniciar sesión. Las columnas `Usuario.intentosFallidos` / `bloqueadoHasta` quedaron sin uso (se quitan en una migración posterior).
 
 ### Hogares (`/api/hogares`) — requieren sesión activa
 - `POST /` — `{ nombre }` → crea el hogar, el creador queda como admin con todos los permisos. Falla si el usuario ya pertenece a un hogar. (El hogar ya no tiene frecuencia de corte ni puntos de corte: cada cuenta fija tiene su propio calendario y los cuadres se hacen cuando el hogar decide.)
@@ -38,6 +42,7 @@ La sesión se maneja con una cookie httpOnly (`finanzas_session`) firmada con JW
 - `GET /miembros` — lista los miembros del hogar con sus permisos
 - `PATCH /miembros/:id/permisos` — `{ puedeEditarGastos?, puedeInvitar? }`. Solo admin.
 - `POST /transferir-admin` — `{ nuevoAdminId }`. Solo admin; mueve el rol a otro miembro del hogar y registra el cambio en `log_transferencia_admin`.
+- `POST /salir` — salir del hogar (el admin, solo si es el último o tras transferir la administración: 409). `DELETE /miembros/:id` — el admin quita a otro miembro (403 si no es admin). Ambos (`salirHogar.service.js`) exigen que la persona no tenga nada del hogar sin cuadrar —gastos variables o cuotas de compras y préstamos de cualquier fecha que pagó o con reparto suyo, y cuotas de cuentas fijas pagadas— ni haya un cuadre abierto (409 con el motivo). Al salir: `hogarId` null y sin permisos, el split vigente (general y de gastos variables) se recalcula desde hoy entre los que quedan en la misma proporción, deja de ser responsable de cuentas fijas, sus invitaciones sin usar se anulan y queda en la actividad ("salió del hogar" / "quitó a X del hogar", que también le llega a quien quitaron). Lo ya cuadrado sigue en el historial con su nombre; su panel personal no cambia.
 
 ### Cuentas fijas del hogar (`/api/conceptos-recurrentes`) — requieren sesión activa
 Modelo `ConceptoRecurrentePareja` (el nombre del modelo y de la ruta se conservaron; en la app se llaman "cuentas fijas").

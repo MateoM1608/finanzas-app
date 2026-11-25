@@ -248,7 +248,13 @@ export async function marcarTodasLeidas(usuarioActual) {
   await prisma.notificacion.updateMany({ where: { usuarioId: usuarioActual.id, leida: false }, data: { leida: true } });
 }
 
-/** La APK registra el token de Firebase del teléfono (uno por dispositivo). */
+/**
+ * La APK registra el token de Firebase del teléfono (uno por dispositivo). Si
+ * el token ya estaba con otro usuario, pasa al que lo registra: es el caso
+ * normal de cerrar sesión y entrar con otra cuenta en el mismo teléfono. El
+ * token solo lo conoce ese teléfono (Firebase lo genera ahí), así que nadie
+ * puede "robarse" las notificaciones de otro sin tener su teléfono.
+ */
 export async function registrarDispositivo(usuarioActual, { token, plataforma }) {
   return prisma.dispositivoNotificacion.upsert({
     where: { token },

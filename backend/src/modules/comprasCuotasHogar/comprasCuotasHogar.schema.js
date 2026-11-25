@@ -15,6 +15,7 @@ export const crearCompraHogarSchema = z.object({
   categoriaId: z.string().uuid().nullable().optional(),
   repartos: z
     .array(z.object({ usuarioId: z.string().uuid(), monto: z.number().int().nonnegative() }))
+    .max(50)
     .optional(),
 });
 
@@ -32,5 +33,6 @@ export const actualizarCompraHogarSchema = z.object({
   categoriaId: z.string().uuid().nullable().optional(),
   repartos: z
     .array(z.object({ usuarioId: z.string().uuid(), monto: z.number().int().nonnegative() }))
+    .max(50)
     .optional(),
 });

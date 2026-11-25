@@ -106,13 +106,19 @@ export async function eliminarMeta(usuarioActual, id) {
   await prisma.metaHogar.delete({ where: { id } });
 }
 
-/** Aporte o retiro de quien lo registra. Un retiro no puede dejar la meta en negativo. */
+const pesosTexto = (n) => `$${Math.round(n).toLocaleString('es-CO')}`;
+
+/** Aporte o retiro de quien lo registra. Un retiro no puede pasar de lo que esa persona ha aportado. */
 export async function registrarMovimiento(usuarioActual, id, data) {
   const meta = await requireMeta(usuarioActual, id);
   await validarMovimiento(usuarioActual.id, data);
   if (data.tipo === 'retiro') {
+    // Cada uno retira solo lo que ha puesto (sus aportes menos sus retiros).
     const actual = await obtener(usuarioActual, id);
-    if (data.monto > actual.ahorrado) throw new HttpError(400, `No puedes retirar más de lo ahorrado (${actual.ahorrado})`);
+    const tope = Math.min(actual.ahorrado, actual.miAporte);
+    if (data.monto > tope) {
+      throw new HttpError(400, `No puedes retirar más de lo que has aportado a esta meta (${pesosTexto(tope)})`);
+    }
   }
   await prisma.$transaction(
     async (tx) => {

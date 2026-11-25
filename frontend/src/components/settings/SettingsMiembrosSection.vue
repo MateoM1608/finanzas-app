@@ -6,7 +6,9 @@ import {
   actualizarPermisosMiembro,
   transferirAdmin,
   generarInvitacion,
+  quitarMiembro,
 } from '../../api/hogares.js';
+import { confirmar } from '../../composables/useConfirm.js';
 import { extractErrorMessage } from '../../api/client.js';
 import AlertError from '../AlertError.vue';
 import AppIcon from '../AppIcon.vue';
@@ -76,6 +78,27 @@ async function onTransferirAdmin() {
     error.value = extractErrorMessage(e);
   } finally {
     transfiriendo.value = false;
+  }
+}
+
+const quitandoId = ref(null);
+
+async function onQuitar(miembro) {
+  const nombre = miembro.nombre.split(' ')[0];
+  const ok = await confirmar(
+    `¿Quitar a ${nombre} del hogar? Dejará de ver todo lo del hogar desde ya; su panel personal sigue siendo suyo. Solo se puede si no tiene nada sin cuadrar.`,
+    { textoAceptar: 'Quitar del hogar' },
+  );
+  if (!ok) return;
+  error.value = '';
+  quitandoId.value = miembro.id;
+  try {
+    await quitarMiembro(miembro.id);
+    miembros.value = miembros.value.filter((m) => m.id !== miembro.id);
+  } catch (e) {
+    error.value = extractErrorMessage(e);
+  } finally {
+    quitandoId.value = null;
   }
 }
 
@@ -185,6 +208,15 @@ function iniciales(nombre = '') {
               />
               Puede invitar
             </label>
+            <button
+              v-if="miembro.id !== auth.usuario?.id"
+              type="button"
+              class="btn-ghost btn-sm ml-auto !text-negative"
+              :disabled="quitandoId === miembro.id"
+              @click="onQuitar(miembro)"
+            >
+              Quitar del hogar
+            </button>
           </div>
         </li>
       </ul>

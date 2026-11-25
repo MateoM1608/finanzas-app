@@ -17,6 +17,7 @@ import {
   transferirAdmin,
 } from './hogares.service.js';
 import { serializeUsuario } from '../auth/auth.service.js';
+import { ipDe, revisarBloqueo, sumarIntento } from '../../utils/limiteIntentos.js';
 
 export const postHogar = asyncHandler(async (req, res) => {
   const data = crearHogarSchema.parse(req.body);
@@ -29,9 +30,21 @@ export const postInvitacion = asyncHandler(async (req, res) => {
   res.status(201).json({ invitacion });
 });
 
+// 10 códigos errados por conexión en una hora bloquean esa conexión una hora.
+const JOIN_IP = { max: 10, ventanaMin: 60, bloqueoMin: 60 };
+
 export const postJoin = asyncHandler(async (req, res) => {
   const { codigo } = joinHogarSchema.parse(req.body);
-  const { hogar, usuario } = await unirseHogar(req.usuario, codigo);
+  const clave = `join:ip:${ipDe(req)}`;
+  await revisarBloqueo(clave);
+  let resultado;
+  try {
+    resultado = await unirseHogar(req.usuario, codigo);
+  } catch (error) {
+    if (error.status === 404 || error.status === 410) await sumarIntento(clave, JOIN_IP);
+    throw error;
+  }
+  const { hogar, usuario } = resultado;
   res.json({ hogar, usuario: serializeUsuario(usuario) });
 });
 

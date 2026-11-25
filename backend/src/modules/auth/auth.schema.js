@@ -7,6 +7,11 @@ export const registerSchema = z.object({
 });
 
 export const loginSchema = z.object({
-  usuario: z.string().trim().min(1).toLowerCase(),
-  password: z.string().min(1),
+  usuario: z.string().trim().min(1).max(50).toLowerCase(),
+  password: z.string().min(1).max(100),
+});
+
+export const cambiarPasswordSchema = z.object({
+  actual: z.string().min(1).max(100),
+  nueva: z.string().min(8).max(100),
 });
