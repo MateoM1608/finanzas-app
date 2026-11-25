@@ -21,6 +21,15 @@ const NAV = [
   { name: 'patrimonio', label: 'Patrimonio', icon: 'trendingUp' },
   { name: 'settings', label: 'Configuración', short: 'Ajustes', icon: 'settings' },
 ];
+// En el celular, Cuadres se abre desde Hogar y su lugar lo toma "+ Registrar"
+// (la acción más frecuente), en el centro de la barra.
+const NAV_MOVIL = NAV.filter((i) => i.name !== 'cuadres');
+const NAV_MOVIL_IZQ = NAV_MOVIL.slice(0, 2);
+const NAV_MOVIL_DER = NAV_MOVIL.slice(2);
+
+function registrar() {
+  router.push({ name: 'panel-personal', query: { registrar: 'gasto' } });
+}
 
 const iniciales = computed(() =>
   (auth.usuario?.nombre || '?')
@@ -126,7 +135,28 @@ async function onLogout() {
     >
       <div class="grid grid-cols-5">
         <router-link
-          v-for="item in NAV"
+          v-for="item in NAV_MOVIL_IZQ"
+          :key="item.name"
+          :to="{ name: item.name }"
+          class="flex flex-col items-center gap-1 py-2.5 text-[11px] font-medium transition-colors"
+          :class="activo(item) ? 'text-accent' : 'text-ink-tertiary hover:text-ink-primary'"
+          :aria-current="activo(item) ? 'page' : undefined"
+        >
+          <AppIcon :name="item.icon" class="h-[22px] w-[22px]" />
+          {{ item.short || item.label }}
+        </router-link>
+        <div class="flex items-center justify-center">
+          <button
+            type="button"
+            class="grid h-12 w-12 -mt-5 place-items-center rounded-full bg-accent text-accent-on shadow-pop ring-4 ring-canvas"
+            aria-label="Registrar movimiento"
+            @click="registrar"
+          >
+            <AppIcon name="plus" class="h-6 w-6" :stroke-width="2.4" />
+          </button>
+        </div>
+        <router-link
+          v-for="item in NAV_MOVIL_DER"
           :key="item.name"
           :to="{ name: item.name }"
           class="flex flex-col items-center gap-1 py-2.5 text-[11px] font-medium transition-colors"

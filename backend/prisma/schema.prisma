@@ -380,6 +380,9 @@ model GastoPersonal {
   @@unique([compraId, numeroCuota])
   @@unique([prestamoId, numeroCuota])
   @@index([usuarioId])
+  // Filtros frecuentes: resumen/consumo por fechas, informe y extractos por cuenta.
+  @@index([usuarioId, fecha])
+  @@index([metodoPagoId])
   @@map("gastos_personales")
 }
 
@@ -417,6 +420,7 @@ model IngresoPersonal {
   @@unique([origenConfigId, fecha])
   @@unique([origenCuadreId, usuarioId])
   @@index([usuarioId])
+  @@index([usuarioId, fecha])
   @@map("ingresos_personales")
 }
 
@@ -516,6 +520,7 @@ model GastoRecurrenteInstanciaReparto {
 
   @@unique([instanciaId, usuarioId])
   @@index([instanciaId])
+  @@index([usuarioId])
   @@map("gastos_recurrentes_instancia_reparto")
 }
 
@@ -573,6 +578,8 @@ model GastoVariableParejaReparto {
 
   @@unique([gastoId, usuarioId])
   @@index([gastoId])
+  // El consumo lee la parte de cada usuario.
+  @@index([usuarioId])
   @@map("gastos_variables_pareja_reparto")
 }
 

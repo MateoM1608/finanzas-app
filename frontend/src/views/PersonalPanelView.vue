@@ -1,4 +1,5 @@
 <script setup>
+import { useRoute, useRouter } from 'vue-router';
 import { ref, computed, onMounted, watch } from 'vue';
 import { listarGastos, crearGasto, actualizarGasto, eliminarGasto, cambiarMetodoGasto } from '../api/gastosPersonales.js';
 import { listarIngresos, crearIngreso, actualizarIngreso, eliminarIngreso, cambiarMetodoIngreso } from '../api/ingresosPersonales.js';
@@ -19,6 +20,7 @@ import FormField from '../components/FormField.vue';
 import AlertError from '../components/AlertError.vue';
 import AppModal from '../components/AppModal.vue';
 import ExportarDatos from '../components/ExportarDatos.vue';
+import EditarMovimientoModal from '../components/personal/EditarMovimientoModal.vue';
 import AppIcon from '../components/AppIcon.vue';
 import ConfiguracionPersonalSection from '../components/personal/ConfiguracionPersonalSection.vue';
 import ResumenPersonalSection from '../components/personal/ResumenPersonalSection.vue';
@@ -394,6 +396,7 @@ async function cargarTodo() {
 
 onMounted(cargarTodo);
 
+
 // --- Presentación (no cambia datos) ---
 const mostrarRegistro = ref(false);
 const tipoRegistro = ref('gasto');
@@ -406,6 +409,19 @@ function abrirRegistro(tipo = 'gasto') {
   error.value = '';
   mostrarRegistro.value = true;
 }
+
+// "+ Registrar" de la barra del celular: /personal?registrar=gasto abre el modal.
+const routeActual = useRoute();
+const routerPanel = useRouter();
+watch(
+  () => routeActual.query.registrar,
+  (tipo) => {
+    if (!tipo) return;
+    abrirRegistro(tipo === 'ingreso' ? 'ingreso' : 'gasto');
+    routerPanel.replace({ query: { ...routeActual.query, registrar: undefined } });
+  },
+  { immediate: true },
+);
 
 async function guardarRegistro() {
   if (tipoRegistro.value === 'gasto') await onAgregarGasto();
@@ -429,6 +445,22 @@ const gastosALaFecha = computed(() => {
 });
 
 // --- Filtro por fechas (Todos, Gastos, Ingresos) ---
+// Editar un gasto o ingreso suelto (los del hogar, préstamos, cuotas,
+// ahorros o inversiones se editan en su pantalla).
+const editandoMov = ref(null); // { tipo, mov }
+function esEditableAqui(mov, tipo) {
+  if (esDelHogar(mov) || esDeOtraPantalla(mov)) return false;
+  if (tipo === 'gasto') return !mov.compraId && mov.origen !== 'pago_tarjeta';
+  return mov.origen !== 'desembolso_prestamo';
+}
+function onMovimientoEditado(actualizado) {
+  const lista = editandoMov.value.tipo === 'gasto' ? gastos : ingresos;
+  const i = lista.value.findIndex((x) => x.id === actualizado.id);
+  if (i >= 0) lista.value[i] = actualizado;
+  editandoMov.value = null;
+  recargarResumenes();
+}
+
 // Exportar con el rango de fechas que tenga puesto el filtro.
 const exportando = ref(false);
 const filtroDesde = ref('');
@@ -816,6 +848,16 @@ function saldoCompra(compra) {
                     {{ gasto.estado === 'pagado' ? 'Marcar pendiente' : 'Marcar pagado' }}
                   </button>
                   <button
+                    v-if="esEditableAqui(gasto, 'gasto')"
+                    type="button"
+                    class="btn-icon !p-1.5"
+                    aria-label="Editar gasto"
+                    title="Editar"
+                    @click="editandoMov = { tipo: 'gasto', mov: gasto }"
+                  >
+                    <AppIcon name="edit" class="h-4 w-4" />
+                  </button>
+                  <button
                     v-if="!gasto.origenConfigId && !esDelHogar(gasto) && !gasto.compraId && !esDeOtraPantalla(gasto)"
                     type="button"
                     class="btn-icon !p-1.5 hover:!text-negative sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100"
@@ -890,6 +932,16 @@ function saldoCompra(compra) {
                   >
                     <AppIcon v-if="ingreso.estado === 'pendiente'" name="check" class="h-3.5 w-3.5" :stroke-width="2.2" />
                     {{ ingreso.estado === 'recibido' ? 'Marcar pendiente' : 'Marcar recibido' }}
+                  </button>
+                  <button
+                    v-if="esEditableAqui(ingreso, 'ingreso')"
+                    type="button"
+                    class="btn-icon !p-1.5"
+                    aria-label="Editar ingreso"
+                    title="Editar"
+                    @click="editandoMov = { tipo: 'ingreso', mov: ingreso }"
+                  >
+                    <AppIcon name="edit" class="h-4 w-4" />
                   </button>
                   <button
                     v-if="!ingreso.origenConfigId && !esDelHogar(ingreso) && !esDeOtraPantalla(ingreso)"
@@ -1155,5 +1207,14 @@ function saldoCompra(compra) {
     <AppModal v-if="exportando" title="Exportar" @close="exportando = false">
       <ExportarDatos :desde-inicial="filtroDesde" :hasta-inicial="filtroHasta" />
     </AppModal>
+    <EditarMovimientoModal
+      v-if="editandoMov"
+      :tipo="editandoMov.tipo"
+      :movimiento="editandoMov.mov"
+      :categorias="categorias"
+      :metodos="metodos"
+      @cerrar="editandoMov = null"
+      @guardado="onMovimientoEditado"
+    />
   </AppLayout>
 </template>

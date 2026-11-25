@@ -43,16 +43,44 @@ export async function obtenerResumenPersonal(usuarioActual, indiceCiclo = 0) {
   const periodoAnterior = calcularPeriodoPorIndice(frecuencia, indiceCiclo - 1);
   const esActual = indiceCiclo === 0;
   const finCiclo = periodoActual.fin;
-  const [gastosPagados, ingresosRecibidos, gastosPendientes, ingresosPendientes, consumo, ingresosSinReintegros] = await Promise.all([
-    // Vista de CAJA: todo lo que salió (incluye el 100 % de lo pagado del
-    // hogar, los pagos de cuadre y de tarjeta).
-    prisma.gastoPersonal.findMany({
-      where: { usuarioId, estado: 'pagado' },
-      include: { metodoPago: { select: { tipo: true } } },
+  // Solo se lee lo que hace falta: la caja se suma en la base (no se traen
+  // todas las filas del historial) y el consumo, desde el inicio de la serie
+  // de meses o del ciclo anterior (lo que sea antes) hasta el fin del ciclo.
+  const inicioSerie = new Date(Date.UTC(finCiclo.getUTCFullYear(), finCiclo.getUTCMonth() - (MESES_VENTANA - 1), 1));
+  const desdeConsumo = new Date(Math.min(inicioSerie, periodoAnterior.inicio));
+  const rangoConsumo = { gte: desdeConsumo, lte: finCiclo };
+  // En un ciclo pasado, la caja llega hasta su último día.
+  const hasta = esActual ? {} : { fecha: { lte: finCiclo } };
+  const suma = (r) => r._sum.monto ?? 0;
+  const [
+    ingresosCaja,
+    gastosCajaSinTarjeta,
+    cargosTarjetaAgg,
+    pagosTarjetaAgg,
+    gastosPendientes,
+    ingresosPendientes,
+    consumo,
+    ingresosSinReintegros,
+  ] = await Promise.all([
+    // Vista de CAJA: todo lo que entró y salió (incluye el 100 % de lo pagado
+    // del hogar, los pagos de cuadre y de tarjeta).
+    prisma.ingresoPersonal.aggregate({ where: { usuarioId, estado: 'recibido', ...hasta }, _sum: { monto: true } }),
+    prisma.gastoPersonal.aggregate({
+      where: {
+        usuarioId,
+        estado: 'pagado',
+        ...hasta,
+        OR: [{ metodoPagoId: null }, { metodoPago: { tipo: { not: 'tarjeta_credito' } } }],
+      },
+      _sum: { monto: true },
     }),
-    prisma.ingresoPersonal.findMany({
-      where: { usuarioId, estado: 'recibido' },
-      orderBy: { fecha: 'asc' },
+    prisma.gastoPersonal.aggregate({
+      where: { usuarioId, estado: 'pagado', ...hasta, metodoPago: { tipo: 'tarjeta_credito' } },
+      _sum: { monto: true },
+    }),
+    prisma.gastoPersonal.aggregate({
+      where: { usuarioId, estado: 'pagado', ...hasta, origen: 'pago_tarjeta' },
+      _sum: { monto: true },
     }),
     // Las cuotas futuras (de compras a cuotas o de pagos del hogar) no se
     // listan acá hasta que entren al ciclo actual: viven en "Mis próximos meses".
@@ -66,21 +94,16 @@ export async function obtenerResumenPersonal(usuarioActual, indiceCiclo = 0) {
     }),
     prisma.ingresoPersonal.findMany({ where: { usuarioId, estado: 'pendiente' }, include: { categoria: true } }),
     // Vista de CONSUMO: lo que el usuario gastó (su parte del hogar incluida).
-    gastosDeConsumo(usuarioId),
-    ingresosReales(usuarioId),
+    gastosDeConsumo(usuarioId, rangoConsumo),
+    ingresosReales(usuarioId, { gte: periodoAnterior.inicio, lte: finCiclo }),
   ]);
 
   // Disponible (caja): lo que entró menos lo que salió. Una compra con
   // tarjeta de crédito no sale de la cuenta hasta que se paga la tarjeta
   // (ese pago es un gasto de origen pago_tarjeta, que sí cuenta).
   // En un ciclo pasado: solo lo que había pasado hasta su último día.
-  const hastaCierre = (items) => (esActual ? items : items.filter((m) => new Date(m.fecha) <= finCiclo));
-  const gastosCaja = hastaCierre(gastosPagados);
-  const conTarjeta = (g) => g.metodoPago?.tipo === 'tarjeta_credito';
-  const disponible = sumarMontos(hastaCierre(ingresosRecibidos)) - sumarMontos(gastosCaja.filter((g) => !conTarjeta(g)));
-  const cargosTarjeta = sumarMontos(gastosCaja.filter(conTarjeta));
-  const pagosTarjeta = sumarMontos(gastosCaja.filter((g) => g.origen === 'pago_tarjeta'));
-  const deudaTarjetas = cargosTarjeta - pagosTarjeta;
+  const disponible = suma(ingresosCaja) - suma(gastosCajaSinTarjeta);
+  const deudaTarjetas = suma(cargosTarjetaAgg) - suma(pagosTarjetaAgg);
 
   // Neto del ciclo (consumo): ingresos reales menos lo que gastó, con su
   // parte del hogar y sin reintegros de cuadres.

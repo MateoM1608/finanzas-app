@@ -114,6 +114,9 @@ const porCategoriaChart = computed(() => {
           <p class="stat-value-lg" :class="resumen.disponible < 0 ? 'text-negative' : 'text-ink-primary'">
             {{ formatCurrency(resumen.disponible) }}
           </p>
+          <p class="sm:hidden mt-1.5 text-[11px] text-ink-tertiary">
+            {{ esActual ? 'Lo que hay hoy en tus cuentas (sin lo que debes en tarjetas).' : 'Lo que había al terminar ese ciclo.' }}
+          </p>
           <p class="stat-hint">
             <template v-if="esActual">Lo que entró menos lo que salió. Las compras con tarjeta de crédito cuentan al pagar la tarjeta.</template>
             <template v-else>Lo que tenías el último día de ese ciclo.</template>
@@ -158,6 +161,9 @@ const porCategoriaChart = computed(() => {
           </p>
           <p class="mt-1.5 sm:mt-2.5 text-[11px] sm:text-xs text-ink-tertiary">
             <span class="sm:hidden">Anterior:</span><span class="hidden sm:inline">Ciclo anterior:</span> {{ formatCurrency(resumen.neto.anterior) }}
+          </p>
+          <p class="mt-1 text-[11px] sm:text-xs text-ink-tertiary">
+            Lo que entró menos lo que gastaste (con tu parte del hogar).
           </p>
         </section>
 
