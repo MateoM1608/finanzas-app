@@ -3,6 +3,7 @@ import { HttpError } from '../../middleware/errorHandler.js';
 import { calcularPeriodoActual, calcularPeriodoAnterior, calcularPeriodoPorIndice, dentroDelRango } from '../../utils/cicloPersonal.js';
 import { evaluarPeriodoSiCorresponde } from '../../utils/evaluacionAhorro.js';
 import { hoyUTC } from '../../utils/fechas.js';
+import { validarMovimiento, crearCajaAhorro, netoAhorro } from '../../utils/movimientosAhorro.js';
 
 const PERIODOS_VENTANA = 6;
 
@@ -59,16 +60,51 @@ export async function eliminarAhorro(usuarioActual, id) {
   await prisma.ahorroPersonal.delete({ where: { id } });
 }
 
+/**
+ * Aporte o retiro manual. El aporte sale de la caja (GastoPersonal
+ * aporte_ahorro: baja el Disponible, no es consumo); el retiro vuelve a ella
+ * (IngresoPersonal retiro_ahorro: no es ingreso real) y no puede superar lo ahorrado.
+ */
 export async function registrarAporte(usuarioActual, ahorroId, data) {
-  await requireAhorroDelUsuario(usuarioActual.id, ahorroId);
-  return prisma.ahorroTransaccion.create({
-    data: {
-      ahorroId,
-      monto: data.monto,
-      fecha: data.fecha ?? hoyUTC(),
-      origen: 'manual',
-    },
+  const ahorro = await requireAhorroDelUsuario(usuarioActual.id, ahorroId);
+  await validarMovimiento(usuarioActual.id, data);
+  const tipo = data.tipo ?? 'aporte';
+  if (tipo === 'retiro') {
+    const transacciones = await prisma.ahorroTransaccion.findMany({ where: { ahorroId } });
+    const ahorrado = netoAhorro(transacciones);
+    if (data.monto > ahorrado) throw new HttpError(400, `No puedes retirar más de lo ahorrado (${ahorrado})`);
+  }
+  return prisma.$transaction(async (tx) => {
+    const transaccion = await tx.ahorroTransaccion.create({
+      data: {
+        ahorroId,
+        tipo,
+        monto: data.monto,
+        fecha: data.fecha ?? hoyUTC(),
+        metodoPagoId: data.metodoPagoId ?? null,
+        origen: 'manual',
+      },
+    });
+    await crearCajaAhorro(tx, transaccion, usuarioActual.id, ahorro.nombre);
+    return transaccion;
   });
+}
+
+/** Quita un aporte o retiro manual (y su movimiento de caja). */
+export async function eliminarTransaccion(usuarioActual, ahorroId, transaccionId) {
+  await requireAhorroDelUsuario(usuarioActual.id, ahorroId);
+  const transaccion = await prisma.ahorroTransaccion.findUnique({ where: { id: transaccionId } });
+  if (!transaccion || transaccion.ahorroId !== ahorroId) throw new HttpError(404, 'Movimiento no encontrado');
+  if (transaccion.origen !== 'manual') {
+    throw new HttpError(409, 'Este débito lo hizo la app al evaluar el período: no se quita a mano');
+  }
+  await prisma.ahorroTransaccion.delete({ where: { id: transaccionId } });
+}
+
+/** Para el patrimonio: lo ahorrado en todas las metas personales. */
+export async function totalAhorrosDe(usuarioId) {
+  const transacciones = await prisma.ahorroTransaccion.findMany({ where: { ahorro: { usuarioId } } });
+  return netoAhorro(transacciones);
 }
 
 /**
@@ -120,13 +156,13 @@ export async function obtenerResumenAhorros(usuarioActual, indiceCiclo = 0) {
 
   const metas = ahorros.map((ahorro) => {
     const transacciones = esActual ? ahorro.transacciones : ahorro.transacciones.filter((t) => new Date(t.fecha) <= rangoCiclo.fin);
-    const totalAhorrado = sumarMontos(transacciones);
-    const aportadoCiclo = sumarMontos(ahorro.transacciones.filter((t) => dentroDelRango(t.fecha, rangoCiclo)));
+    const totalAhorrado = netoAhorro(transacciones);
+    const aportadoCiclo = netoAhorro(ahorro.transacciones.filter((t) => dentroDelRango(t.fecha, rangoCiclo)));
     const pronostico = pronosticoDe.get(ahorro.id) ?? null;
 
     const periodos = ahorro.pronosticos.map((p) => {
       const rango = { inicio: p.periodo.periodoInicio, fin: p.periodo.periodoFin };
-      const montoAhorradoReal = sumarMontos(ahorro.transacciones.filter((t) => dentroDelRango(t.fecha, rango)));
+      const montoAhorradoReal = netoAhorro(ahorro.transacciones.filter((t) => dentroDelRango(t.fecha, rango)));
       const estado = estadoSemaforo(montoAhorradoReal, p.montoSugerido);
 
       return {
@@ -151,6 +187,7 @@ export async function obtenerResumenAhorros(usuarioActual, indiceCiclo = 0) {
       totalAhorrado,
       progresoPct: ahorro.montoMetaTotal ? (totalAhorrado / ahorro.montoMetaTotal) * 100 : null,
       periodos,
+      transacciones: [...ahorro.transacciones].sort((x, y) => new Date(y.fecha) - new Date(x.fecha)),
       cicloConsultado: {
         montoAhorradoReal: aportadoCiclo,
         montoSugerido: pronostico?.montoSugerido ?? null,
@@ -159,7 +196,7 @@ export async function obtenerResumenAhorros(usuarioActual, indiceCiclo = 0) {
     };
   });
 
-  const totalAhorradoAcumulado = sumarMontos(
+  const totalAhorradoAcumulado = netoAhorro(
     ahorros
       .filter((a) => a.activo)
       .flatMap((a) => a.transacciones)

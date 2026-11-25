@@ -37,3 +37,21 @@ export function crearCaja(tx, mov, { enlace, origenes, descripcion }) {
   }
   return tx.ingresoPersonal.create({ data: { ...base, estado: 'recibido', origen: origenes.retiro } });
 }
+
+/** Ahorros personales: el movimiento de caja de un aporte o retiro (AhorroTransaccion). */
+export function crearCajaAhorro(tx, transaccion, usuarioId, nombreMeta) {
+  return crearCaja(
+    tx,
+    { ...transaccion, usuarioId },
+    {
+      enlace: { ahorroTransaccionId: transaccion.id },
+      origenes: { aporte: 'aporte_ahorro', retiro: 'retiro_ahorro' },
+      descripcion: `${transaccion.tipo === 'retiro' ? 'Retiro de' : 'Ahorro ·'} ${nombreMeta}`,
+    },
+  );
+}
+
+/** Saldo de una lista de transacciones de ahorro: aportes − retiros. */
+export function netoAhorro(transacciones) {
+  return transacciones.reduce((a, t) => a + (t.tipo === 'retiro' ? -t.monto : t.monto), 0);
+}

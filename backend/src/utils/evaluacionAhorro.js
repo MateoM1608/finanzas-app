@@ -1,3 +1,4 @@
+import { crearCajaAhorro } from './movimientosAhorro.js';
 import { prisma } from '../config/prisma.js';
 import { calcularPeriodoActual } from './cicloPersonal.js';
 import { calcularFechasPendientes } from './instanciasFijas.js';
@@ -129,9 +130,11 @@ export async function evaluarPeriodoSiCorresponde(usuarioId, fecha) {
         });
 
         if (ahorro.modoTransaccion === 'automatico' && montoSugerido > 0) {
-          await tx.ahorroTransaccion.create({
+          const transaccion = await tx.ahorroTransaccion.create({
             data: { ahorroId: ahorro.id, monto: montoSugerido, fecha: fechaDebito, origen: 'automatico' },
           });
+          // Sale de la caja (baja el Disponible) sin ser consumo.
+          await crearCajaAhorro(tx, transaccion, usuarioId, ahorro.nombre);
         }
       }
 

@@ -95,6 +95,14 @@ function onCicloCargado(info) {
   filtroHasta.value = String(info.fin).slice(0, 10);
 }
 
+// Un aporte o retiro de ahorro mueve la caja: Disponible y movimientos al día.
+function onCambioAhorro() {
+  resumenRef.value?.recargar();
+  proximosRef.value?.recargar();
+  cargarGastos();
+  cargarIngresos();
+}
+
 function recargarResumenes() {
   resumenRef.value?.recargar();
   proximosRef.value?.recargar();
@@ -490,12 +498,22 @@ const ORIGEN_MOVIMIENTO = {
   retiro_inversion: { badge: 'Inversión', icono: 'trendingUp' },
   aporte_meta_hogar: { badge: 'Meta del hogar', icono: 'piggy' },
   retiro_meta_hogar: { badge: 'Meta del hogar', icono: 'piggy' },
+  aporte_ahorro: { badge: 'Ahorro', icono: 'piggy' },
+  retiro_ahorro: { badge: 'Ahorro', icono: 'piggy' },
 };
 function esDelHogar(mov) {
   return mov.origen === 'pago_hogar' || mov.origen === 'liquidacion_hogar';
 }
 // Movimientos que se manejan desde Patrimonio (préstamos, inversiones) o la meta del hogar.
-const ORIGENES_DE_OTRA_PANTALLA = ['abono_prestamo', 'aporte_inversion', 'retiro_inversion', 'aporte_meta_hogar', 'retiro_meta_hogar'];
+const ORIGENES_DE_OTRA_PANTALLA = [
+  'abono_prestamo',
+  'aporte_inversion',
+  'retiro_inversion',
+  'aporte_meta_hogar',
+  'retiro_meta_hogar',
+  'aporte_ahorro',
+  'retiro_ahorro',
+];
 function esDeOtraPantalla(mov) {
   return Boolean(mov.prestamoId) || ORIGENES_DE_OTRA_PANTALLA.includes(mov.origen);
 }
@@ -605,7 +623,7 @@ function saldoCompra(compra) {
             </div>
             <button type="button" class="btn-ghost btn-sm" @click="abrirConfig('ahorros')">Configurar</button>
           </div>
-          <AhorrosPersonalesSection ref="ahorrosRef" :ciclo="ciclo" />
+          <AhorrosPersonalesSection ref="ahorrosRef" :ciclo="ciclo" @cambio="onCambioAhorro" />
         </section>
       </div>
 

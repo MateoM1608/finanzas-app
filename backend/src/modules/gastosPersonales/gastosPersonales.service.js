@@ -36,8 +36,8 @@ function requireNoEsDelHogar(gasto) {
   if (gasto.prestamoId || gasto.origen === 'abono_prestamo') {
     throw new HttpError(409, 'Este movimiento es de un préstamo: manéjalo desde Préstamos');
   }
-  if (gasto.origen === 'aporte_inversion' || gasto.origen === 'aporte_meta_hogar') {
-    throw new HttpError(409, 'Este movimiento es un aporte a una inversión o meta: quítalo desde allí');
+  if (['aporte_inversion', 'aporte_meta_hogar', 'aporte_ahorro'].includes(gasto.origen)) {
+    throw new HttpError(409, 'Este movimiento es un aporte a un ahorro, inversión o meta: quítalo desde allí');
   }
 }
 

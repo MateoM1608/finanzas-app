@@ -117,7 +117,8 @@ export async function eliminarMetodoPago(usuarioActual, id) {
     Promise.all([
       prisma.inversionMovimiento.count({ where: { metodoPagoId: id } }),
       prisma.metaHogarMovimiento.count({ where: { metodoPagoId: id } }),
-    ]).then(([a, b]) => a + b),
+      prisma.ahorroTransaccion.count({ where: { metodoPagoId: id } }),
+    ]).then(([a, b, c]) => a + b + c),
   ]);
   if (gastos || ingresos || gastosFijos || compras || comprasHogar || extractos || prestamos || movsAhorro) {
     throw new HttpError(409, 'Este método de pago ya está en uso — no se puede eliminar');

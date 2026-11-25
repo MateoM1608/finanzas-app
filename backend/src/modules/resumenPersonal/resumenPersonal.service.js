@@ -5,6 +5,7 @@ import { gastosDeConsumo, ingresosReales } from '../../utils/consumo.js';
 import { valorInversionesDe } from '../inversiones/inversiones.service.js';
 import { misAportesEnMetas } from '../metasHogar/metasHogar.service.js';
 import { deudaPrestamosDe } from '../prestamos/prestamos.service.js';
+import { totalAhorrosDe } from '../ahorrosPersonales/ahorrosPersonales.service.js';
 
 const MESES_VENTANA = 6;
 
@@ -142,14 +143,16 @@ export async function obtenerResumenPersonal(usuarioActual, indiceCiclo = 0) {
   // Patrimonio (solo en el ciclo actual): lo que tengo menos lo que debo.
   let patrimonio = null;
   if (esActual) {
-    const [inversiones, metasHogar, prestamos] = await Promise.all([
+    const [inversiones, metasHogar, prestamos, ahorros] = await Promise.all([
       valorInversionesDe(usuarioActual),
       misAportesEnMetas(usuarioActual),
       deudaPrestamosDe(usuarioActual),
+      totalAhorrosDe(usuarioId),
     ]);
     patrimonio = {
-      total: disponible + inversiones + metasHogar - deudaTarjetas - prestamos,
+      total: disponible + ahorros + inversiones + metasHogar - deudaTarjetas - prestamos,
       disponible,
+      ahorros,
       inversiones,
       metasHogar,
       deudaTarjetas,

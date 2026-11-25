@@ -127,7 +127,7 @@ const porCategoriaChart = computed(() => {
             <span class="font-semibold text-warning">{{ formatCurrency(resumen.deudaTarjetas) }}</span>
           </router-link>
           <router-link
-            v-if="resumen.patrimonio && (resumen.patrimonio.inversiones || resumen.patrimonio.prestamos || resumen.patrimonio.metasHogar)"
+            v-if="resumen.patrimonio && (resumen.patrimonio.ahorros || resumen.patrimonio.inversiones || resumen.patrimonio.prestamos || resumen.patrimonio.metasHogar)"
             :to="{ name: 'patrimonio' }"
             class="mt-1.5 flex items-center justify-between gap-2 rounded-lg text-[13px] hover:underline"
           >

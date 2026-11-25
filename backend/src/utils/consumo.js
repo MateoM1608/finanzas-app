@@ -23,11 +23,18 @@ export const ORIGENES_NO_CONSUMO = [
   'abono_prestamo',
   'aporte_inversion',
   'aporte_meta_hogar',
+  'aporte_ahorro',
 ];
 
 // Entradas de caja que no son ingreso real: reintegros de cuadres, desembolsos
 // de préstamos y retiros de inversiones o metas (es plata propia que vuelve).
-export const ORIGENES_NO_INGRESO = ['liquidacion_hogar', 'desembolso_prestamo', 'retiro_inversion', 'retiro_meta_hogar'];
+export const ORIGENES_NO_INGRESO = [
+  'liquidacion_hogar',
+  'desembolso_prestamo',
+  'retiro_inversion',
+  'retiro_meta_hogar',
+  'retiro_ahorro',
+];
 
 const CATEGORIA_HOGAR = 'Hogar';
 

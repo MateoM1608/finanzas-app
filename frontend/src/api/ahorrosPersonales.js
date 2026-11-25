@@ -23,3 +23,7 @@ export function eliminarAhorro(id) {
 export function registrarAporte(id, payload) {
   return api.post(`/api/ahorros-personales/${id}/transacciones`, payload).then((r) => r.data.transaccion);
 }
+
+export function eliminarTransaccionAhorro(id, transaccionId) {
+  return api.delete(`/api/ahorros-personales/${id}/transacciones/${transaccionId}`);
+}

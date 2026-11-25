@@ -265,6 +265,7 @@ function progreso(p) {
           </div>
           <dl class="grid grid-cols-2 gap-x-5 gap-y-1 text-[13px] sm:flex sm:flex-wrap sm:gap-x-6">
             <div class="flex justify-between gap-2 sm:block"><dt class="text-ink-tertiary">Disponible</dt><dd class="font-medium text-ink-primary">{{ formatCurrency(patrimonio.disponible) }}</dd></div>
+            <div v-if="patrimonio.ahorros" class="flex justify-between gap-2 sm:block"><dt class="text-ink-tertiary">Ahorros</dt><dd class="font-medium text-positive">+{{ formatCurrency(patrimonio.ahorros) }}</dd></div>
             <div class="flex justify-between gap-2 sm:block"><dt class="text-ink-tertiary">Inversiones</dt><dd class="font-medium text-positive">+{{ formatCurrency(patrimonio.inversiones) }}</dd></div>
             <div v-if="patrimonio.metasHogar" class="flex justify-between gap-2 sm:block"><dt class="text-ink-tertiary"><span class="sm:hidden">Metas</span><span class="hidden sm:inline">Metas del hogar</span></dt><dd class="font-medium text-positive">+{{ formatCurrency(patrimonio.metasHogar) }}</dd></div>
             <div class="flex justify-between gap-2 sm:block"><dt class="text-ink-tertiary">Tarjetas</dt><dd class="font-medium text-warning">−{{ formatCurrency(patrimonio.deudaTarjetas) }}</dd></div>

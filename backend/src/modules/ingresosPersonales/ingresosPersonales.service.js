@@ -25,8 +25,8 @@ export function crearIngresoPersonal(usuarioId, data) {
 
 /** Los retiros de inversiones y metas del hogar se manejan desde allí. */
 function requireNoEsRetiro(ingreso) {
-  if (ingreso.origen === 'retiro_inversion' || ingreso.origen === 'retiro_meta_hogar') {
-    throw new HttpError(409, 'Este ingreso es un retiro de una inversión o meta: quítalo desde allí');
+  if (['retiro_inversion', 'retiro_meta_hogar', 'retiro_ahorro'].includes(ingreso.origen)) {
+    throw new HttpError(409, 'Este ingreso es un retiro de un ahorro, inversión o meta: quítalo desde allí');
   }
 }
 

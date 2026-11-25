@@ -22,6 +22,8 @@ export const actualizarAhorroSchema = z.object({
 });
 
 export const crearTransaccionSchema = z.object({
+  tipo: z.enum(['aporte', 'retiro']).optional(),
   monto: z.number().int().positive(),
   fecha: z.coerce.date().optional(),
+  metodoPagoId: z.string().uuid().nullable().optional(),
 });

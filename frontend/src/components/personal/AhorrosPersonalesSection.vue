@@ -1,6 +1,8 @@
 <script setup>
 import { ref, reactive, watch } from 'vue';
-import { obtenerResumenAhorros, registrarAporte } from '../../api/ahorrosPersonales.js';
+import { obtenerResumenAhorros, registrarAporte, eliminarTransaccionAhorro } from '../../api/ahorrosPersonales.js';
+import { listarMetodosPago } from '../../api/metodosPagoPersonales.js';
+import { confirmar } from '../../composables/useConfirm.js';
 import { extractErrorMessage } from '../../api/client.js';
 import { formatCurrency, formatDate } from '../../utils/format.js';
 import AlertError from '../AlertError.vue';
@@ -18,11 +20,20 @@ const ESTADO_INFO = {
 };
 
 const props = defineProps({ ciclo: { type: Number, default: 0 } });
+// Un aporte o retiro mueve la caja: el panel recarga Disponible y movimientos.
+const emit = defineEmits(['cambio']);
 
 const loading = ref(true);
 const error = ref('');
 const resumen = ref(null);
 const aportandoId = ref(null);
+const tipoMovimiento = ref('aporte');
+const cuentaAporte = ref('');
+const metodos = ref([]);
+listarMetodosPago()
+  .then((m) => (metodos.value = m.filter((x) => x.tipo !== 'tarjeta_credito')))
+  .catch(() => {});
+const verMovimientosId = ref(null);
 const montoAporte = reactive({});
 const guardandoAporteId = ref(null);
 
@@ -52,18 +63,37 @@ function pctCiclo(periodo) {
   return Math.min(100, Math.max(0, (Number(periodo.montoAhorradoReal) / sugerido) * 100));
 }
 
-function onMostrarAporte(meta) {
+function onMostrarAporte(meta, tipo = 'aporte') {
   aportandoId.value = meta.id;
+  tipoMovimiento.value = tipo;
+  cuentaAporte.value = '';
   montoAporte[meta.id] = '';
+}
+
+async function onQuitarTransaccion(meta, t) {
+  if (!(await confirmar(`¿Quitar este ${t.tipo} de ${formatCurrency(t.monto)}?`, { textoAceptar: 'Quitar' }))) return;
+  error.value = '';
+  try {
+    await eliminarTransaccionAhorro(meta.id, t.id);
+    await cargar();
+    emit('cambio');
+  } catch (e) {
+    error.value = extractErrorMessage(e);
+  }
 }
 
 async function onRegistrarAporte(meta) {
   error.value = '';
   guardandoAporteId.value = meta.id;
   try {
-    await registrarAporte(meta.id, { monto: Number(montoAporte[meta.id]) });
+    await registrarAporte(meta.id, {
+      tipo: tipoMovimiento.value,
+      monto: Number(montoAporte[meta.id]),
+      metodoPagoId: cuentaAporte.value || null,
+    });
     aportandoId.value = null;
     await cargar();
+    emit('cambio');
   } catch (e) {
     error.value = extractErrorMessage(e);
   } finally {
@@ -120,14 +150,13 @@ async function onRegistrarAporte(meta) {
                 </template>
               </p>
             </div>
-            <button
-              v-if="ciclo === 0 && meta.modoTransaccion === 'manual' && aportandoId !== meta.id"
-              class="btn-secondary btn-sm shrink-0"
-              @click="onMostrarAporte(meta)"
-            >
-              <AppIcon name="plus" class="h-3.5 w-3.5" />
-              Registrar aporte
-            </button>
+            <div v-if="ciclo === 0 && aportandoId !== meta.id" class="flex shrink-0 gap-1.5">
+              <button v-if="meta.activo && meta.modoTransaccion === 'manual'" class="btn-secondary btn-sm" @click="onMostrarAporte(meta)">
+                <AppIcon name="plus" class="h-3.5 w-3.5" />
+                Aportar
+              </button>
+              <button v-if="meta.totalAhorrado > 0" class="btn-ghost btn-sm" @click="onMostrarAporte(meta, 'retiro')">Retirar</button>
+            </div>
           </div>
 
           <div v-if="periodoActual(meta)" class="mt-3">
@@ -172,10 +201,14 @@ async function onRegistrarAporte(meta) {
               v-model="montoAporte[meta.id]"
               type="number"
               inputmode="numeric"
-              class="field min-w-0 flex-1 sm:max-w-[12rem]"
-              placeholder="Monto (COP)"
-              aria-label="Monto del aporte"
+              class="field min-w-0 flex-1 sm:max-w-[10rem]"
+              :placeholder="tipoMovimiento === 'retiro' ? 'Retiras (COP)' : 'Aportas (COP)'"
+              :aria-label="tipoMovimiento === 'retiro' ? 'Monto del retiro' : 'Monto del aporte'"
             />
+            <select v-model="cuentaAporte" class="field min-w-0 flex-1 sm:max-w-[12rem]" :aria-label="tipoMovimiento === 'retiro' ? 'Cuenta a la que llega' : 'Cuenta de la que sale'">
+              <option value="">{{ tipoMovimiento === 'retiro' ? 'Llega a: sin definir' : 'Sale de: sin definir' }}</option>
+              <option v-for="m in metodos" :key="m.id" :value="m.id">{{ m.nombre }}</option>
+            </select>
             <div class="flex items-center gap-2">
               <button
                 class="btn-primary btn-sm"
@@ -186,7 +219,31 @@ async function onRegistrarAporte(meta) {
               </button>
               <button class="btn-ghost btn-sm" @click="aportandoId = null">Cancelar</button>
             </div>
+            <p class="w-full text-xs text-ink-tertiary">
+              {{ tipoMovimiento === 'retiro' ? 'Sube tu Disponible pero no cuenta como ingreso.' : 'Baja tu Disponible pero no cuenta como gasto.' }}
+            </p>
           </div>
+          <button
+            v-if="ciclo === 0 && meta.transacciones?.length"
+            type="button"
+            class="mt-2 text-xs text-ink-tertiary hover:text-ink-primary hover:underline"
+            @click="verMovimientosId = verMovimientosId === meta.id ? null : meta.id"
+          >
+            {{ verMovimientosId === meta.id ? 'Ocultar movimientos' : `Movimientos (${meta.transacciones.length})` }}
+          </button>
+          <ul v-if="verMovimientosId === meta.id" class="list mt-1">
+            <li v-for="t in meta.transacciones" :key="t.id" class="list-row !py-1.5 text-[13px]">
+              <span class="text-ink-secondary">
+                {{ formatDate(t.fecha) }} · {{ t.tipo === 'retiro' ? 'retiro' : t.origen === 'automatico' ? 'débito automático' : 'aporte' }}
+              </span>
+              <span class="flex items-center gap-1.5">
+                <span class="font-semibold" :class="t.tipo === 'retiro' ? 'text-warning' : 'text-ink-primary'">{{ t.tipo === 'retiro' ? '−' : '' }}{{ formatCurrency(t.monto) }}</span>
+                <button v-if="t.origen === 'manual'" type="button" class="btn-icon !p-1" aria-label="Quitar movimiento" @click="onQuitarTransaccion(meta, t)">
+                  <AppIcon name="x" class="h-3.5 w-3.5" />
+                </button>
+              </span>
+            </li>
+          </ul>
         </li>
       </ul>
     </template>

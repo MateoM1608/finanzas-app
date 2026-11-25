@@ -7,6 +7,7 @@ import {
   eliminarAhorro,
   registrarAporte,
   obtenerResumenAhorros,
+  eliminarTransaccion,
 } from './ahorrosPersonales.service.js';
 import { leerCiclo } from '../../utils/cicloQuery.js';
 
@@ -41,4 +42,9 @@ export const postTransaccion = asyncHandler(async (req, res) => {
   const data = crearTransaccionSchema.parse(req.body);
   const transaccion = await registrarAporte(req.usuario, req.params.id, data);
   res.status(201).json({ transaccion });
+});
+
+export const deleteTransaccion = asyncHandler(async (req, res) => {
+  await eliminarTransaccion(req.usuario, req.params.id, req.params.transaccionId);
+  res.status(204).send();
 });
