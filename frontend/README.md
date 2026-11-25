@@ -67,6 +67,8 @@ Todos los gráficos manejan estado vacío explícito ("Aún no hay gastos…", "
 
 **Avisos y notificaciones:** `components/AvisosPagar.vue` ("Para pagar", plegable, con etiqueta Ayer/Hoy/Mañana/En N días y botón Ir; en Personal lo propio y lo del hogar que te toca, en Hogar todo lo del hogar con a quién le toca; no aparece si no hay nada). `AppLayout` muestra una campana con el número sin leer (se consulta en cada cambio de pantalla) que lleva a `/notificaciones` (`NotificacionesView.vue`: tocar una la marca leída y lleva a pagarla; "Marcar todas como leídas").
 
+**Actividad del hogar:** `components/hogar/ActividadHogarSection.vue` en Panel del hogar (las últimas 8, "Ver más" hasta 40: "Mateo agregó Mercado · $120.000 · hace 2 h"). En Movimientos, un pago del hogar registrado por otro miembro lleva la etiqueta "Registrado por X". La bandeja muestra también las notificaciones de actividad.
+
 **Exportar (`components/ExportarDatos.vue`):** formato XLSX o CSV (en CSV se elige la tabla), fechas con atajos (este mes, mes anterior, este año, todo) y descarga con `responseType: 'blob'` (el nombre sale del `Content-Disposition`). Está en Configuración (pestaña Exportar) y en Movimientos (botón Exportar, abre con el rango del filtro).
 
 **Ahorros personales:** `AhorrosPersonalesSection` permite Aportar (metas manuales y activas) y Retirar eligiendo la cuenta, y lista los movimientos de cada meta (se quitan los manuales); al cambiar, el panel recarga Disponible y Movimientos. En Movimientos salen con la etiqueta "Ahorro" y sin botones de editar ni borrar.

@@ -31,8 +31,13 @@ async function cargar() {
 }
 onMounted(cargar);
 
-const ICONO = { atrasado: 'alert', vence_hoy: 'bell', vence_pronto: 'clock' };
-const COLOR = { atrasado: 'bg-negative/10 text-negative', vence_hoy: 'bg-warning/10 text-warning', vence_pronto: 'bg-accent/10 text-accent' };
+const ICONO = { atrasado: 'alert', vence_hoy: 'bell', vence_pronto: 'clock', actividad: 'users' };
+const COLOR = {
+  atrasado: 'bg-negative/10 text-negative',
+  vence_hoy: 'bg-warning/10 text-warning',
+  vence_pronto: 'bg-accent/10 text-accent',
+  actividad: 'bg-positive/10 text-positive',
+};
 
 function hace(fecha) {
   const min = Math.round((Date.now() - new Date(fecha)) / 60000);
@@ -70,7 +75,7 @@ async function leerTodas() {
 </script>
 
 <template>
-  <AppLayout title="Notificaciones" subtitle="Lo que vence y lo que quedó sin pagar.">
+  <AppLayout title="Notificaciones" subtitle="Lo que vence, lo que quedó sin pagar y lo que registró tu pareja.">
     <template #actions>
       <button v-if="hayNoLeidas" type="button" class="btn-secondary btn-sm" @click="leerTodas">
         <AppIcon name="check" class="h-4 w-4" /> Marcar todas como leídas

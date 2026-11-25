@@ -1,3 +1,4 @@
+import { registrarActividad } from '../../utils/actividadHogar.js';
 import { prisma } from '../../config/prisma.js';
 import { HttpError } from '../../middleware/errorHandler.js';
 import { hoyUTC } from '../../utils/fechas.js';
@@ -78,6 +79,7 @@ export async function crearMeta(usuarioActual, data) {
       fechaMeta: data.fechaMeta ?? null,
     },
   });
+  await registrarActividad(usuarioActual, { tipo: 'meta', descripcion: `creó la meta ${data.nombre}`, monto: data.montoMeta });
   return obtener(usuarioActual, meta.id);
 }
 
@@ -132,6 +134,11 @@ export async function registrarMovimiento(usuarioActual, id, data) {
     },
     { timeout: 120000, maxWait: 20000 },
   );
+  await registrarActividad(usuarioActual, {
+    tipo: 'meta',
+    descripcion: `${data.tipo === 'aporte' ? 'aportó a' : 'retiró de'} la meta ${meta.nombre}`,
+    monto: data.monto,
+  });
   return obtener(usuarioActual, id);
 }
 

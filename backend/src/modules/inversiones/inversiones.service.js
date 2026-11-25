@@ -1,3 +1,4 @@
+import { registrarActividad } from '../../utils/actividadHogar.js';
 import { prisma } from '../../config/prisma.js';
 import { HttpError } from '../../middleware/errorHandler.js';
 import { hoyUTC } from '../../utils/fechas.js';
@@ -132,6 +133,9 @@ export async function crearInversion(usuarioActual, data) {
     },
     { timeout: 120000, maxWait: 20000 },
   );
+  if (creada.hogarId) {
+    await registrarActividad(usuarioActual, { tipo: 'inversion', descripcion: `registró la inversión ${creada.nombre}`, monto: aporte?.monto ?? null, enlace: '/patrimonio?vista=inversiones' });
+  }
   return obtener(usuarioActual, creada.id);
 }
 
@@ -186,6 +190,14 @@ export async function registrarMovimiento(usuarioActual, id, data) {
     (tx) => registrar(tx, inversion, usuarioActual.id, { ...data, fecha: data.fecha ?? hoyUTC() }),
     { timeout: 120000, maxWait: 20000 },
   );
+  if (inversion.hogarId) {
+    await registrarActividad(usuarioActual, {
+      tipo: 'inversion',
+      descripcion: `${data.tipo === 'aporte' ? 'aportó a' : 'retiró de'} la inversión ${inversion.nombre}`,
+      monto: data.monto,
+      enlace: '/patrimonio?vista=inversiones',
+    });
+  }
   return obtener(usuarioActual, id);
 }
 

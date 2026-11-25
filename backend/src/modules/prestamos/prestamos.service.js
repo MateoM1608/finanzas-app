@@ -1,3 +1,4 @@
+import { registrarActividad, registrarPago } from '../../utils/actividadHogar.js';
 import { prisma } from '../../config/prisma.js';
 import { HttpError } from '../../middleware/errorHandler.js';
 import { fechasDeCuotas } from '../../utils/cuotas.js';
@@ -399,6 +400,7 @@ export async function crearPrestamo(usuarioActual, data) {
     { timeout: 120000, maxWait: 20000 },
   );
   if (!esHogar) await evaluarPagadas(prestamo);
+  else await registrarActividad(usuarioActual, { tipo: 'prestamo', descripcion: `registró el préstamo ${prestamo.nombre}`, monto: prestamo.saldoInicial, enlace: '/patrimonio' });
   return cargar(usuarioActual, prestamo);
 }
 
@@ -572,6 +574,7 @@ export async function pagarCuota(usuarioActual, id, numero, data) {
           valorTotal: monto,
           mora: monto > base ? monto - base : null,
           pagoUsuarioId,
+          registradoPorId: usuarioActual.id,
           metodoPagoId:
             pagoUsuarioId === usuarioActual.id
               ? (data.metodoPagoId ?? (prestamo.pagoUsuarioId === pagoUsuarioId ? prestamo.metodoPagoId : null))
@@ -582,6 +585,12 @@ export async function pagarCuota(usuarioActual, id, numero, data) {
     },
     { timeout: 120000, maxWait: 20000 },
   );
+  await registrarPago(usuarioActual, pagoUsuarioId, {
+    tipo: 'cuota_prestamo',
+    item: `${prestamo.nombre} (cuota ${numero})`,
+    monto: data.monto ?? null,
+    enlace: '/patrimonio',
+  });
   return obtenerPrestamo(usuarioActual, id);
 }
 
@@ -695,6 +704,9 @@ export async function abonar(usuarioActual, id, data) {
     },
     { timeout: 120000, maxWait: 20000 },
   );
+  if (prestamo.hogarId) {
+    await registrarActividad(usuarioActual, { tipo: 'prestamo', descripcion: `abonó a capital del préstamo ${prestamo.nombre}`, monto: data.monto, enlace: '/patrimonio' });
+  }
   return obtenerPrestamo(usuarioActual, id);
 }
 

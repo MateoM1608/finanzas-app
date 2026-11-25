@@ -164,8 +164,10 @@ model Usuario {
   movimientosInversion          InversionMovimiento[]
   metasHogarCreadas             MetaHogar[]
   movimientosMetaHogar          MetaHogarMovimiento[]
-  notificacions                 Notificacion[]
-  dispositivoNotificacions      DispositivoNotificacion[]
+  notificaciones                Notificacion[]
+  dispositivos                  DispositivoNotificacion[]
+  actividadHogar                ActividadHogar[]
+  gastosRegistrados             GastoPersonal[]                   @relation("gastoRegistradoPor")
 
   @@index([hogarId])
   @@map("usuarios")
@@ -187,6 +189,7 @@ model Hogar {
   prestamos            Prestamo[]
   inversiones          Inversion[]
   metas                MetaHogar[]
+  actividad            ActividadHogar[]
 
   @@map("hogares")
 }
@@ -245,8 +248,6 @@ model MetodoPagoPersonal {
   movimientosInversion InversionMovimiento[]
   movimientosMetaHogar MetaHogarMovimiento[]
   transaccionesAhorro  AhorroTransaccion[]
-  notificaciones       Notificacion[]
-  dispositivos         DispositivoNotificacion[]
 
   @@index([usuarioId])
   @@map("metodos_pago_personales")
@@ -347,6 +348,8 @@ model GastoPersonal {
   pagoCuotaHogarId    String?   @unique @map("pago_cuota_hogar_id")
   pagoGastoHogarId    String?   @unique @map("pago_gasto_hogar_id")
   // Pago de tarjeta (origen pago_tarjeta): la tarjeta que se pagó.
+  // Movimiento del hogar registrado por otro miembro (ej. "pagó Daniela").
+  registradoPorId     String?   @map("registrado_por_id")
   tarjetaPagadaId     String?   @map("tarjeta_pagada_id")
   // Cuota de un préstamo personal (numeroCuota): monto = capital + interes +
   // seguro + mora. `fecha` es la de pago (la de vencimiento hasta pagarla) y
@@ -374,6 +377,7 @@ model GastoPersonal {
   categoria         CategoriaPersonal?        @relation(fields: [categoriaId], references: [id])
   ajustesExtracto   ExtractoAjuste[]
   prestamo          Prestamo?                 @relation(fields: [prestamoId], references: [id])
+  registradoPor     Usuario?                  @relation("gastoRegistradoPor", fields: [registradoPorId], references: [id], onDelete: SetNull)
   abonoPrestamo     PrestamoAbono?            @relation("abonoGastoPersonal", fields: [abonoPrestamoId], references: [id], onDelete: Cascade)
   inversionMov      InversionMovimiento?      @relation("inversionGasto", fields: [inversionMovId], references: [id], onDelete: Cascade)
   metaHogarMov      MetaHogarMovimiento?      @relation("metaHogarGasto", fields: [metaHogarMovId], references: [id], onDelete: Cascade)
@@ -491,16 +495,18 @@ model LogTransferenciaAdmin {
 // cuenta si es fija, null si es variable, sin pagador) y solo pasa a
 // `pagado` — y entra al saldo/cuadre — cuando alguien la marca como pagada.
 model GastoRecurrenteInstancia {
-  id            String           @id @default(uuid())
-  conceptoId    String           @map("concepto_id")
-  fecha         DateTime
-  monto         Int?
-  pagoUsuarioId String?          @map("pago_usuario_id")
-  fechaPago     DateTime?        @map("fecha_pago")
+  id                  String           @id @default(uuid())
+  conceptoId          String           @map("concepto_id")
+  fecha               DateTime
+  monto               Int?
+  pagoUsuarioId       String?          @map("pago_usuario_id")
+  fechaPago           DateTime?        @map("fecha_pago")
   // Método de pago personal con el que se pagó (privado: solo lo ve quien pagó).
-  metodoPagoId  String?          @map("metodo_pago_id")
-  estado        EstadoGastoHogar @default(por_pagar)
-  creadoEn      DateTime         @default(now()) @map("creado_en")
+  // Quién marcó "Lo pagué".
+  pagoRegistradoPorId String?          @map("pago_registrado_por_id")
+  metodoPagoId        String?          @map("metodo_pago_id")
+  estado              EstadoGastoHogar @default(por_pagar)
+  creadoEn            DateTime         @default(now()) @map("creado_en")
 
   concepto       ConceptoRecurrentePareja          @relation(fields: [conceptoId], references: [id])
   pagador        Usuario?                          @relation("gastoRecurrentePagador", fields: [pagoUsuarioId], references: [id])
@@ -546,6 +552,8 @@ model GastoVariablePareja {
   interes         Int?
   fechaPago       DateTime?        @map("fecha_pago")
   // Método de pago personal con el que se pagó (privado: solo lo ve quien pagó).
+  // Quién lo registró (o marcó pagada la cuota): para "Registrado por" y la actividad.
+  registradoPorId String?          @map("registrado_por_id")
   metodoPagoId    String?          @map("metodo_pago_id")
   // Cuota de un préstamo del hogar (numeroCuota): valorTotal = capital +
   // interes + seguro + mora. O abono extra a capital (abonoPrestamoId), que
@@ -1179,9 +1187,7 @@ model Notificacion {
   enviadaPushEn DateTime? @map("enviada_push_en")
   creadaEn      DateTime  @default(now()) @map("creada_en")
 
-  usuario              Usuario             @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
-  metodoPagoPersonal   MetodoPagoPersonal? @relation(fields: [metodoPagoPersonalId], references: [id])
-  metodoPagoPersonalId String?
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
 
   @@unique([usuarioId, clave])
   @@index([usuarioId, leida, creadaEn])
@@ -1198,10 +1204,28 @@ model DispositivoNotificacion {
   creadoEn    DateTime @default(now()) @map("creado_en")
   ultimoUsoEn DateTime @default(now()) @map("ultimo_uso_en")
 
-  usuario              Usuario             @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
-  metodoPagoPersonal   MetodoPagoPersonal? @relation(fields: [metodoPagoPersonalId], references: [id])
-  metodoPagoPersonalId String?
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
 
   @@index([usuarioId])
   @@map("dispositivos_notificacion")
+}
+
+// Actividad del hogar (entrega E3): quién hizo qué ("Mateo agregó Mercado
+// $120.000"). La escribe registrarActividad() (src/utils/actividadHogar.js),
+// que además avisa a los demás miembros con notificar().
+model ActividadHogar {
+  id          String   @id @default(uuid())
+  hogarId     String   @map("hogar_id")
+  usuarioId   String   @map("usuario_id")
+  tipo        String
+  descripcion String
+  monto       Int?
+  enlace      String?
+  creadoEn    DateTime @default(now()) @map("creado_en")
+
+  hogar   Hogar   @relation(fields: [hogarId], references: [id], onDelete: Cascade)
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@index([hogarId, creadoEn])
+  @@map("actividad_hogar")
 }

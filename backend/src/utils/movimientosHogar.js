@@ -30,6 +30,7 @@ export async function sincronizarPagoCuota(tx, cuotaId) {
     fecha,
     descripcion: `Hogar · ${cuota.concepto.nombre}`,
     metodoPagoId: cuota.metodoPagoId,
+    registradoPorId: cuota.pagoRegistradoPorId ?? null,
   });
 }
 
@@ -56,6 +57,7 @@ export async function sincronizarPagoGasto(tx, gastoId) {
     metodoPagoId: gasto.metodoPagoId ?? gasto.compra?.metodoPagoId ?? null,
     capital: gasto.capital,
     interes: gasto.interes,
+    registradoPorId: gasto.registradoPorId ?? null,
   });
 }
 

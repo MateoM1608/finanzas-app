@@ -1,3 +1,4 @@
+import { registrarActividad, registrarPago } from '../../utils/actividadHogar.js';
 import { prisma } from '../../config/prisma.js';
 import { HttpError } from '../../middleware/errorHandler.js';
 import { obtenerSplitVigenteGastosVariables, calcularReparto } from '../../utils/reparto.js';
@@ -93,6 +94,7 @@ export async function crearGastoVariable(usuarioActual, data) {
         pagoUsuarioId: data.pagoUsuarioId,
         fecha: data.fecha,
         metodoPagoId,
+        registradoPorId: usuarioActual.id,
       },
     });
 
@@ -103,6 +105,11 @@ export async function crearGastoVariable(usuarioActual, data) {
 
     return tx.gastoVariablePareja.findUnique({ where: { id: gasto.id }, include: INCLUDE_GASTO });
   });
+  if (data.pagoUsuarioId === usuarioActual.id) {
+    await registrarActividad(usuarioActual, { tipo: 'gasto_variable', descripcion: `agregó ${data.item}`, monto: data.valorTotal });
+  } else {
+    await registrarPago(usuarioActual, data.pagoUsuarioId, { tipo: 'gasto_variable', item: data.item, monto: data.valorTotal });
+  }
   return ocultarMetodoAjeno(creado, usuarioActual);
 }
 
@@ -152,6 +159,7 @@ export async function actualizarGastoVariable(usuarioActual, gastoId, data) {
         valorTotal: data.valorTotal ?? undefined,
         pagoUsuarioId: data.pagoUsuarioId ?? undefined,
         fecha: data.fecha ?? undefined,
+        registradoPorId: usuarioActual.id,
       },
     });
 
@@ -165,6 +173,7 @@ export async function actualizarGastoVariable(usuarioActual, gastoId, data) {
     await sincronizarPagoGasto(tx, gastoId);
     return tx.gastoVariablePareja.findUnique({ where: { id: gastoId }, include: INCLUDE_GASTO });
   });
+  await registrarActividad(usuarioActual, { tipo: 'gasto_variable', descripcion: `editó ${actualizado.item}`, monto: actualizado.valorTotal, avisar: 'nadie' });
   return ocultarMetodoAjeno(actualizado, usuarioActual);
 }
 
@@ -183,6 +192,7 @@ export async function eliminarGastoVariable(usuarioActual, gastoId) {
     prisma.gastoVariableParejaReparto.deleteMany({ where: { gastoId } }),
     prisma.gastoVariablePareja.delete({ where: { id: gastoId } }),
   ]);
+  await registrarActividad(usuarioActual, { tipo: 'gasto_variable', descripcion: `eliminó ${gasto.item}`, monto: gasto.valorTotal });
 }
 
 /**
@@ -207,10 +217,16 @@ export async function pagarCuotaVariable(usuarioActual, gastoId, data) {
         pagoUsuarioId: data.pagoUsuarioId ?? undefined,
         ...(data.pagoUsuarioId && data.pagoUsuarioId !== gasto.pagoUsuarioId && { metodoPagoId: null }),
         fechaPago: data.fechaPago ?? hoyUTC(),
+        registradoPorId: usuarioActual.id,
       },
     });
     await sincronizarPagoGasto(tx, gastoId);
     return tx.gastoVariablePareja.findUnique({ where: { id: gastoId }, include: INCLUDE_GASTO });
+  });
+  await registrarPago(usuarioActual, pagada.pagoUsuarioId, {
+    tipo: 'cuota_compra',
+    item: `${pagada.item} (cuota ${pagada.numeroCuota})`,
+    monto: pagada.valorTotal,
   });
   return ocultarMetodoAjeno(pagada, usuarioActual);
 }
@@ -233,5 +249,6 @@ export async function deshacerPagoCuotaVariable(usuarioActual, gastoId) {
     await sincronizarPagoGasto(tx, gastoId);
     return tx.gastoVariablePareja.findUnique({ where: { id: gastoId }, include: INCLUDE_GASTO });
   });
+  await registrarActividad(usuarioActual, { tipo: 'cuota_compra', descripcion: `deshizo el pago de ${gasto.item} (cuota ${gasto.numeroCuota})`, avisar: 'nadie' });
   return ocultarMetodoAjeno(deshecha, usuarioActual);
 }

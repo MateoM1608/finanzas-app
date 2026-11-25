@@ -1,3 +1,4 @@
+import { registrarActividad, registrarPago } from '../../utils/actividadHogar.js';
 import { prisma } from '../../config/prisma.js';
 import { HttpError } from '../../middleware/errorHandler.js';
 import { calcularCuotas, fechasDeCuotas, interesDeCompra } from '../../utils/cuotas.js';
@@ -94,6 +95,7 @@ export async function crearCompra(usuarioActual, data) {
   Object.assign(data, interesDeCompra(data, metodo));
 
   const porcentajes = await resolverPorcentajes(hogarId, data);
+  data.registradoPorId = usuarioActual.id;
 
   const compra = await prisma.$transaction(async (tx) => {
     const nueva = await tx.compraCuotasHogar.create({
@@ -115,6 +117,7 @@ export async function crearCompra(usuarioActual, data) {
     await tx.compraCuotasHogar.update({ where: { id: nueva.id }, data: { fechaPrimeraCuota: primera } });
     return tx.compraCuotasHogar.findUnique({ where: { id: nueva.id }, include: INCLUDE_COMPRA });
   });
+  await registrarActividad(usuarioActual, { tipo: 'compra_cuotas', descripcion: `agregó la compra a cuotas ${data.item}`, monto: data.montoTotal });
   return ocultarMetodoAjeno(compra, usuarioActual);
 }
 
@@ -136,6 +139,8 @@ async function generarCuotas(tx, compraId, hogarId, datos, porcentajes) {
         estado: estadoInicial,
         compraId,
         numeroCuota: i + 1,
+        // Automáticas: nacen pagadas por quien registró la compra.
+        registradoPorId: estadoInicial === 'pagado' ? (datos.registradoPorId ?? null) : null,
       },
     });
     await tx.gastoVariableParejaReparto.createMany({
@@ -278,4 +283,5 @@ export async function eliminarCompra(usuarioActual, compraId) {
     prisma.gastoVariablePareja.deleteMany({ where: { compraId } }),
     prisma.compraCuotasHogar.delete({ where: { id: compraId } }),
   ]);
+  await registrarActividad(usuarioActual, { tipo: 'compra_cuotas', descripcion: `eliminó la compra a cuotas ${compra.item}`, monto: compra.montoTotal });
 }

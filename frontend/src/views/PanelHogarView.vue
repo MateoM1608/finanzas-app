@@ -8,16 +8,19 @@ import PanelVariablesSection from '../components/hogar/PanelVariablesSection.vue
 import ResumenHogarSection from '../components/hogar/ResumenHogarSection.vue';
 import MetasHogarSection from '../components/hogar/MetasHogarSection.vue';
 import AvisosPagar from '../components/AvisosPagar.vue';
+import ActividadHogarSection from '../components/hogar/ActividadHogarSection.vue';
 
 const saldoRef = ref(null);
 const resumenRef = ref(null);
 const avisosRef = ref(null);
+const actividadRef = ref(null);
 
 // Pagar una cuenta o registrar un gasto mueve el saldo y el informe.
 function onCambio() {
   saldoRef.value?.recargar();
   resumenRef.value?.recargar();
   avisosRef.value?.recargar();
+  actividadRef.value?.recargar();
 }
 </script>
 
@@ -38,6 +41,7 @@ function onCambio() {
         <PanelVariablesSection @cambio="onCambio" />
       </div>
       <MetasHogarSection />
+      <ActividadHogarSection ref="actividadRef" />
       <ResumenHogarSection ref="resumenRef" />
     </div>
   </AppLayout>

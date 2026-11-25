@@ -1,3 +1,4 @@
+import { getActividad } from './actividad.controller.js';
 import { Router } from 'express';
 import { requireAuth } from '../../middleware/auth.js';
 import {
@@ -20,5 +21,6 @@ hogaresRouter.patch('/', patchHogar);
 hogaresRouter.post('/join', postJoin);
 hogaresRouter.post('/invitaciones', postInvitacion);
 hogaresRouter.get('/miembros', getMiembros);
+hogaresRouter.get('/actividad', getActividad);
 hogaresRouter.patch('/miembros/:id/permisos', patchMiembroPermisos);
 hogaresRouter.post('/transferir-admin', postTransferirAdmin);

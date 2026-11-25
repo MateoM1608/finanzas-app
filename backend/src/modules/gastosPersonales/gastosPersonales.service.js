@@ -8,6 +8,7 @@ const INCLUDE_GASTO = {
   metodoPago: true,
   categoria: true,
   compra: { select: { id: true, numeroCuotas: true, modoCobro: true } },
+  registradoPor: { select: { id: true, nombre: true } },
 };
 
 /**

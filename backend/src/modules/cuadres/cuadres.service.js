@@ -1,3 +1,4 @@
+import { registrarActividad } from '../../utils/actividadHogar.js';
 import { prisma } from '../../config/prisma.js';
 import { HttpError } from '../../middleware/errorHandler.js';
 import { obtenerOrigenesDetalladosPorLote, origenClave } from '../../utils/cuadreItemOrigen.js';
@@ -357,7 +358,10 @@ export async function confirmarCuadre(usuarioActual, cuadreId, { metodoPagoId } 
     });
   });
 
-  return obtenerCuadreEnriquecido(cuadreId);
+  const cerrado = await obtenerCuadreEnriquecido(cuadreId);
+  const total = (cerrado.items ?? []).reduce((acc, i) => acc + (i.monto ?? 0), 0);
+  await registrarActividad(usuarioActual, { tipo: 'cuadre', descripcion: 'confirmó un cuadre de cuentas', monto: total, enlace: '/cuadres' });
+  return cerrado;
 }
 
 /**

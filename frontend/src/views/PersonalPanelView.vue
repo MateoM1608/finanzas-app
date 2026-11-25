@@ -20,6 +20,7 @@ import FormField from '../components/FormField.vue';
 import AlertError from '../components/AlertError.vue';
 import AppModal from '../components/AppModal.vue';
 import ExportarDatos from '../components/ExportarDatos.vue';
+import { useAuthStore } from '../stores/auth.js';
 import AvisosPagar from '../components/AvisosPagar.vue';
 import EditarMovimientoModal from '../components/personal/EditarMovimientoModal.vue';
 import AppIcon from '../components/AppIcon.vue';
@@ -117,6 +118,8 @@ function recargarResumenes() {
   limitesRef.value?.recargar();
 }
 
+// Quién soy: para mostrar "Registrado por" en lo que registró otro miembro.
+const authPanel = useAuthStore();
 const categorias = ref([]);
 const metodos = ref([]);
 const categoriasParaGasto = computed(() => categorias.value.filter((c) => c.aplicaA.includes('gasto')));
@@ -872,6 +875,9 @@ function saldoCompra(compra) {
                     <span v-if="gasto.esObligatorio" class="badge-accent">Obligatorio</span>
                     <span v-if="gasto.origenConfigId" class="badge-neutral">Fijo</span>
                     <span v-if="ORIGEN_MOVIMIENTO[gasto.origen]" class="badge-neutral">{{ ORIGEN_MOVIMIENTO[gasto.origen].badge }}</span>
+                    <span v-if="gasto.registradoPor && gasto.registradoPor.id !== authPanel.usuario?.id" class="badge-accent">
+                      Registrado por {{ gasto.registradoPor.nombre.split(' ')[0] }}
+                    </span>
                     <span v-if="gasto.compra" class="badge-neutral">Cuota {{ gasto.numeroCuota }}/{{ gasto.compra.numeroCuotas }}</span>
                   </p>
                   <p class="mt-0.5 text-[13px] text-ink-tertiary">

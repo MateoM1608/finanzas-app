@@ -31,3 +31,7 @@ export function actualizarPermisosMiembro(id, permisos) {
 export function transferirAdmin(nuevoAdminId) {
   return api.post('/api/hogares/transferir-admin', { nuevoAdminId }).then((r) => r.data.miembros);
 }
+
+export function listarActividadHogar(limite = 40) {
+  return api.get('/api/hogares/actividad', { params: { limite } }).then((r) => r.data.actividad);
+}

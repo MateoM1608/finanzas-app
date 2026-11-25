@@ -1,3 +1,4 @@
+import { registrarActividad, registrarPago } from '../../utils/actividadHogar.js';
 import { prisma } from '../../config/prisma.js';
 import { HttpError } from '../../middleware/errorHandler.js';
 import { asegurarCuotasHogar } from '../../utils/cuentasFijas.js';
@@ -130,12 +131,14 @@ export async function pagarCuota(usuarioActual, cuotaId, data) {
         fechaPago: data.fechaPago ?? hoyUTC(),
         metodoPagoId,
         estado: 'pagado',
+        pagoRegistradoPorId: usuarioActual.id,
       },
     });
     // El 100 % sale de la plata de quien pagó: queda en sus movimientos.
     await sincronizarPagoCuota(tx, cuotaId);
     return tx.gastoRecurrenteInstancia.findUnique({ where: { id: cuotaId }, include: INCLUDE_CUOTA });
   });
+  await registrarPago(usuarioActual, pagoUsuarioId, { tipo: 'cuenta_fija', item: cuota.concepto.nombre, monto });
   return ocultarMetodoAjeno(pagada, usuarioActual);
 }
 
@@ -162,10 +165,14 @@ export async function deshacerPagoCuota(usuarioActual, cuotaId) {
         pagoUsuarioId: null,
         fechaPago: null,
         metodoPagoId: null,
+        pagoRegistradoPorId: null,
         monto: cuota.concepto.tipoMonto === 'fijo' ? cuota.concepto.montoDefault : null,
       },
     });
     await sincronizarPagoCuota(tx, cuotaId);
     return tx.gastoRecurrenteInstancia.findUnique({ where: { id: cuotaId }, include: INCLUDE_CUOTA });
+  }).then(async (r) => {
+    await registrarActividad(usuarioActual, { tipo: 'cuenta_fija', descripcion: `deshizo el pago de ${cuota.concepto.nombre}`, avisar: 'nadie' });
+    return r;
   });
 }
