@@ -13,7 +13,8 @@ import { prisma } from '../config/prisma.js';
  * Una compra con tarjeta de crédito sí es consumo en su fecha (aunque no
  * baje el Disponible hasta pagar la tarjeta).
  */
-export const ORIGENES_NO_CONSUMO = ['pago_hogar', 'liquidacion_hogar', 'pago_tarjeta', 'cuadre_hogar'];
+// Un abono extra a capital de un préstamo paga deuda: baja la caja pero no es consumo.
+export const ORIGENES_NO_CONSUMO = ['pago_hogar', 'liquidacion_hogar', 'pago_tarjeta', 'cuadre_hogar', 'abono_prestamo'];
 
 const CATEGORIA_HOGAR = 'Hogar';
 
@@ -38,7 +39,7 @@ export async function gastosDeConsumo(usuarioId, rango, { estado = 'pagado' } = 
       : [],
     estado === 'pagado'
       ? prisma.gastoVariableParejaReparto.findMany({
-          where: { usuarioId, gasto: { estado: { not: 'por_pagar' }, ...(fecha ? { fecha } : {}) } },
+          where: { usuarioId, gasto: { estado: { not: 'por_pagar' }, abonoPrestamoId: null, ...(fecha ? { fecha } : {}) } },
           include: { gasto: { select: { fecha: true, item: true } } },
         })
       : [],
@@ -75,11 +76,11 @@ export async function gastosDeConsumo(usuarioId, rango, { estado = 'pagado' } = 
   ].filter((g) => g.monto > 0);
 }
 
-/** Ingresos reales recibidos en el rango: sin los reintegros de los cuadres del hogar. */
+/** Ingresos reales recibidos en el rango: sin los reintegros de los cuadres del hogar ni desembolsos de préstamos. */
 export function ingresosReales(usuarioId, rango) {
   const fecha = rango ? { gte: rango.gte ?? rango.inicio, lte: rango.lte ?? rango.fin } : undefined;
   return prisma.ingresoPersonal.findMany({
-    where: { usuarioId, estado: 'recibido', origen: { not: 'liquidacion_hogar' }, ...(fecha ? { fecha } : {}) },
+    where: { usuarioId, estado: 'recibido', origen: { notIn: ['liquidacion_hogar', 'desembolso_prestamo'] }, ...(fecha ? { fecha } : {}) },
   });
 }
 

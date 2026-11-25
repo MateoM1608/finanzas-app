@@ -18,6 +18,7 @@ const NAV = [
   { name: 'panel-personal', label: 'Personal', icon: 'wallet' },
   { name: 'panel-hogar', label: 'Hogar', icon: 'home' },
   { name: 'cuadres', label: 'Cuadres', icon: 'scale' },
+  { name: 'prestamos', label: 'Préstamos', icon: 'receipt' },
   { name: 'settings', label: 'Configuración', short: 'Ajustes', icon: 'settings' },
 ];
 
@@ -123,7 +124,7 @@ async function onLogout() {
       style="padding-bottom: env(safe-area-inset-bottom)"
       aria-label="Principal"
     >
-      <div class="grid grid-cols-4">
+      <div class="grid grid-cols-5">
         <router-link
           v-for="item in NAV"
           :key="item.name"

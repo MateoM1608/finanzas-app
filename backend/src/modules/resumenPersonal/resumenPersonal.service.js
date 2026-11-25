@@ -56,7 +56,7 @@ export async function obtenerResumenPersonal(usuarioActual, indiceCiclo = 0) {
       where: {
         usuarioId,
         estado: 'pendiente',
-        OR: [{ fecha: { lte: finCiclo } }, { compraId: null, origen: { not: 'pago_hogar' } }],
+        OR: [{ fecha: { lte: finCiclo } }, { compraId: null, prestamoId: null, origen: { not: 'pago_hogar' } }],
       },
       include: { categoria: true },
     }),

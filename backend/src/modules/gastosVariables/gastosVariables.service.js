@@ -37,6 +37,9 @@ async function requireGastoDelHogar(hogarId, gastoId) {
   if (!gasto || gasto.hogarId !== hogarId) {
     throw new HttpError(404, 'Gasto no encontrado');
   }
+  if (gasto.prestamoId || gasto.abonoPrestamoId) {
+    throw new HttpError(409, 'Es parte de un préstamo del hogar: manéjalo desde Préstamos');
+  }
   return gasto;
 }
 
@@ -65,8 +68,9 @@ async function resolverRepartos(hogarId, valorTotal, repartosInput, fecha) {
 
 export async function listarGastosVariables(usuarioActual) {
   const hogarId = requireHogarId(usuarioActual);
+  // Las cuotas y abonos de préstamos del hogar se ven y manejan en Préstamos.
   const gastos = await prisma.gastoVariablePareja.findMany({
-    where: { hogarId },
+    where: { hogarId, prestamoId: null, abonoPrestamoId: null },
     include: INCLUDE_GASTO,
     orderBy: [{ fecha: 'desc' }, { creadoEn: 'desc' }],
   });

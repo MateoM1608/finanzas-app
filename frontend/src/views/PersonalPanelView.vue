@@ -410,7 +410,7 @@ function cambiarTab(tab) {
 // "Mis próximos meses" y en la pestaña A cuotas.
 const gastosALaFecha = computed(() => {
   const hoy = hoyISO();
-  return gastos.value.filter((g) => !g.compraId || g.fecha.slice(0, 10) <= hoy);
+  return gastos.value.filter((g) => (!g.compraId && !g.prestamoId) || g.fecha.slice(0, 10) <= hoy);
 });
 
 // --- Filtro por fechas (Todos, Gastos, Ingresos) ---
@@ -775,7 +775,7 @@ function saldoCompra(compra) {
                     {{ gasto.estado === 'pagado' ? 'Marcar pendiente' : 'Marcar pagado' }}
                   </button>
                   <button
-                    v-if="!gasto.origenConfigId && !esDelHogar(gasto) && !gasto.compraId"
+                    v-if="!gasto.origenConfigId && !esDelHogar(gasto) && !gasto.compraId && !gasto.prestamoId && gasto.origen !== 'abono_prestamo'"
                     type="button"
                     class="btn-icon !p-1.5 hover:!text-negative sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100"
                     :disabled="eliminandoGastoId === gasto.id"

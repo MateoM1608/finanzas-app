@@ -36,13 +36,17 @@ export async function sincronizarPagoCuota(tx, cuotaId) {
 export async function sincronizarPagoGasto(tx, gastoId) {
   const gasto = await tx.gastoVariablePareja.findUnique({
     where: { id: gastoId },
-    include: { compra: { select: { numeroCuotas: true, metodoPagoId: true } } },
+    include: {
+      compra: { select: { numeroCuotas: true, metodoPagoId: true } },
+      prestamo: { select: { numeroCuotas: true } },
+    },
   });
   if (!gasto || gasto.estado === 'por_pagar') {
     await tx.gastoPersonal.deleteMany({ where: { pagoGastoHogarId: gastoId } });
     return;
   }
-  const nombre = gasto.compra ? `${gasto.item} (cuota ${gasto.numeroCuota}/${gasto.compra.numeroCuotas})` : gasto.item;
+  const plan = gasto.compra ?? gasto.prestamo;
+  const nombre = plan ? `${gasto.item} (cuota ${gasto.numeroCuota}/${plan.numeroCuotas})` : gasto.item;
   await guardar(tx, { pagoGastoHogarId: gastoId }, {
     usuarioId: gasto.pagoUsuarioId,
     monto: gasto.valorTotal,

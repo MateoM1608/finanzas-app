@@ -33,6 +33,9 @@ function requireNoEsDelHogar(gasto) {
   if (gasto.origen === 'liquidacion_hogar') {
     throw new HttpError(409, 'Este movimiento es el pago de un cuadre del hogar y no se puede cambiar');
   }
+  if (gasto.prestamoId || gasto.origen === 'abono_prestamo') {
+    throw new HttpError(409, 'Este movimiento es de un préstamo: manéjalo desde Préstamos');
+  }
 }
 
 export async function listarGastosPersonales(usuarioId) {

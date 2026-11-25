@@ -28,6 +28,10 @@ enum OrigenGasto {
   pago_hogar
   liquidacion_hogar
   pago_tarjeta
+  // Préstamos (D1): abono extra a capital (baja el Disponible, no es consumo)
+  // y desembolso recibido (sube el Disponible, no es ingreso real).
+  abono_prestamo
+  desembolso_prestamo
 }
 
 // Frecuencia propia de cada cuenta fija del hogar (ya no hay frecuencia de
@@ -141,6 +145,8 @@ model Usuario {
   comprasCuotasHogarComoPagador CompraCuotasHogar[]               @relation("compraHogarPagador")
   balancesCuadre                CuadreBalanceMiembro[]
   extractosTarjeta              ExtractoTarjeta[]
+  prestamosCreados              Prestamo[]                        @relation("prestamoUsuario")
+  prestamosComoPagador          Prestamo[]                        @relation("prestamoPagador")
 
   @@index([hogarId])
   @@map("usuarios")
@@ -159,6 +165,7 @@ model Hogar {
   gastosVariables      GastoVariablePareja[]
   cuadres              Cuadre[]
   comprasCuotas        CompraCuotasHogar[]
+  prestamos            Prestamo[]
 
   @@map("hogares")
 }
@@ -212,6 +219,8 @@ model MetodoPagoPersonal {
   pagosGastosHogar  GastoVariablePareja[]
   pagosRecibidos    GastoPersonal[]            @relation("pagoTarjeta")
   extractos         ExtractoTarjeta[]
+  prestamos         Prestamo[]
+  abonosPrestamo    PrestamoAbono[]
 
   @@index([usuarioId])
   @@map("metodos_pago_personales")
@@ -309,25 +318,37 @@ model GastoPersonal {
 
   // Movimiento de caja del pago de un gasto del hogar (origen pago_hogar):
   // se borra solo si se borra ese gasto del hogar.
-  pagoCuotaHogarId String? @unique @map("pago_cuota_hogar_id")
-  pagoGastoHogarId String? @unique @map("pago_gasto_hogar_id")
+  pagoCuotaHogarId String?   @unique @map("pago_cuota_hogar_id")
+  pagoGastoHogarId String?   @unique @map("pago_gasto_hogar_id")
   // Pago de tarjeta (origen pago_tarjeta): la tarjeta que se pagó.
-  tarjetaPagadaId  String? @map("tarjeta_pagada_id")
+  tarjetaPagadaId  String?   @map("tarjeta_pagada_id")
+  // Cuota de un préstamo personal (numeroCuota): monto = capital + interes +
+  // seguro + mora. `fecha` es la de pago (la de vencimiento hasta pagarla) y
+  // `fechaVencimiento` la de la cuota según el plan.
+  prestamoId       String?   @map("prestamo_id")
+  seguro           Int?
+  mora             Int?
+  fechaVencimiento DateTime? @map("fecha_vencimiento")
+  // Abono extra a capital de un préstamo personal (origen abono_prestamo).
+  abonoPrestamoId  String?   @unique @map("abono_prestamo_id")
 
-  usuario        Usuario                   @relation(fields: [usuarioId], references: [id])
-  compra         CompraCuotasPersonal?     @relation(fields: [compraId], references: [id])
-  pagoCuotaHogar GastoRecurrenteInstancia? @relation(fields: [pagoCuotaHogarId], references: [id], onDelete: Cascade)
-  pagoGastoHogar GastoVariablePareja?      @relation(fields: [pagoGastoHogarId], references: [id], onDelete: Cascade)
-  tarjetaPagada  MetodoPagoPersonal?       @relation("pagoTarjeta", fields: [tarjetaPagadaId], references: [id])
-  origenConfig   GastoFijoConfig?          @relation(fields: [origenConfigId], references: [id])
-  origenCuadre   Cuadre?                   @relation(fields: [origenCuadreId], references: [id])
-  metodoPago     MetodoPagoPersonal?       @relation(fields: [metodoPagoId], references: [id])
-  categoria      CategoriaPersonal?        @relation(fields: [categoriaId], references: [id])
+  usuario         Usuario                   @relation(fields: [usuarioId], references: [id])
+  compra          CompraCuotasPersonal?     @relation(fields: [compraId], references: [id])
+  pagoCuotaHogar  GastoRecurrenteInstancia? @relation(fields: [pagoCuotaHogarId], references: [id], onDelete: Cascade)
+  pagoGastoHogar  GastoVariablePareja?      @relation(fields: [pagoGastoHogarId], references: [id], onDelete: Cascade)
+  tarjetaPagada   MetodoPagoPersonal?       @relation("pagoTarjeta", fields: [tarjetaPagadaId], references: [id])
+  origenConfig    GastoFijoConfig?          @relation(fields: [origenConfigId], references: [id])
+  origenCuadre    Cuadre?                   @relation(fields: [origenCuadreId], references: [id])
+  metodoPago      MetodoPagoPersonal?       @relation(fields: [metodoPagoId], references: [id])
+  categoria       CategoriaPersonal?        @relation(fields: [categoriaId], references: [id])
   ajustesExtracto ExtractoAjuste[]
+  prestamo        Prestamo?                 @relation(fields: [prestamoId], references: [id])
+  abonoPrestamo   PrestamoAbono?            @relation("abonoGastoPersonal", fields: [abonoPrestamoId], references: [id], onDelete: Cascade)
 
   @@unique([origenConfigId, fecha])
   @@unique([origenCuadreId, usuarioId, fecha])
   @@unique([compraId, numeroCuota])
+  @@unique([prestamoId, numeroCuota])
   @@index([usuarioId])
   @@map("gastos_personales")
 }
@@ -350,6 +371,7 @@ model IngresoPersonal {
 
   usuario      Usuario             @relation(fields: [usuarioId], references: [id])
   origenCuadre Cuadre?             @relation(fields: [origenCuadreId], references: [id])
+  desembolsoDe Prestamo?           @relation("desembolsoPrestamo")
   origenConfig IngresoFijoConfig?  @relation(fields: [origenConfigId], references: [id])
   metodoPago   MetodoPagoPersonal? @relation(fields: [metodoPagoId], references: [id])
   categoria    CategoriaPersonal?  @relation(fields: [categoriaId], references: [id])
@@ -462,24 +484,33 @@ model GastoRecurrenteInstanciaReparto {
 // Gasto puntual del hogar (mercado, una compra…): `fecha` es el día del
 // gasto. Nace `pagado` porque siempre se registra con quién pagó.
 model GastoVariablePareja {
-  id            String           @id @default(uuid())
-  hogarId       String           @map("hogar_id")
-  item          String
-  valorTotal    Int              @map("valor_total")
-  pagoUsuarioId String           @map("pago_usuario_id")
-  fecha         DateTime
-  estado        EstadoGastoHogar @default(pagado)
+  id              String           @id @default(uuid())
+  hogarId         String           @map("hogar_id")
+  item            String
+  valorTotal      Int              @map("valor_total")
+  pagoUsuarioId   String           @map("pago_usuario_id")
+  fecha           DateTime
+  estado          EstadoGastoHogar @default(pagado)
   // Cuota de una compra a cuotas del hogar (numeroCuota 1..N). Si la compra
   // es de cobro manual la cuota nace `por_pagar` y alguien la marca pagada.
-  compraId      String?          @map("compra_id")
-  numeroCuota   Int?             @map("numero_cuota")
-  capital       Int?
-  interes       Int?
-  fechaPago     DateTime?        @map("fecha_pago")
+  compraId        String?          @map("compra_id")
+  numeroCuota     Int?             @map("numero_cuota")
+  capital         Int?
+  interes         Int?
+  fechaPago       DateTime?        @map("fecha_pago")
   // Método de pago personal con el que se pagó (privado: solo lo ve quien pagó).
-  metodoPagoId  String?          @map("metodo_pago_id")
-  creadoEn      DateTime         @default(now()) @map("creado_en")
+  metodoPagoId    String?          @map("metodo_pago_id")
+  // Cuota de un préstamo del hogar (numeroCuota): valorTotal = capital +
+  // interes + seguro + mora. O abono extra a capital (abonoPrestamoId), que
+  // se reparte y entra a los cuadres pero no es consumo.
+  prestamoId      String?          @map("prestamo_id")
+  seguro          Int?
+  mora            Int?
+  abonoPrestamoId String?          @unique @map("abono_prestamo_id")
+  creadoEn        DateTime         @default(now()) @map("creado_en")
 
+  prestamo       Prestamo?                    @relation(fields: [prestamoId], references: [id])
+  abonoPrestamo  PrestamoAbono?               @relation("abonoGastoHogar", fields: [abonoPrestamoId], references: [id], onDelete: Cascade)
   hogar          Hogar                        @relation(fields: [hogarId], references: [id])
   pagador        Usuario                      @relation("gastoVariablePagador", fields: [pagoUsuarioId], references: [id])
   metodoPago     MetodoPagoPersonal?          @relation(fields: [metodoPagoId], references: [id])
@@ -488,6 +519,7 @@ model GastoVariablePareja {
   repartos       GastoVariableParejaReparto[]
 
   @@unique([compraId, numeroCuota])
+  @@unique([prestamoId, numeroCuota])
   @@index([hogarId, estado])
   @@map("gastos_variables_pareja")
 }
@@ -787,10 +819,10 @@ enum EstadoExtracto {
 }
 
 enum TipoAjusteExtracto {
-  correccion    // el banco cobró otro valor por un cargo que la app tenía
-  cargo         // cargo que la app no tenía (interés, cuota de manejo…): crea un gasto
+  correccion // el banco cobró otro valor por un cargo que la app tenía
+  cargo // cargo que la app no tenía (interés, cuota de manejo…): crea un gasto
   no_reconocido // cargo del banco que el usuario no reconoce: reclamo
-  no_cobrado    // la app lo esperaba y el banco no lo cobró en este extracto
+  no_cobrado // la app lo esperaba y el banco no lo cobró en este extracto
 }
 
 enum ConceptoCargoExtracto {
@@ -806,7 +838,7 @@ enum ConceptoCargoExtracto {
 enum EstadoReclamo {
   pendiente
   reversado // el banco lo devolvió
-  aceptado  // sí era un cargo válido: se registró como gasto
+  aceptado // sí era un cargo válido: se registró como gasto
 }
 
 // Quién propuso el ajuste: el usuario a mano, o la lectura del PDF con IA
@@ -863,4 +895,91 @@ model ExtractoAjuste {
   @@index([extractoId])
   @@index([gastoId])
   @@map("extracto_ajustes")
+}
+
+// ---------------------------------------------------------------------------
+// Préstamos (entrega D1): personales (hogarId null) o del hogar. Las cuotas
+// son filas reales: GastoPersonal (personal) o GastoVariablePareja (hogar),
+// con prestamoId + numeroCuota, como las compras a cuotas.
+// ---------------------------------------------------------------------------
+
+enum TipoPrestamo {
+  libre_inversion
+  vehiculo
+  vivienda
+  educativo
+  persona
+  otro
+}
+
+enum ModoAbonoPrestamo {
+  reducir_plazo
+  reducir_cuota
+}
+
+model Prestamo {
+  id                  String           @id @default(uuid())
+  // Quien lo registró (dueño si es personal).
+  usuarioId           String           @map("usuario_id")
+  // Del hogar si no es null: cuotas como gastos del hogar, repartidas.
+  hogarId             String?          @map("hogar_id")
+  nombre              String
+  entidad             String?
+  tipo                TipoPrestamo     @default(otro)
+  // Monto prestado (informativo) y capital que se debía al registrarlo
+  // (igual al monto si es nuevo; el saldo de hoy si ya iba en curso).
+  montoPrestado       Int              @map("monto_prestado")
+  saldoInicial        Int              @map("saldo_inicial")
+  // Cuotas ya pagadas antes de registrarlo: la primera cuota de la app es la N+1.
+  cuotasPrevias       Int              @default(0) @map("cuotas_previas")
+  numeroCuotas        Int              @map("numero_cuotas")
+  tasaMensual         Float            @default(0) @map("tasa_mensual")
+  // La tasa tal como se escribió (para mostrarla): E.A. o mensual.
+  tasaIngresada       Float            @default(0) @map("tasa_ingresada")
+  tasaEsAnual         Boolean          @default(false) @map("tasa_es_anual")
+  sistemaInteres      SistemaInteres   @default(cuota_fija) @map("sistema_interes")
+  seguroMensual       Int              @default(0) @map("seguro_mensual")
+  fechaDesembolso     DateTime?        @map("fecha_desembolso")
+  fechaPrimeraCuota   DateTime         @map("fecha_primera_cuota")
+  modoCobro           ModoFijoPersonal @default(manual) @map("modo_cobro")
+  // Cuenta con que se paga (personal: del usuario; hogar: del pagador, privada).
+  metodoPagoId        String?          @map("metodo_pago_id")
+  // Hogar: quién paga las cuotas por defecto.
+  pagoUsuarioId       String?          @map("pago_usuario_id")
+  categoriaId         String?          @map("categoria_id")
+  // Personal: ingreso del desembolso (origen desembolso_prestamo), si se registró.
+  desembolsoIngresoId String?          @unique @map("desembolso_ingreso_id")
+  creadoEn            DateTime         @default(now()) @map("creado_en")
+
+  usuario           Usuario               @relation("prestamoUsuario", fields: [usuarioId], references: [id])
+  hogar             Hogar?                @relation(fields: [hogarId], references: [id])
+  pagador           Usuario?              @relation("prestamoPagador", fields: [pagoUsuarioId], references: [id])
+  metodoPago        MetodoPagoPersonal?   @relation(fields: [metodoPagoId], references: [id])
+  desembolsoIngreso IngresoPersonal?      @relation("desembolsoPrestamo", fields: [desembolsoIngresoId], references: [id], onDelete: SetNull)
+  cuotasPersonales  GastoPersonal[]
+  cuotasHogar       GastoVariablePareja[]
+  abonos            PrestamoAbono[]
+
+  @@index([usuarioId])
+  @@index([hogarId])
+  @@map("prestamos")
+}
+
+model PrestamoAbono {
+  id            String            @id @default(uuid())
+  prestamoId    String            @map("prestamo_id")
+  fecha         DateTime
+  monto         Int
+  modo          ModoAbonoPrestamo
+  metodoPagoId  String?           @map("metodo_pago_id")
+  pagoUsuarioId String?           @map("pago_usuario_id")
+  creadoEn      DateTime          @default(now()) @map("creado_en")
+
+  prestamo      Prestamo             @relation(fields: [prestamoId], references: [id], onDelete: Cascade)
+  metodoPago    MetodoPagoPersonal?  @relation(fields: [metodoPagoId], references: [id])
+  gastoPersonal GastoPersonal?       @relation("abonoGastoPersonal")
+  gastoHogar    GastoVariablePareja? @relation("abonoGastoHogar")
+
+  @@index([prestamoId])
+  @@map("prestamo_abonos")
 }

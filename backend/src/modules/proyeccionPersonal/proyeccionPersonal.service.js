@@ -98,12 +98,13 @@ export async function obtenerProyeccion(usuarioActual, numeroMeses = 6) {
       select: { origenConfigId: true, fecha: true, monto: true },
     }),
     prisma.gastoPersonal.findMany({
-      where: { usuarioId, compraId: { not: null }, fecha: { gte: inicio, lte: fin } },
-      include: { compra: { select: { numeroCuotas: true } } },
+      // Cuotas de compras a cuotas y de préstamos personales.
+      where: { usuarioId, OR: [{ compraId: { not: null } }, { prestamoId: { not: null } }], fecha: { gte: inicio, lte: fin } },
+      include: { compra: { select: { numeroCuotas: true } }, prestamo: { select: { numeroCuotas: true } } },
     }),
     prisma.ingresoFijoConfig.findMany({ where: { usuarioId, activo: true } }),
     prisma.ingresoPersonal.findMany({
-      where: { usuarioId, fecha: { gte: inicio, lte: fin }, origen: { not: 'liquidacion_hogar' } },
+      where: { usuarioId, fecha: { gte: inicio, lte: fin }, origen: { notIn: ['liquidacion_hogar', 'desembolso_prestamo'] } },
       select: { origenConfigId: true, fecha: true, monto: true, descripcion: true },
     }),
   ]);
@@ -116,7 +117,8 @@ export async function obtenerProyeccion(usuarioActual, numeroMeses = 6) {
     }
   }
   for (const cuota of cuotasPersonales) {
-    sumar(cuota.fecha, 'cuotasPersonales', cuota.monto, `${cuota.descripcion ?? 'Compra'} (${cuota.numeroCuota}/${cuota.compra.numeroCuotas})`);
+    const total = (cuota.compra ?? cuota.prestamo).numeroCuotas;
+    sumar(cuota.fecha, 'cuotasPersonales', cuota.monto, `${cuota.descripcion ?? 'Compra'} (${cuota.numeroCuota}/${total})`);
   }
 
   // --- Ingresos esperados: fijos proyectados + los ya registrados sueltos ---
@@ -143,8 +145,8 @@ export async function obtenerProyeccion(usuarioActual, numeroMeses = 6) {
         include: { repartos: true },
       }),
       prisma.gastoVariablePareja.findMany({
-        where: { hogarId, compraId: { not: null }, fecha: { gte: inicio, lte: fin } },
-        include: { repartos: true, compra: { select: { numeroCuotas: true } } },
+        where: { hogarId, OR: [{ compraId: { not: null } }, { prestamoId: { not: null } }], fecha: { gte: inicio, lte: fin } },
+        include: { repartos: true, compra: { select: { numeroCuotas: true } }, prestamo: { select: { numeroCuotas: true } } },
       }),
       obtenerSplitVigente(hogarId, 'general'),
     ]);
@@ -191,7 +193,7 @@ export async function obtenerProyeccion(usuarioActual, numeroMeses = 6) {
     }
     for (const cuota of cuotasCompras) {
       const miParte = cuota.repartos.find((r) => r.usuarioId === usuarioId)?.monto ?? 0;
-      sumar(cuota.fecha, 'hogarCuotas', miParte, `${cuota.item} (${cuota.numeroCuota}/${cuota.compra.numeroCuotas})`);
+      sumar(cuota.fecha, 'hogarCuotas', miParte, `${cuota.item} (${cuota.numeroCuota}/${(cuota.compra ?? cuota.prestamo).numeroCuotas})`);
     }
   }
 

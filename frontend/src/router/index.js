@@ -49,6 +49,12 @@ const routes = [
     meta: { requiresAuth: true, requiresHogar: true },
   },
   {
+    path: '/prestamos',
+    name: 'prestamos',
+    component: () => import('../views/PrestamosView.vue'),
+    meta: { requiresAuth: true, requiresHogar: true },
+  },
+  {
     path: '/cuadres',
     name: 'cuadres',
     component: () => import('../views/CuadresView.vue'),
