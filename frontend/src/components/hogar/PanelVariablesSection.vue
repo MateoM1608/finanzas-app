@@ -310,6 +310,7 @@ async function onCambiarPagador(gasto, usuarioId) {
 }
 
 async function onEliminar(gasto) {
+  if (!(await confirmar(`¿Eliminar "${gasto.item}" de ${formatCurrency(gasto.valorTotal)}? Cambia el saldo del hogar y no se puede deshacer.`))) return;
   error.value = '';
   eliminandoId.value = gasto.id;
   try {

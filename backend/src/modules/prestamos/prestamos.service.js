@@ -79,6 +79,8 @@ function montoCuota(c) {
  */
 function estaPagada(prestamo, c, hoy) {
   if (!prestamo.hogarId) return c.estado === 'pagado';
+  // Adelantada en un cuadre: ya se liquidó aunque su fecha sea futura.
+  if (c.estado === 'en_cuadre' || c.estado === 'cuadrado') return true;
   return c.estado !== 'por_pagar' && new Date(c.fechaPago ?? c.fecha) <= hoy;
 }
 
@@ -570,7 +572,10 @@ export async function pagarCuota(usuarioActual, id, numero, data) {
           valorTotal: monto,
           mora: monto > base ? monto - base : null,
           pagoUsuarioId,
-          metodoPagoId: pagoUsuarioId === usuarioActual.id ? (data.metodoPagoId ?? prestamo.metodoPagoId ?? null) : null,
+          metodoPagoId:
+            pagoUsuarioId === usuarioActual.id
+              ? (data.metodoPagoId ?? (prestamo.pagoUsuarioId === pagoUsuarioId ? prestamo.metodoPagoId : null))
+              : null,
         },
       });
       await sincronizarPagoGasto(tx, cuota.id);

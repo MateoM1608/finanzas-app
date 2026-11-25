@@ -1,3 +1,4 @@
+import { validarReferenciasPropias } from '../../utils/pertenencia.js';
 import { prisma } from '../../config/prisma.js';
 import { HttpError } from '../../middleware/errorHandler.js';
 import { calcularPeriodoActual, calcularPeriodoAnterior, calcularPeriodoPorIndice, dentroDelRango } from '../../utils/cicloPersonal.js';
@@ -32,13 +33,15 @@ export function listarAhorros(usuarioActual) {
   });
 }
 
-export function crearAhorro(usuarioActual, data) {
+export async function crearAhorro(usuarioActual, data) {
+  await validarReferenciasPropias(usuarioActual.id, data);
   return prisma.ahorroPersonal.create({
     data: { ...data, usuarioId: usuarioActual.id },
   });
 }
 
 export async function actualizarAhorro(usuarioActual, id, data) {
+  await validarReferenciasPropias(usuarioActual.id, data);
   await requireAhorroDelUsuario(usuarioActual.id, id);
   return prisma.ahorroPersonal.update({ where: { id }, data });
 }

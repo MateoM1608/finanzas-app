@@ -21,10 +21,12 @@ export function errorHandler(err, req, res, next) { // eslint-disable-line no-un
 
   const status = err.status || 500;
   if (status >= 500) {
+    // El detalle (p. ej. un error de Prisma con tablas y columnas) solo va al log.
     console.error(err);
+    return res.status(status).json({ error: 'Ocurrió un error interno. Intenta de nuevo.' });
   }
   res.status(status).json({
-    error: err.message || 'Error interno',
+    error: err.message || 'Error',
     details: err.details,
   });
 }

@@ -1,3 +1,4 @@
+import { validarReferenciasPropias } from '../../utils/pertenencia.js';
 import { prisma } from '../../config/prisma.js';
 import { HttpError } from '../../middleware/errorHandler.js';
 import { obtenerEvaluacionActual, obtenerEvaluacionAnterior, obtenerEvaluacionPasada } from '../../utils/evaluacionLimite.js';
@@ -29,7 +30,8 @@ export function listarLimites(usuarioActual) {
   });
 }
 
-export function crearLimite(usuarioActual, data) {
+export async function crearLimite(usuarioActual, data) {
+  await validarReferenciasPropias(usuarioActual.id, data);
   const categoriaId = data.categoriaId ?? null;
   validarConsistenciaObjetivo(data.tipoObjetivo, categoriaId);
 
@@ -39,6 +41,7 @@ export function crearLimite(usuarioActual, data) {
 }
 
 export async function actualizarLimite(usuarioActual, id, data) {
+  await validarReferenciasPropias(usuarioActual.id, data);
   const limite = await requireLimiteDelUsuario(usuarioActual.id, id);
 
   const tipoObjetivo = data.tipoObjetivo ?? limite.tipoObjetivo;

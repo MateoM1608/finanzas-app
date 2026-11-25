@@ -1,3 +1,4 @@
+import { validarReferenciasPropias } from '../../utils/pertenencia.js';
 import { prisma } from '../../config/prisma.js';
 import { HttpError } from '../../middleware/errorHandler.js';
 import { asegurarIngresosFijos } from '../../utils/instanciasFijasPersonales.js';
@@ -16,7 +17,8 @@ export async function listarIngresosPersonales(usuarioId) {
   });
 }
 
-export function crearIngresoPersonal(usuarioId, data) {
+export async function crearIngresoPersonal(usuarioId, data) {
+  await validarReferenciasPropias(usuarioId, data);
   return prisma.ingresoPersonal.create({
     data: { ...data, usuarioId },
     include: INCLUDE_INGRESO,
@@ -31,6 +33,7 @@ function requireNoEsRetiro(ingreso) {
 }
 
 export async function actualizarIngresoPersonal(usuarioId, ingresoId, data) {
+  await validarReferenciasPropias(usuarioId, data);
   const ingreso = await prisma.ingresoPersonal.findUnique({ where: { id: ingresoId } });
   if (!ingreso || ingreso.usuarioId !== usuarioId) {
     throw new HttpError(404, 'Ingreso no encontrado');

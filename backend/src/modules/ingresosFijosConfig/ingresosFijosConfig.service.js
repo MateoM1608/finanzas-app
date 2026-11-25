@@ -1,3 +1,4 @@
+import { validarReferenciasPropias } from '../../utils/pertenencia.js';
 import { prisma } from '../../config/prisma.js';
 import { HttpError } from '../../middleware/errorHandler.js';
 
@@ -16,13 +17,15 @@ export function listarIngresosFijos(usuarioActual) {
   });
 }
 
-export function crearIngresoFijo(usuarioActual, data) {
+export async function crearIngresoFijo(usuarioActual, data) {
+  await validarReferenciasPropias(usuarioActual.id, data);
   return prisma.ingresoFijoConfig.create({
     data: { ...data, usuarioId: usuarioActual.id },
   });
 }
 
 export async function actualizarIngresoFijo(usuarioActual, id, data) {
+  await validarReferenciasPropias(usuarioActual.id, data);
   await requireConfigDelUsuario(usuarioActual.id, id);
   return prisma.ingresoFijoConfig.update({ where: { id }, data });
 }

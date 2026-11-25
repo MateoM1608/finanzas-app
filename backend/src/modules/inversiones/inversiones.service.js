@@ -82,10 +82,14 @@ export async function listarInversiones(usuarioActual) {
   };
 }
 
-/** Para el patrimonio: valor de mis inversiones activas + mi parte de las del hogar. */
+/**
+ * Para el patrimonio: valor de mis inversiones + mi parte de las del hogar,
+ * también las cerradas (si les queda valor, la plata sigue ahí; una
+ * liquidada con su retiro queda en 0).
+ */
 export async function valorInversionesDe(usuarioActual) {
-  const { resumen } = await listarInversiones(usuarioActual);
-  return resumen.valorPersonal + resumen.miParteHogar;
+  const { personales, hogar } = await listarInversiones(usuarioActual);
+  return personales.reduce((a, i) => a + i.valorActual, 0) + hogar.reduce((a, i) => a + i.miParte, 0);
 }
 
 async function obtener(usuarioActual, id) {

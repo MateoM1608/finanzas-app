@@ -1,3 +1,4 @@
+import { metodoSiEsDe } from './pertenencia.js';
 import { prisma } from '../config/prisma.js';
 import { hoyUTC } from './fechas.js';
 
@@ -59,6 +60,9 @@ export async function sincronizarPagoGasto(tx, gastoId) {
 }
 
 async function guardar(tx, enlace, datos) {
+  // La cuenta va solo si es de quien pagó: la de una compra o un préstamo
+  // registrado por otro miembro no debe aparecer (ni cargarse) en mi caja.
+  datos = { ...datos, metodoPagoId: await metodoSiEsDe(tx, datos.usuarioId, datos.metodoPagoId) };
   // Una cuota automática con fecha futura todavía no ha salido: queda
   // pendiente y pasa a pagada sola en su fecha (pagarMovimientosVencidos).
   const estado = new Date(datos.fecha) <= hoyUTC() ? 'pagado' : 'pendiente';

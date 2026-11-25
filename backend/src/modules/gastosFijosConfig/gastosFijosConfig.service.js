@@ -1,3 +1,4 @@
+import { validarReferenciasPropias } from '../../utils/pertenencia.js';
 import { prisma } from '../../config/prisma.js';
 import { HttpError } from '../../middleware/errorHandler.js';
 
@@ -16,13 +17,15 @@ export function listarGastosFijos(usuarioActual) {
   });
 }
 
-export function crearGastoFijo(usuarioActual, data) {
+export async function crearGastoFijo(usuarioActual, data) {
+  await validarReferenciasPropias(usuarioActual.id, data);
   return prisma.gastoFijoConfig.create({
     data: { ...data, usuarioId: usuarioActual.id },
   });
 }
 
 export async function actualizarGastoFijo(usuarioActual, id, data) {
+  await validarReferenciasPropias(usuarioActual.id, data);
   await requireConfigDelUsuario(usuarioActual.id, id);
   return prisma.gastoFijoConfig.update({ where: { id }, data });
 }

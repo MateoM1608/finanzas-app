@@ -1,3 +1,4 @@
+import { validarReferenciasPropias } from '../../utils/pertenencia.js';
 import { prisma } from '../../config/prisma.js';
 import { HttpError } from '../../middleware/errorHandler.js';
 import { asegurarGastosFijos } from '../../utils/instanciasFijasPersonales.js';
@@ -51,6 +52,7 @@ export async function listarGastosPersonales(usuarioId) {
 }
 
 export async function crearGastoPersonal(usuarioId, data) {
+  await validarReferenciasPropias(usuarioId, data);
   const gasto = await prisma.gastoPersonal.create({
     data: { ...data, usuarioId },
     include: INCLUDE_GASTO,
@@ -60,6 +62,7 @@ export async function crearGastoPersonal(usuarioId, data) {
 }
 
 export async function actualizarGastoPersonal(usuarioId, gastoId, data) {
+  await validarReferenciasPropias(usuarioId, data);
   const gasto = await prisma.gastoPersonal.findUnique({ where: { id: gastoId } });
   if (!gasto || gasto.usuarioId !== usuarioId) {
     throw new HttpError(404, 'Gasto no encontrado');

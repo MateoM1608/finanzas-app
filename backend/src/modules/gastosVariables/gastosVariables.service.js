@@ -205,6 +205,7 @@ export async function pagarCuotaVariable(usuarioActual, gastoId, data) {
       data: {
         estado: 'pagado',
         pagoUsuarioId: data.pagoUsuarioId ?? undefined,
+        ...(data.pagoUsuarioId && data.pagoUsuarioId !== gasto.pagoUsuarioId && { metodoPagoId: null }),
         fechaPago: data.fechaPago ?? hoyUTC(),
       },
     });

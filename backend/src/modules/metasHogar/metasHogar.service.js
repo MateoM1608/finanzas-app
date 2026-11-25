@@ -51,11 +51,11 @@ export async function listarMetas(usuarioActual) {
   return metas.map((m) => vista(m, usuarioActual, hoy));
 }
 
-/** Para el patrimonio: lo que el usuario tiene puesto en metas del hogar activas. */
+/** Para el patrimonio: lo que el usuario tiene puesto en metas del hogar (activas o no: la plata sigue ahí). */
 export async function misAportesEnMetas(usuarioActual) {
   if (!usuarioActual.hogarId) return 0;
   const movimientos = await prisma.metaHogarMovimiento.findMany({
-    where: { usuarioId: usuarioActual.id, meta: { hogarId: usuarioActual.hogarId, activa: true } },
+    where: { usuarioId: usuarioActual.id, meta: { hogarId: usuarioActual.hogarId } },
     select: { tipo: true, monto: true },
   });
   return movimientos.reduce((a, m) => a + (m.tipo === 'aporte' ? m.monto : -m.monto), 0);

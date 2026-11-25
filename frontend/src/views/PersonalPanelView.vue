@@ -280,6 +280,9 @@ async function onToggleEstadoGasto(gasto) {
 }
 
 async function onEliminarGasto(id) {
+  const gasto = gastos.value.find((g) => g.id === id);
+  const nombre = gasto?.descripcion || gasto?.categoria?.nombre || 'este gasto';
+  if (!(await confirmar(`¿Eliminar "${nombre}" de ${formatCurrency(gasto?.monto ?? 0)}? No se puede deshacer.`))) return;
   error.value = '';
   eliminandoGastoId.value = id;
   try {
@@ -353,6 +356,9 @@ async function onToggleEstadoIngreso(ingreso) {
 }
 
 async function onEliminarIngreso(id) {
+  const ingreso = ingresos.value.find((i) => i.id === id);
+  const nombre = ingreso?.descripcion || ingreso?.categoria?.nombre || 'este ingreso';
+  if (!(await confirmar(`¿Eliminar "${nombre}" de ${formatCurrency(ingreso?.monto ?? 0)}? No se puede deshacer.`))) return;
   error.value = '';
   eliminandoIngresoId.value = id;
   try {
