@@ -22,7 +22,7 @@ function aplicar(valor) {
   // Evita que cada borde/fondo anime su transición al cambiar de tema.
   root.classList.add('theme-switching');
   root.classList.toggle('dark', valor === 'dark');
-  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', valor === 'dark' ? '#0B0D11' : '#F4F5F1');
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', valor === 'dark' ? '#0A2416' : '#F6EFE3');
   requestAnimationFrame(() => requestAnimationFrame(() => root.classList.remove('theme-switching')));
 }
 

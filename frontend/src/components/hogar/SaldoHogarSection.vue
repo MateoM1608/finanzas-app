@@ -32,8 +32,7 @@ const frase = computed(() => (saldo.value ? formatearBalances(saldo.value.balanc
 </script>
 
 <template>
-  <section class="card card-pad relative overflow-hidden" aria-labelledby="saldo-hogar-titulo">
-    <div class="pointer-events-none absolute inset-x-0 top-0 h-1 bg-accent" aria-hidden="true" />
+  <section class="card-brand card-pad relative overflow-hidden" aria-labelledby="saldo-hogar-titulo">
     <AlertError :message="error" />
 
     <div v-if="loading" class="animate-pulse" aria-busy="true">
@@ -47,7 +46,7 @@ const frase = computed(() => (saldo.value ? formatearBalances(saldo.value.balanc
           <AppIcon name="scale" class="h-3.5 w-3.5" />
           Saldo de hoy
         </p>
-        <p class="mt-2 text-xl sm:text-2xl font-semibold tracking-tight text-ink-primary text-balance">
+        <p class="mt-2 text-[1.375rem] sm:text-[1.875rem] font-extrabold leading-tight tracking-[-0.025em] text-ink-primary text-balance">
           {{ alDia ? 'Están a paz y salvo' : frase }}
         </p>
         <p class="mt-1.5 text-[13px] text-ink-tertiary">

@@ -5,6 +5,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/auth.js';
 import AppIcon from './AppIcon.vue';
 import ThemeToggle from './ThemeToggle.vue';
+import { confirmar } from '../composables/useConfirm.js';
 
 defineProps({
   title: { type: String, required: true },
@@ -62,6 +63,8 @@ function activo(item) {
 }
 
 async function onLogout() {
+  const ok = await confirmar('¿Cerrar sesión en este dispositivo?', { textoAceptar: 'Cerrar sesión', peligroso: false });
+  if (!ok) return;
   await auth.logout();
   router.push({ name: 'login' });
 }
@@ -71,13 +74,13 @@ async function onLogout() {
   <div class="min-h-screen lg:pl-64">
     <!-- Barra lateral (escritorio) -->
     <aside
-      class="hidden lg:flex fixed inset-y-0 left-0 w-64 flex-col border-r border-border bg-surface/70 backdrop-blur-sm"
+      class="scope-brand hidden lg:flex fixed inset-y-0 left-0 w-64 flex-col"
     >
       <div class="h-16 flex items-center gap-2.5 px-5">
         <span class="grid h-8 w-8 place-items-center rounded-lg bg-accent text-accent-on">
           <AppIcon name="logo" class="h-[18px] w-[18px]" :stroke-width="2.4" />
         </span>
-        <span class="text-[15px] font-semibold tracking-tight">Finanzas</span>
+        <span class="text-base font-extrabold tracking-tight">Finanzas</span>
         <router-link :to="{ name: 'notificaciones' }" class="btn-icon relative ml-auto !p-1.5" :aria-label="textoCampana" :title="textoCampana">
           <AppIcon name="bell" class="h-[18px] w-[18px]" />
           <span v-if="noLeidas" class="absolute -right-0.5 -top-0.5 grid h-4 min-w-4 place-items-center rounded-full bg-negative px-1 text-[10px] font-semibold text-white">{{ noLeidas > 9 ? '9+' : noLeidas }}</span>
@@ -89,8 +92,8 @@ async function onLogout() {
           v-for="item in NAV"
           :key="item.name"
           :to="{ name: item.name }"
-          class="relative flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition-colors"
-          :class="activo(item) ? 'bg-accent/10 text-accent' : 'text-ink-secondary hover:text-ink-primary hover:bg-surface-hover'"
+          class="relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-colors"
+          :class="activo(item) ? 'bg-highlight font-bold text-highlight-on' : 'font-medium text-ink-secondary hover:text-ink-primary hover:bg-surface-hover'"
           :aria-current="activo(item) ? 'page' : undefined"
         >
           <AppIcon :name="item.icon" class="h-[18px] w-[18px]" />
@@ -124,7 +127,7 @@ async function onLogout() {
         <span class="grid h-7 w-7 place-items-center rounded-lg bg-accent text-accent-on">
           <AppIcon name="logo" class="h-4 w-4" :stroke-width="2.4" />
         </span>
-        <span class="text-[15px] font-semibold tracking-tight">Finanzas</span>
+        <span class="text-base font-extrabold tracking-tight">Finanzas</span>
       </div>
       <div class="flex items-center gap-1">
         <router-link :to="{ name: 'notificaciones' }" class="btn-icon relative" :aria-label="textoCampana" :title="textoCampana">
@@ -173,7 +176,7 @@ async function onLogout() {
         <div class="flex items-center justify-center">
           <button
             type="button"
-            class="grid h-12 w-12 -mt-5 place-items-center rounded-full bg-accent text-accent-on shadow-pop ring-4 ring-canvas"
+            class="grid h-12 w-12 -mt-5 place-items-center rounded-2xl bg-accent text-highlight dark:text-accent-on shadow-pop ring-4 ring-canvas"
             aria-label="Registrar movimiento"
             @click="registrar"
           >

@@ -12,7 +12,7 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        sans: ['Geist', 'Inter', 'system-ui', 'sans-serif'],
+        sans: ['"Plus Jakarta Sans"', 'system-ui', 'sans-serif'],
       },
       colors: {
         canvas: v('canvas'),
@@ -37,6 +37,11 @@ export default {
           muted: 'rgb(var(--c-accent) / 0.12)',
           on: v('on-accent'),
         },
+        highlight: {
+          DEFAULT: v('highlight'),
+          on: v('on-highlight'),
+        },
+        brand: v('brand'),
         positive: v('positive'),
         negative: v('negative'),
         warning: v('warning'),
@@ -52,7 +57,7 @@ export default {
         pop: 'var(--shadow-pop)',
       },
       fontSize: {
-        display: ['2.5rem', { lineHeight: '1', letterSpacing: '-0.035em', fontWeight: '600' }],
+        display: ['2.75rem', { lineHeight: '1.08', letterSpacing: '-0.035em', fontWeight: '800' }],
       },
       transitionTimingFunction: {
         out: 'cubic-bezier(0.22, 1, 0.36, 1)',

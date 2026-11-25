@@ -6,24 +6,24 @@ import { formatCurrency } from '../utils/format.js';
 // `computed`: al cambiar de tema, vue-chartjs vuelve a dibujar con la paleta nueva.
 const PALETAS = {
   light: {
-    series: ['#294AD1', '#0E8A7E', '#C4840F', '#CD2D3B', '#7A55D6', '#2B8FCF'],
-    soft: '#A9B8F0',
-    grid: 'rgba(17,21,26,0.06)',
-    ticks: '#8A9197',
-    text: '#586068',
-    tooltipBg: '#11151A',
-    tooltipText: '#F4F5F1',
-    surface: '#FFFFFF',
+    series: ['#145232', '#4FB04C', '#C98A1A', '#C2462E', '#3E8C8A', '#8A6FBF'],
+    soft: '#B9D9BF',
+    grid: 'rgba(14,36,24,0.07)',
+    ticks: '#6C796F',
+    text: '#485A4E',
+    tooltipBg: '#0F3622',
+    tooltipText: '#F6EFE3',
+    surface: '#FFFBF4',
   },
   dark: {
-    series: ['#7691FF', '#3DCCB4', '#F0B648', '#FF707A', '#A78BFA', '#5CB8F0'],
-    soft: '#3B4A85',
-    grid: 'rgba(234,237,242,0.07)',
-    ticks: '#6E7684',
-    text: '#9DA4B1',
-    tooltipBg: '#EAEDF2',
-    tooltipText: '#0B0D11',
-    surface: '#12151B',
+    series: ['#6EE26B', '#F2C262', '#5CC8B8', '#FF8C7A', '#B59CF0', '#A8DDA6'],
+    soft: '#2E5E42',
+    grid: 'rgba(246,239,227,0.07)',
+    ticks: '#8DA495',
+    text: '#B9CCBD',
+    tooltipBg: '#F6EFE3',
+    tooltipText: '#0A2416',
+    surface: '#0F2E1D',
   },
 };
 
@@ -40,8 +40,8 @@ export function useChartTheme() {
       cornerRadius: 8,
       displayColors: true,
       boxPadding: 4,
-      titleFont: { family: 'Geist', weight: '600' },
-      bodyFont: { family: 'Geist' },
+      titleFont: { family: 'Plus Jakarta Sans', weight: '600' },
+      bodyFont: { family: 'Plus Jakarta Sans' },
       callbacks: {
         label: (ctx) => {
           const valor = ctx.parsed?.y ?? ctx.parsed;
@@ -62,7 +62,7 @@ export function useChartTheme() {
         boxWidth: 8,
         boxHeight: 8,
         padding: 14,
-        font: { family: 'Geist', size: 12 },
+        font: { family: 'Plus Jakarta Sans', size: 12 },
       },
     };
   }
@@ -74,7 +74,7 @@ export function useChartTheme() {
       const eje = {
         stacked: apilado,
         border: { display: false },
-        ticks: { color: p.ticks, font: { family: 'Geist', size: 11 } },
+        ticks: { color: p.ticks, font: { family: 'Plus Jakarta Sans', size: 11 } },
       };
       return {
         responsive: true,

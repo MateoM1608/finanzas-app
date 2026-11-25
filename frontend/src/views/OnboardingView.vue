@@ -69,7 +69,7 @@ function cambiarModo(nuevo) {
 <template>
   <div class="min-h-screen bg-canvas lg:grid lg:grid-cols-2">
     <!-- Panel de marca: solo en pantallas grandes -->
-    <aside class="hidden lg:flex flex-col justify-between border-r border-border bg-surface-sunken p-12 xl:p-16">
+    <aside class="scope-brand hidden lg:flex flex-col justify-between p-12 xl:p-16">
       <div class="flex items-center gap-2.5">
         <span class="grid h-9 w-9 place-items-center rounded-xl bg-accent text-accent-on">
           <AppIcon name="logo" class="h-5 w-5" :stroke-width="2.4" />
@@ -78,7 +78,7 @@ function cambiarModo(nuevo) {
       </div>
 
       <div class="max-w-md">
-        <h2 class="text-display text-ink-primary">Un hogar, cuentas claras para todos.</h2>
+        <h2 class="text-display text-ink-primary">Un hogar, <span class="marker">cuentas claras</span> para todos.</h2>
         <p class="mt-4 text-[15px] leading-relaxed text-ink-secondary">
           El hogar reúne los gastos compartidos; tu panel personal sigue siendo solo tuyo.
         </p>

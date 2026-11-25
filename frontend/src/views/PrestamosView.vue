@@ -257,11 +257,11 @@ function progreso(p) {
 
     <div class="space-y-6">
       <!-- Patrimonio: lo que tienes − lo que debes -->
-      <section v-if="patrimonio" class="card card-pad">
+      <section v-if="patrimonio" class="card-brand card-pad">
         <div class="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
           <div>
             <p class="stat-label">Tu patrimonio</p>
-            <p class="stat-value-lg" :class="patrimonio.total < 0 ? 'text-negative' : 'text-ink-primary'">{{ formatCurrency(patrimonio.total) }}</p>
+            <p class="stat-value-lg" :class="patrimonio.total < 0 ? 'text-negative' : 'text-ink-primary'"><span :class="{ marker: patrimonio.total >= 0 }">{{ formatCurrency(patrimonio.total) }}</span></p>
           </div>
           <dl class="grid grid-cols-2 gap-x-5 gap-y-1 text-[13px] sm:flex sm:flex-wrap sm:gap-x-6">
             <div class="flex justify-between gap-2 sm:block"><dt class="text-ink-tertiary">Disponible</dt><dd class="font-medium text-ink-primary">{{ formatCurrency(patrimonio.disponible) }}</dd></div>

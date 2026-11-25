@@ -193,6 +193,11 @@ async function onPagarCuota(gasto) {
 }
 
 async function onDeshacerPagoCuota(gasto) {
+  const ok = await confirmar(
+    `¿Deshacer el pago de "${gasto.item}" de ${formatCurrency(gasto.valorTotal)}? Vuelve a quedar por pagar y sale del saldo del hogar.`,
+    { textoAceptar: 'Deshacer pago', peligroso: false },
+  );
+  if (!ok) return;
   error.value = '';
   pagandoId.value = gasto.id;
   try {

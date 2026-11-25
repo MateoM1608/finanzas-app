@@ -4,56 +4,92 @@
 
 /*
  * Tokens de color en canales RGB (ver tailwind.config.js).
- * Claro: base cálida-neutra con cobalto como único acento de acción;
- * verde/rojo/ámbar reservados para semántica financiera.
- * Oscuro: grafito azulado, no negro puro, con el acento aclarado para
- * mantener contraste.
+ * Identidad "bosque": verde bosque profundo como color de acción y de marca,
+ * lima como resaltador (se usa poco: la cifra clave, el elemento activo) y
+ * crema como papel. Verde/rojo/ámbar siguen reservados para la semántica
+ * financiera (a favor, atrasado, aviso).
+ * Oscuro: el bosque pasa a ser el fondo y la lima el color de acción.
  */
 @layer base {
   :root {
-    --c-canvas: 244 245 241;
-    --c-surface: 255 255 255;
-    --c-surface-hover: 240 241 236;
-    --c-surface-raised: 249 250 247;
-    --c-surface-sunken: 236 238 232;
-    --c-border: 226 228 221;
-    --c-border-strong: 205 208 199;
-    --c-ink-primary: 17 21 26;
-    --c-ink-secondary: 88 96 104;
-    --c-ink-tertiary: 138 145 151;
-    --c-accent: 41 74 209;
-    --c-accent-hover: 31 60 180;
-    --c-on-accent: 255 255 255;
-    --c-positive: 10 135 84;
-    --c-negative: 205 45 59;
-    --c-warning: 176 112 10;
-    --c-overlay: 12 15 20;
-    --shadow-card: 0 1px 0 rgb(17 21 26 / 0.03), 0 1px 3px rgb(17 21 26 / 0.04);
-    --shadow-pop: 0 12px 32px -8px rgb(17 21 26 / 0.18), 0 2px 6px rgb(17 21 26 / 0.06);
+    --c-canvas: 246 239 227;
+    --c-surface: 255 251 244;
+    --c-surface-hover: 242 234 220;
+    --c-surface-raised: 255 253 249;
+    --c-surface-sunken: 237 228 211;
+    --c-border: 228 218 200;
+    --c-border-strong: 208 196 174;
+    --c-ink-primary: 14 36 24;
+    --c-ink-secondary: 72 90 78;
+    --c-ink-tertiary: 108 121 111;
+    --c-accent: 15 54 34;
+    --c-accent-hover: 27 76 50;
+    --c-on-accent: 246 239 227;
+    --c-highlight: 110 226 107;
+    --c-on-highlight: 10 36 22;
+    --c-positive: 28 120 58;
+    --c-negative: 184 52 30;
+    --c-warning: 156 98 0;
+    --c-overlay: 10 36 22;
+    --c-brand: 15 54 34;
+    --shadow-card: 0 1px 0 rgb(14 36 24 / 0.03), 0 1px 3px rgb(14 36 24 / 0.05);
+    --shadow-pop: 0 12px 32px -8px rgb(14 36 24 / 0.22), 0 2px 6px rgb(14 36 24 / 0.08);
     color-scheme: light;
   }
 
   .dark {
-    --c-canvas: 11 13 17;
-    --c-surface: 18 21 27;
-    --c-surface-hover: 27 31 39;
-    --c-surface-raised: 23 27 34;
-    --c-surface-sunken: 14 16 21;
-    --c-border: 36 41 51;
-    --c-border-strong: 54 60 73;
-    --c-ink-primary: 234 237 242;
-    --c-ink-secondary: 157 164 177;
-    --c-ink-tertiary: 110 118 132;
-    --c-accent: 118 145 255;
-    --c-accent-hover: 146 168 255;
-    --c-on-accent: 9 12 28;
-    --c-positive: 61 204 137;
-    --c-negative: 255 112 122;
-    --c-warning: 240 182 72;
+    --c-canvas: 10 36 22;
+    --c-surface: 15 46 29;
+    --c-surface-hover: 22 59 38;
+    --c-surface-raised: 18 52 33;
+    --c-surface-sunken: 8 30 18;
+    --c-border: 30 70 47;
+    --c-border-strong: 46 94 66;
+    --c-ink-primary: 246 239 227;
+    --c-ink-secondary: 185 204 189;
+    --c-ink-tertiary: 141 164 149;
+    --c-accent: 110 226 107;
+    --c-accent-hover: 145 236 141;
+    --c-on-accent: 10 36 22;
+    --c-highlight: 110 226 107;
+    --c-on-highlight: 10 36 22;
+    --c-positive: 132 228 138;
+    --c-negative: 255 140 122;
+    --c-warning: 242 194 98;
     --c-overlay: 0 0 0;
+    --c-brand: 24 82 52;
     --shadow-card: 0 0 0 transparent;
-    --shadow-pop: 0 16px 40px -8px rgb(0 0 0 / 0.6), 0 0 0 1px rgb(255 255 255 / 0.04);
+    --shadow-pop: 0 16px 40px -8px rgb(0 0 0 / 0.55), 0 0 0 1px rgb(246 239 227 / 0.05);
     color-scheme: dark;
+  }
+
+  /*
+   * Zona de marca: el bloque principal de cada pantalla, la barra lateral y
+   * el panel de inicio de sesión. Verde bosque con trama de puntos; dentro,
+   * los mismos tokens se redefinen para que textos, insignias y botones se
+   * vean bien sin tocar cada componente (el botón principal pasa a lima).
+   */
+  .scope-brand {
+    --c-surface: 22 66 43;
+    --c-surface-hover: 30 80 53;
+    --c-surface-raised: 26 72 47;
+    --c-surface-sunken: 11 42 26;
+    --c-border: 40 90 62;
+    --c-border-strong: 58 110 80;
+    --c-ink-primary: 246 239 227;
+    --c-ink-secondary: 196 214 200;
+    --c-ink-tertiary: 160 184 168;
+    --c-accent: 110 226 107;
+    --c-accent-hover: 145 236 141;
+    --c-on-accent: 10 36 22;
+    --c-positive: 145 236 141;
+    --c-negative: 255 160 142;
+    --c-warning: 246 204 112;
+    --shadow-card: 0 0 0 transparent;
+    background-color: rgb(var(--c-brand));
+    background-image: radial-gradient(rgb(246 239 227 / 0.085) 1px, transparent 1.3px);
+    background-size: 16px 16px;
+    color: rgb(var(--c-ink-primary));
   }
 
   html {
@@ -62,7 +98,6 @@
 
   body {
     @apply bg-canvas text-ink-primary antialiased;
-    font-feature-settings: 'ss01', 'cv11';
     /* Montos alineados en columnas y sin "saltos" al cambiar de valor. */
     font-variant-numeric: tabular-nums;
   }
@@ -75,7 +110,8 @@
   }
 
   ::selection {
-    background: rgb(var(--c-accent) / 0.22);
+    background: rgb(var(--c-highlight) / 0.45);
+    color: rgb(var(--c-on-highlight));
   }
 
   :focus-visible {
@@ -108,6 +144,24 @@
     @apply p-4 sm:p-6;
   }
 
+  /* Bloque principal de una pantalla (Disponible, saldo del hogar, patrimonio). */
+  .card-brand {
+    @apply scope-brand rounded-3xl;
+  }
+
+  .dark .card-brand {
+    @apply border border-border;
+  }
+
+  /* Resaltador lima, como marcador sobre papel: solo para la cifra clave. */
+  .marker {
+    @apply rounded-lg px-1.5 -mx-0.5;
+    background-color: rgb(var(--c-highlight));
+    color: rgb(var(--c-on-highlight));
+    box-decoration-break: clone;
+    -webkit-box-decoration-break: clone;
+  }
+
   .panel-sunken {
     @apply bg-surface-sunken/60 border border-border rounded-xl;
   }
@@ -123,7 +177,7 @@
   }
 
   .btn-primary {
-    @apply btn bg-accent text-accent-on hover:bg-accent-hover;
+    @apply btn bg-accent text-accent-on hover:bg-accent-hover font-semibold;
   }
 
   .btn-secondary {
@@ -167,7 +221,7 @@
 
   /* --- Tipografía de página --- */
   .page-title {
-    @apply text-xl sm:text-[1.75rem] font-semibold tracking-tight text-ink-primary;
+    @apply text-[1.375rem] sm:text-[2rem] font-extrabold tracking-[-0.025em] leading-tight text-ink-primary;
   }
 
   .page-subtitle {
@@ -176,11 +230,11 @@
 
   /* Indicadores: grandes en escritorio, compactos en celular (dos por fila). */
   .stat-value {
-    @apply mt-1.5 sm:mt-2 text-base sm:text-[1.75rem] leading-tight sm:leading-none font-semibold tracking-tight whitespace-nowrap;
+    @apply mt-1.5 sm:mt-2 text-base sm:text-[1.75rem] leading-tight sm:leading-none font-bold tracking-tight whitespace-nowrap;
   }
 
   .stat-value-lg {
-    @apply mt-2 sm:mt-3 text-[1.625rem] sm:text-[2rem] leading-none font-semibold tracking-tight;
+    @apply mt-2 sm:mt-3 text-[1.75rem] sm:text-[2.375rem] leading-tight font-extrabold tracking-[-0.03em];
   }
 
   /* Explicación debajo de un indicador: solo en pantallas grandes. */
@@ -189,7 +243,7 @@
   }
 
   .section-title {
-    @apply text-[15px] font-semibold text-ink-primary tracking-tight;
+    @apply text-base font-bold text-ink-primary tracking-tight;
   }
 
   .section-hint {
@@ -201,7 +255,7 @@
   }
 
   .stat-value {
-    @apply text-2xl font-semibold tracking-tight text-ink-primary;
+    @apply text-2xl font-bold tracking-tight text-ink-primary;
   }
 
   .amount-positive {
@@ -265,11 +319,7 @@
   }
 
   .tab-active {
-    @apply bg-surface text-ink-primary shadow-card;
-  }
-
-  .dark .tab-active {
-    @apply bg-surface-hover;
+    @apply bg-accent text-accent-on shadow-card hover:text-accent-on;
   }
 
   /* --- Estado vacío --- */

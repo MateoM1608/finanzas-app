@@ -103,8 +103,7 @@ const porCategoriaChart = computed(() => {
     <template v-else-if="resumen">
       <!-- Indicadores -->
       <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4">
-        <section class="card card-pad relative overflow-hidden col-span-2 sm:col-span-1">
-          <div class="pointer-events-none absolute inset-x-0 top-0 h-1 bg-accent" aria-hidden="true" />
+        <section class="card-brand card-pad relative overflow-hidden col-span-2 sm:col-span-1">
           <div class="flex items-center justify-between">
             <p class="stat-label">{{ esActual ? 'Disponible' : 'Disponible al cierre' }}</p>
             <span class="grid h-8 w-8 place-items-center rounded-lg bg-accent/10 text-accent">
@@ -112,7 +111,7 @@ const porCategoriaChart = computed(() => {
             </span>
           </div>
           <p class="stat-value-lg" :class="resumen.disponible < 0 ? 'text-negative' : 'text-ink-primary'">
-            {{ formatCurrency(resumen.disponible) }}
+            <span :class="{ marker: resumen.disponible >= 0 }">{{ formatCurrency(resumen.disponible) }}</span>
           </p>
           <p class="sm:hidden mt-1.5 text-[11px] text-ink-tertiary">
             {{ esActual ? 'Lo que hay hoy en tus cuentas (sin lo que debes en tarjetas).' : 'Lo que había al terminar ese ciclo.' }}

@@ -27,7 +27,7 @@ ChartJS.register(
   Legend,
 );
 
-ChartJS.defaults.font.family = 'Geist, Inter, system-ui, sans-serif';
+ChartJS.defaults.font.family = "'Plus Jakarta Sans', system-ui, sans-serif";
 ChartJS.defaults.font.size = 12;
 ChartJS.defaults.animation.duration = 400;
 

@@ -48,7 +48,7 @@ async function onSubmit() {
 <template>
   <div class="min-h-screen bg-canvas lg:grid lg:grid-cols-2">
     <!-- Panel de marca: solo en pantallas grandes -->
-    <aside class="hidden lg:flex flex-col justify-between border-r border-border bg-surface-sunken p-12 xl:p-16">
+    <aside class="scope-brand hidden lg:flex flex-col justify-between p-12 xl:p-16">
       <div class="flex items-center gap-2.5">
         <span class="grid h-9 w-9 place-items-center rounded-xl bg-accent text-accent-on">
           <AppIcon name="logo" class="h-5 w-5" :stroke-width="2.4" />
@@ -57,7 +57,7 @@ async function onSubmit() {
       </div>
 
       <div class="max-w-md">
-        <h2 class="text-display text-ink-primary">Ordena tus finanzas y las de tu hogar.</h2>
+        <h2 class="text-display text-ink-primary">Ordena tus finanzas <span class="marker">y las de tu hogar.</span></h2>
         <p class="mt-4 text-[15px] leading-relaxed text-ink-secondary">
           Un panel privado para ti y uno compartido para el hogar, conectados entre sí.
         </p>

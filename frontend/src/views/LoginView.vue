@@ -41,7 +41,7 @@ async function onSubmit() {
 <template>
   <div class="min-h-screen bg-canvas lg:grid lg:grid-cols-2">
     <!-- Panel de marca: solo en pantallas grandes -->
-    <aside class="hidden lg:flex flex-col justify-between border-r border-border bg-surface-sunken p-12 xl:p-16">
+    <aside class="scope-brand hidden lg:flex flex-col justify-between p-12 xl:p-16">
       <div class="flex items-center gap-2.5">
         <span class="grid h-9 w-9 place-items-center rounded-xl bg-accent text-accent-on">
           <AppIcon name="logo" class="h-5 w-5" :stroke-width="2.4" />
@@ -50,7 +50,7 @@ async function onSubmit() {
       </div>
 
       <div class="max-w-md">
-        <h2 class="text-display text-ink-primary">Tu dinero y el de tu hogar, en claro.</h2>
+        <h2 class="text-display text-ink-primary">Tu dinero y el de tu hogar, <span class="marker">en claro.</span></h2>
         <p class="mt-4 text-[15px] leading-relaxed text-ink-secondary">
           Lo personal sigue siendo privado; lo compartido se liquida sin cuentas a mano.
         </p>

@@ -9,6 +9,7 @@ import { formatCurrency, formatDate, hoyISO } from '../../utils/format.js';
 import AlertError from '../AlertError.vue';
 import AppIcon from '../AppIcon.vue';
 import AppModal from '../AppModal.vue';
+import { confirmar } from '../../composables/useConfirm.js';
 import FormField from '../FormField.vue';
 
 /**
@@ -93,6 +94,11 @@ async function onConfirmarPago() {
 }
 
 async function onDeshacer(cuota) {
+  const ok = await confirmar(
+    `¿Deshacer el pago de "${cuota.concepto.nombre}"${cuota.monto != null ? ` de ${formatCurrency(cuota.monto)}` : ''}? Vuelve a quedar por pagar y sale del saldo del hogar.`,
+    { textoAceptar: 'Deshacer pago', peligroso: false },
+  );
+  if (!ok) return;
   deshaciendoId.value = cuota.id;
   error.value = '';
   try {
