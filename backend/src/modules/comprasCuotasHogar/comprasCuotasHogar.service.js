@@ -1,6 +1,6 @@
 import { prisma } from '../../config/prisma.js';
 import { HttpError } from '../../middleware/errorHandler.js';
-import { calcularCuotas, fechasDeCuotas } from '../../utils/cuotas.js';
+import { calcularCuotas, fechasDeCuotas, interesDeCompra } from '../../utils/cuotas.js';
 import { obtenerSplitVigenteGastosVariables, calcularReparto } from '../../utils/reparto.js';
 import { sincronizarPagoGasto } from '../../utils/movimientosHogar.js';
 
@@ -82,13 +82,16 @@ export async function crearCompra(usuarioActual, data) {
   if (!pagador) {
     throw new HttpError(400, 'Quien paga debe ser un miembro de tu hogar');
   }
+  let metodo = null;
   if (data.metodoPagoId) {
     // Solo el propio pagador puede asociar uno de SUS métodos de pago.
-    const metodo = await prisma.metodoPagoPersonal.findUnique({ where: { id: data.metodoPagoId } });
+    metodo = await prisma.metodoPagoPersonal.findUnique({ where: { id: data.metodoPagoId } });
     if (!metodo || metodo.usuarioId !== usuarioActual.id || data.pagoUsuarioId !== usuarioActual.id) {
       throw new HttpError(400, 'Solo puedes asociar uno de tus métodos de pago a una compra que pagas tú');
     }
   }
+  // La tasa sale de la tarjeta del pagador, salvo que la compra traiga la suya.
+  Object.assign(data, interesDeCompra(data, metodo));
 
   const porcentajes = await resolverPorcentajes(hogarId, data);
 

@@ -188,14 +188,18 @@ model InvitacionHogar {
 // el código de seguridad ni la fecha de vencimiento). `ultimos4` es opcional,
 // solo para reconocer la tarjeta.
 model MetodoPagoPersonal {
-  id        String         @id @default(uuid())
-  usuarioId String         @map("usuario_id")
-  nombre    String
-  tipo      TipoMetodoPago @default(otro)
-  ultimos4  String?        @map("ultimos_4")
-  diaCorte  Int?           @map("dia_corte")
-  diaPago   Int?           @map("dia_pago")
-  cupo      Int?
+  id             String         @id @default(uuid())
+  usuarioId      String         @map("usuario_id")
+  nombre         String
+  tipo           TipoMetodoPago @default(otro)
+  ultimos4       String?        @map("ultimos_4")
+  diaCorte       Int?           @map("dia_corte")
+  diaPago        Int?           @map("dia_pago")
+  cupo           Int?
+  // Tasa de la tarjeta o del crédito (% mensual) y cómo calcula el banco las
+  // cuotas: las compras a cuotas con este método la heredan por defecto.
+  tasaMensual    Float          @default(0) @map("tasa_mensual")
+  sistemaInteres SistemaInteres @default(capital_fijo) @map("sistema_interes")
 
   usuario           Usuario                    @relation(fields: [usuarioId], references: [id])
   gastos            GastoPersonal[]

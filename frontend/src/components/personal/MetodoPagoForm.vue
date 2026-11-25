@@ -24,6 +24,8 @@ const form = reactive({
   diaCorte: props.inicial?.diaCorte ?? '',
   diaPago: props.inicial?.diaPago ?? '',
   cupo: props.inicial?.cupo ?? '',
+  tasaMensual: props.inicial?.tasaMensual || '',
+  sistemaInteres: props.inicial?.sistemaInteres ?? 'capital_fijo',
 });
 
 const esTarjeta = computed(() => form.tipo === 'tarjeta_credito');
@@ -44,6 +46,8 @@ function onSubmit() {
     diaCorte: esTarjeta.value ? numeroONull(form.diaCorte) : null,
     diaPago: esCredito.value ? numeroONull(form.diaPago) : null,
     cupo: esCredito.value ? numeroONull(form.cupo) : null,
+    tasaMensual: esCredito.value ? Number(form.tasaMensual) || 0 : 0,
+    sistemaInteres: form.sistemaInteres,
   });
 }
 </script>
@@ -69,12 +73,28 @@ function onSubmit() {
     <FormField v-if="esTarjeta" v-model="form.diaCorte" type="number" label="Día de corte" placeholder="25" />
     <FormField v-if="esCredito" v-model="form.diaPago" type="number" label="Día de pago" placeholder="10" />
     <FormField v-if="esCredito" v-model="form.cupo" type="number" label="Cupo (opcional, COP)" />
+    <FormField
+      v-if="esCredito"
+      v-model="form.tasaMensual"
+      type="number"
+      step="0.01"
+      label="Tasa mensual (%)"
+      hint="La de tu extracto, ej. 2,1. Vacío o 0 = sin interés."
+    />
+    <div v-if="esCredito">
+      <label class="label" :for="`${idBase}-sistema`">Cómo calcula el banco las cuotas</label>
+      <select :id="`${idBase}-sistema`" v-model="form.sistemaInteres" class="field">
+        <option value="capital_fijo">Capital fijo + interés sobre lo que falta</option>
+        <option value="cuota_fija">Cuota fija</option>
+      </select>
+    </div>
 
     <p v-if="!ultimos4Valido" class="sm:col-span-2 text-[13px] font-medium text-negative">
       Escribe solo los últimos 4 dígitos.
     </p>
     <p v-if="esCredito" class="sm:col-span-2 text-[13px] text-ink-tertiary">
-      Con el día de corte y de pago la app sugiere sola la fecha de la primera cuota de tus compras a cuotas.
+      Con el día de corte y de pago la app sugiere la fecha de la primera cuota, y la tasa se usa sola en tus compras a
+      cuotas con este método (salvo que marques una compra sin interés u otra tasa).
     </p>
 
     <div class="flex justify-end gap-2 sm:col-span-2">

@@ -102,3 +102,16 @@ export function calcularCuotas(total, numeroCuotas, tasaMensual = 0, sistema = '
   }
   return cuotas;
 }
+
+/**
+ * Interés que aplica a una compra a cuotas: si la compra trae su propia tasa
+ * (`tasaMensual` definido: 0 = sin interés / promoción, o una tasa distinta),
+ * esa; si no, la del método de pago (la tarjeta o el crédito). Sin método o
+ * sin tasa en el método: sin interés.
+ */
+export function interesDeCompra(data, metodo) {
+  if (data.tasaMensual !== undefined && data.tasaMensual !== null) {
+    return { tasaMensual: data.tasaMensual, sistemaInteres: data.sistemaInteres ?? metodo?.sistemaInteres ?? 'capital_fijo' };
+  }
+  return { tasaMensual: metodo?.tasaMensual ?? 0, sistemaInteres: metodo?.sistemaInteres ?? 'capital_fijo' };
+}

@@ -13,7 +13,7 @@ import {
 } from '../api/comprasCuotas.js';
 import { confirmar } from '../composables/useConfirm.js';
 import { extractErrorMessage } from '../api/client.js';
-import { formatCurrency, formatDate, hoyISO, modoCobroSugerido } from '../utils/format.js';
+import { formatCurrency, formatDate, hoyISO, modoCobroSugerido, formatTasa } from '../utils/format.js';
 import AppLayout from '../components/AppLayout.vue';
 import FormField from '../components/FormField.vue';
 import AlertError from '../components/AlertError.vue';
@@ -84,7 +84,8 @@ const gACuotas = ref(false);
 const gNumeroCuotas = ref('3');
 const gPrimeraCuota = ref('');
 const gModoCobro = ref('automatico');
-const gConInteres = ref(false);
+// Interés de la compra: el de la tarjeta (por defecto si tiene), sin interés u otra tasa.
+const gInteres = ref('sin');
 const gTasa = ref('');
 const gSistema = ref('capital_fijo');
 const compras = ref([]);
@@ -113,6 +114,7 @@ async function actualizarSugerenciaCuota() {
   if (!gACuotas.value || !gFecha.value) return;
   const metodo = metodos.value.find((m) => m.id === gMetodoPagoId.value);
   gModoCobro.value = modoCobroSugerido(metodo);
+  gInteres.value = metodo?.tasaMensual > 0 ? 'tarjeta' : 'sin';
   try {
     gPrimeraCuota.value = await sugerirPrimeraCuota(gFecha.value, gMetodoPagoId.value || undefined);
   } catch {
@@ -120,6 +122,8 @@ async function actualizarSugerenciaCuota() {
   }
 }
 watch([gACuotas, gMetodoPagoId, gFecha], actualizarSugerenciaCuota);
+
+const metodoSeleccionado = computed(() => metodos.value.find((m) => m.id === gMetodoPagoId.value));
 
 const valorCuota = computed(() => {
   const n = Number(gNumeroCuotas.value);
@@ -161,13 +165,13 @@ async function onAgregarCompra() {
     numeroCuotas: Number(gNumeroCuotas.value),
     fechaPrimeraCuota: gPrimeraCuota.value,
     modoCobro: gModoCobro.value,
-    tasaMensual: gConInteres.value ? Number(gTasa.value) || 0 : 0,
-    sistemaInteres: gSistema.value,
+    ...(gInteres.value === 'tarjeta'
+      ? {}
+      : { tasaMensual: gInteres.value === 'otra' ? Number(gTasa.value) || 0 : 0, sistemaInteres: gSistema.value }),
     metodoPagoId: gMetodoPagoId.value || undefined,
     categoriaId: gCategoriaId.value || undefined,
     esObligatorio: gEsObligatorio.value,
   });
-  gConInteres.value = false;
   gTasa.value = '';
   await Promise.all([cargarCompras(), cargarGastos()]);
 }
@@ -955,20 +959,28 @@ function saldoCompra(compra) {
           <p class="self-end pb-2.5 text-[13px] text-ink-secondary">
             <template v-if="valorCuota">≈ {{ formatCurrency(valorCuota) }} de capital por cuota</template>
           </p>
-          <label class="sm:col-span-2 inline-flex items-center gap-2.5 text-sm text-ink-secondary cursor-pointer">
-            <input v-model="gConInteres" type="checkbox" class="checkbox" />
-            Tiene interés
-          </label>
-          <template v-if="gConInteres">
-            <FormField v-model="gTasa" type="number" step="0.01" label="Tasa mensual (%)" hint="La que aparece en el extracto, ej. 2,1" required />
+          <div class="sm:col-span-2 grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
-              <label class="label" for="g-sistema">Cómo se calcula</label>
-              <select id="g-sistema" v-model="gSistema" class="field">
-                <option value="capital_fijo">Capital fijo + interés sobre lo que falta (cuotas bajan)</option>
-                <option value="cuota_fija">Cuota fija (todas iguales)</option>
+              <label class="label" for="g-interes">Interés</label>
+              <select id="g-interes" v-model="gInteres" class="field">
+                <option v-if="metodoSeleccionado?.tasaMensual > 0" value="tarjeta">
+                  El de la tarjeta ({{ formatTasa(metodoSeleccionado.tasaMensual) }})
+                </option>
+                <option value="sin">Sin interés</option>
+                <option value="otra">Otra tasa</option>
               </select>
             </div>
-          </template>
+            <template v-if="gInteres === 'otra'">
+              <FormField v-model="gTasa" type="number" step="0.01" label="Tasa mensual (%)" required />
+              <div class="sm:col-span-2 sm:max-w-sm">
+                <label class="label" for="g-sistema">Cómo se calcula</label>
+                <select id="g-sistema" v-model="gSistema" class="field">
+                  <option value="capital_fijo">Capital fijo + interés sobre lo que falta (cuotas bajan)</option>
+                  <option value="cuota_fija">Cuota fija (todas iguales)</option>
+                </select>
+              </div>
+            </template>
+          </div>
           <p class="sm:col-span-2 text-[13px] text-ink-tertiary">
             El monto es el total de la compra y la descripción es obligatoria. Se crean todas las cuotas; las
             automáticas se dan por pagadas en su fecha.

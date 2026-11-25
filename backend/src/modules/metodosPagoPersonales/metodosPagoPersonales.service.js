@@ -87,6 +87,8 @@ function datosMetodo(data, actual = {}) {
     diaCorte: tipo === 'tarjeta_credito' ? valor('diaCorte') : null,
     diaPago: esCredito ? valor('diaPago') : null,
     cupo: esCredito ? valor('cupo') : null,
+    tasaMensual: esCredito ? (data.tasaMensual ?? actual.tasaMensual ?? 0) : 0,
+    sistemaInteres: data.sistemaInteres ?? actual.sistemaInteres ?? 'capital_fijo',
   };
 }
 

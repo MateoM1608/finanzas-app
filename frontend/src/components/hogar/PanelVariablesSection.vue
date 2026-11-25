@@ -21,7 +21,7 @@ import { useAuthStore } from '../../stores/auth.js';
 import { confirmar } from '../../composables/useConfirm.js';
 import { listarMiembros } from '../../api/hogares.js';
 import { extractErrorMessage } from '../../api/client.js';
-import { formatCurrency, formatDate, formatReparto, hoyISO, modoCobroSugerido } from '../../utils/format.js';
+import { formatCurrency, formatDate, formatReparto, hoyISO, modoCobroSugerido, formatTasa } from '../../utils/format.js';
 import FormField from '../FormField.vue';
 import AlertError from '../AlertError.vue';
 import AppModal from '../AppModal.vue';
@@ -69,7 +69,7 @@ const aCuotas = ref(false);
 const numeroCuotas = ref('3');
 const primeraCuota = ref('');
 const modoCobro = ref('automatico');
-const hConInteres = ref(false);
+const hInteres = ref('sin');
 const hTasa = ref('');
 const hSistema = ref('capital_fijo');
 const metodoPagoId = ref('');
@@ -106,6 +106,7 @@ async function actualizarSugerencia() {
   if (!aCuotas.value || !fecha.value) return;
   const metodo = pagaYo.value ? misMetodos.value.find((m) => m.id === metodoPagoId.value) : null;
   modoCobro.value = modoCobroSugerido(metodo);
+  hInteres.value = metodo?.tasaMensual > 0 ? 'tarjeta' : 'sin';
   try {
     primeraCuota.value = await sugerirPrimeraCuota(fecha.value, pagaYo.value ? metodoPagoId.value || undefined : undefined);
   } catch {
@@ -113,6 +114,9 @@ async function actualizarSugerencia() {
   }
 }
 watch([aCuotas, metodoPagoId, fecha, pagoUsuarioId], actualizarSugerencia);
+
+// La tasa de la tarjeta solo se conoce si quien paga es el usuario actual (sus métodos).
+const metodoCompraHogar = computed(() => (pagaYo.value ? misMetodos.value.find((m) => m.id === metodoPagoId.value) : null));
 
 const valorCuota = computed(() => {
   const n = Number(numeroCuotas.value);
@@ -262,8 +266,9 @@ async function onCrear() {
         fechaCompra: payload.fecha,
         fechaPrimeraCuota: primeraCuota.value,
         modoCobro: modoCobro.value,
-        tasaMensual: hConInteres.value ? Number(hTasa.value) || 0 : 0,
-        sistemaInteres: hSistema.value,
+        ...(hInteres.value === 'tarjeta'
+          ? {}
+          : { tasaMensual: hInteres.value === 'otra' ? Number(hTasa.value) || 0 : 0, sistemaInteres: hSistema.value }),
         pagoUsuarioId: payload.pagoUsuarioId,
         metodoPagoId: pagaYo.value && metodoPagoId.value ? metodoPagoId.value : undefined,
         repartos: payload.repartos,
@@ -410,20 +415,28 @@ onMounted(cargar);
               <option value="manual">Manual (crédito de almacén: se marca al pagar)</option>
             </select>
           </div>
-          <label class="sm:col-span-2 inline-flex items-center gap-2.5 text-sm text-ink-secondary cursor-pointer">
-            <input v-model="hConInteres" type="checkbox" class="checkbox" />
-            Tiene interés
-          </label>
-          <template v-if="hConInteres">
-            <FormField v-model="hTasa" type="number" step="0.01" label="Tasa mensual (%)" hint="La que aparece en el extracto, ej. 2,1" required />
+          <div class="sm:col-span-2 grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
-              <label class="label" for="compra-hogar-sistema">Cómo se calcula</label>
-              <select id="compra-hogar-sistema" v-model="hSistema" class="field">
-                <option value="capital_fijo">Capital fijo + interés sobre lo que falta (cuotas bajan)</option>
-                <option value="cuota_fija">Cuota fija (todas iguales)</option>
+              <label class="label" for="compra-hogar-interes">Interés</label>
+              <select id="compra-hogar-interes" v-model="hInteres" class="field">
+                <option v-if="metodoCompraHogar?.tasaMensual > 0" value="tarjeta">
+                  El de la tarjeta ({{ formatTasa(metodoCompraHogar.tasaMensual) }})
+                </option>
+                <option value="sin">Sin interés</option>
+                <option value="otra">Otra tasa</option>
               </select>
             </div>
-          </template>
+            <template v-if="hInteres === 'otra'">
+              <FormField v-model="hTasa" type="number" step="0.01" label="Tasa mensual (%)" required />
+              <div class="sm:col-span-2 sm:max-w-sm">
+                <label class="label" for="compra-hogar-sistema">Cómo se calcula</label>
+                <select id="compra-hogar-sistema" v-model="hSistema" class="field">
+                  <option value="capital_fijo">Capital fijo + interés sobre lo que falta (cuotas bajan)</option>
+                  <option value="cuota_fija">Cuota fija (todas iguales)</option>
+                </select>
+              </div>
+            </template>
+          </div>
           <p class="sm:col-span-2 text-[13px] text-ink-tertiary">
             <template v-if="valorCuota">≈ {{ formatCurrency(valorCuota) }} de capital por cuota. </template>
             El valor total es el de la compra y la fecha es el día en que compraron; el reparto acordado ese día se

@@ -1,6 +1,6 @@
 import { prisma } from '../../config/prisma.js';
 import { HttpError } from '../../middleware/errorHandler.js';
-import { calcularCuotas, fechasDeCuotas, sugerirFechaPrimeraCuota } from '../../utils/cuotas.js';
+import { calcularCuotas, fechasDeCuotas, sugerirFechaPrimeraCuota, interesDeCompra } from '../../utils/cuotas.js';
 import { evaluarPeriodoSiCorresponde } from '../../utils/evaluacionAhorro.js';
 import { hoyUTC } from '../../utils/fechas.js';
 
@@ -74,8 +74,9 @@ async function evaluarCuotasPagadas(usuarioId, compra) {
 
 export async function crearCompra(usuarioActual, data) {
   const usuarioId = usuarioActual.id;
-  await requireDelUsuario('metodoPagoPersonal', usuarioId, data.metodoPagoId, 'Método de pago no encontrado');
+  const metodo = await requireDelUsuario('metodoPagoPersonal', usuarioId, data.metodoPagoId, 'Método de pago no encontrado');
   await requireDelUsuario('categoriaPersonal', usuarioId, data.categoriaId, 'Categoría no encontrada');
+  const interes = interesDeCompra(data, metodo);
 
   const datos = {
     descripcion: data.descripcion,
@@ -83,8 +84,8 @@ export async function crearCompra(usuarioActual, data) {
     numeroCuotas: data.numeroCuotas,
     fechaPrimeraCuota: data.fechaPrimeraCuota,
     modoCobro: data.modoCobro,
-    tasaMensual: data.tasaMensual ?? 0,
-    sistemaInteres: data.sistemaInteres ?? 'capital_fijo',
+    tasaMensual: interes.tasaMensual,
+    sistemaInteres: interes.sistemaInteres,
     metodoPagoId: data.metodoPagoId ?? null,
     categoriaId: data.categoriaId ?? null,
     esObligatorio: data.esObligatorio ?? true,

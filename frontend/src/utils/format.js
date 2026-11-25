@@ -99,10 +99,16 @@ export function describirMetodo(metodo) {
   if (metodo.diaCorte) partes.push(`corte ${metodo.diaCorte}`);
   if (metodo.diaPago) partes.push(`pago ${metodo.diaPago}`);
   if (metodo.cupo) partes.push(`cupo ${formatCurrency(metodo.cupo)}`);
+  if (metodo.tasaMensual > 0) partes.push(formatTasa(metodo.tasaMensual));
   return partes.join(' · ');
 }
 
 /** Modo de cobro sugerido para una compra a cuotas según el método. */
 export function modoCobroSugerido(metodo) {
   return metodo && (metodo.tipo === 'credito_almacen' || metodo.tipo === 'efectivo') ? 'manual' : 'automatico';
+}
+
+/** "2,1 % mensual" */
+export function formatTasa(tasa) {
+  return `${String(tasa).replace('.', ',')} % mensual`;
 }

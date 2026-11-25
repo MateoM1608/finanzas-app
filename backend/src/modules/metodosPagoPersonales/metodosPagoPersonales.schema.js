@@ -17,6 +17,8 @@ export const guardarMetodoPagoSchema = z.object({
   diaCorte: dia,
   diaPago: dia,
   cupo: z.number().int().positive().nullable().optional(),
+  tasaMensual: z.number().min(0).max(10).optional(),
+  sistemaInteres: z.enum(['capital_fijo', 'cuota_fija']).optional(),
 });
 
 export const pagoTarjetaSchema = z.object({
