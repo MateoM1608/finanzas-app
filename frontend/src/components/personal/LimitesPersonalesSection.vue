@@ -1,9 +1,11 @@
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, watch } from 'vue';
 import { obtenerResumenLimites } from '../../api/limitesPersonales.js';
 import { extractErrorMessage } from '../../api/client.js';
 import { formatCurrency } from '../../utils/format.js';
 import AlertError from '../AlertError.vue';
+
+const props = defineProps({ ciclo: { type: Number, default: 0 } });
 
 const loading = ref(true);
 const error = ref('');
@@ -13,14 +15,14 @@ async function cargar() {
   loading.value = true;
   error.value = '';
   try {
-    resumen.value = await obtenerResumenLimites();
+    resumen.value = await obtenerResumenLimites(props.ciclo);
   } catch (e) {
     error.value = extractErrorMessage(e);
   } finally {
     loading.value = false;
   }
 }
-onMounted(cargar);
+watch(() => props.ciclo, cargar, { immediate: true });
 defineExpose({ recargar: cargar });
 
 // Solo presentación: porcentaje gastado del límite, acotado a 0–100 para la barra.
@@ -38,7 +40,8 @@ function pctGastado(actual) {
 
     <template v-else>
       <p v-if="!resumen.limites.length" class="empty">
-        Aún no tienes límites. Créalos con «Configurar».
+        <template v-if="ciclo === 0">Aún no tienes límites. Créalos con «Configurar».</template>
+        <template v-else>No había límites en ese ciclo.</template>
       </p>
 
       <div v-else class="grid grid-cols-1 sm:grid-cols-2 gap-3">

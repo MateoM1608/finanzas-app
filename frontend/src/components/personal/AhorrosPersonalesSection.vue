@@ -1,5 +1,5 @@
 <script setup>
-import { ref, reactive, onMounted } from 'vue';
+import { ref, reactive, watch } from 'vue';
 import { obtenerResumenAhorros, registrarAporte } from '../../api/ahorrosPersonales.js';
 import { extractErrorMessage } from '../../api/client.js';
 import { formatCurrency, formatDate } from '../../utils/format.js';
@@ -17,6 +17,8 @@ const ESTADO_INFO = {
   verde: { clase: 'badge-positive', barra: 'bg-positive', texto: () => 'Superaste el pronóstico' },
 };
 
+const props = defineProps({ ciclo: { type: Number, default: 0 } });
+
 const loading = ref(true);
 const error = ref('');
 const resumen = ref(null);
@@ -28,18 +30,19 @@ async function cargar() {
   loading.value = true;
   error.value = '';
   try {
-    resumen.value = await obtenerResumenAhorros();
+    resumen.value = await obtenerResumenAhorros(props.ciclo);
   } catch (e) {
     error.value = extractErrorMessage(e);
   } finally {
     loading.value = false;
   }
 }
-onMounted(cargar);
+watch(() => props.ciclo, cargar, { immediate: true });
 defineExpose({ recargar: cargar });
 
+// Pronóstico del ciclo consultado (null si ese período no se evaluó).
 function periodoActual(meta) {
-  return meta.periodos[0] ?? null;
+  return meta.cicloConsultado?.estado ? meta.cicloConsultado : null;
 }
 
 // Solo presentación: % ahorrado este ciclo vs el monto sugerido, acotado a 0–100.
@@ -76,7 +79,7 @@ async function onRegistrarAporte(meta) {
 
     <template v-else>
       <div class="mb-5">
-        <p class="stat-label">Ahorrado en total</p>
+        <p class="stat-label">{{ ciclo === 0 ? 'Ahorrado en total' : 'Ahorrado al cierre del ciclo' }}</p>
         <p class="mt-1 text-3xl font-semibold tracking-tight text-ink-primary">
           {{ formatCurrency(resumen.totalAhorradoAcumulado) }}
         </p>
@@ -92,7 +95,8 @@ async function onRegistrarAporte(meta) {
       </div>
 
       <p v-if="!resumen.metas.length" class="empty">
-        Aún no tienes metas de ahorro. Créalas con «Configurar».
+        <template v-if="ciclo === 0">Aún no tienes metas de ahorro. Créalas con «Configurar».</template>
+        <template v-else>No había metas de ahorro en ese ciclo.</template>
       </p>
 
       <ul v-else class="list">
@@ -117,7 +121,7 @@ async function onRegistrarAporte(meta) {
               </p>
             </div>
             <button
-              v-if="meta.modoTransaccion === 'manual' && aportandoId !== meta.id"
+              v-if="ciclo === 0 && meta.modoTransaccion === 'manual' && aportandoId !== meta.id"
               class="btn-secondary btn-sm shrink-0"
               @click="onMostrarAporte(meta)"
             >
@@ -132,7 +136,7 @@ async function onRegistrarAporte(meta) {
                 <span class="font-medium text-ink-primary">{{
                   formatCurrency(periodoActual(meta).montoAhorradoReal)
                 }}</span>
-                este ciclo
+                {{ ciclo === 0 ? 'este ciclo' : 'en ese ciclo' }}
               </span>
               <span :class="ESTADO_INFO[periodoActual(meta).estado].clase">
                 {{ ESTADO_INFO[periodoActual(meta).estado].texto(periodoActual(meta)) }}
@@ -155,7 +159,12 @@ async function onRegistrarAporte(meta) {
           </div>
           <p v-else class="mt-3 flex items-center gap-1.5 text-[13px] text-ink-tertiary">
             <AppIcon name="clock" class="h-3.5 w-3.5 shrink-0" />
-            Este ciclo todavía no se ha evaluado (faltan obligatorios por pagar).
+            <template v-if="ciclo === 0">Este ciclo todavía no se ha evaluado (faltan obligatorios por pagar).</template>
+            <template v-else>
+              Ese ciclo no se evaluó<template v-if="meta.cicloConsultado.montoAhorradoReal">
+                · aportaste {{ formatCurrency(meta.cicloConsultado.montoAhorradoReal) }}</template
+              >.
+            </template>
           </p>
 
           <div v-if="aportandoId === meta.id" class="panel-sunken mt-3 flex flex-wrap items-center gap-2 p-3">

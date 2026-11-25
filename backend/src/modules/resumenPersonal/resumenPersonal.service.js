@@ -1,13 +1,15 @@
 import { prisma } from '../../config/prisma.js';
-import { calcularPeriodoActual, calcularPeriodoAnterior, dentroDelRango } from '../../utils/cicloPersonal.js';
+import { calcularPeriodoPorIndice, dentroDelRango } from '../../utils/cicloPersonal.js';
 import { asegurarInstanciasFijasPersonales } from '../../utils/instanciasFijasPersonales.js';
 import { gastosDeConsumo, ingresosReales } from '../../utils/consumo.js';
 
 const MESES_VENTANA = 6;
 
 function claveMes(fecha) {
+  // Fechas de calendario guardadas como medianoche UTC: leerlas en UTC (en
+  // hora de Colombia el día 1 caía en el mes anterior).
   const d = new Date(fecha);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
 }
 
 function sumarMontos(items) {
@@ -16,16 +18,27 @@ function sumarMontos(items) {
 
 /**
  * Resumen del panel personal: reemplaza el antiguo dashboard de Fase 6.
- * `disponible` es histórico (sin período) — "cuánto tengo ahora"; `neto` sí
- * usa el ciclo configurable (`Usuario.frecuenciaCicloPersonal`) para comparar
- * el período en curso contra el anterior. Ver Modulo_Panel_Personal_Ajustes.md
- * sección 5.
+ * `ciclo` es el índice relativo del ciclo consultado (0 = actual, -1 = el
+ * anterior…, Etapa 6), según `Usuario.frecuenciaCicloPersonal`:
+ * - `disponible` (caja) es histórico: en el actual, "cuánto tengo ahora";
+ *   en un ciclo pasado, el saldo al cierre de ese ciclo (igual la deuda de
+ *   tarjetas).
+ * - `neto` compara ese ciclo contra el anterior a él.
+ * - `compromisosPendientes`: en el actual, lo pendiente hasta el fin del
+ *   ciclo; en uno pasado, lo de ese ciclo que sigue sin pagar/recibir.
+ * - `serieMensual`: los últimos meses hasta el mes en que termina el ciclo;
+ *   `porCategoria`: solo ese ciclo.
+ * Ver Modulo_Panel_Personal_Ajustes.md secciones 5 y 7.4.
  */
-export async function obtenerResumenPersonal(usuarioActual) {
+export async function obtenerResumenPersonal(usuarioActual, indiceCiclo = 0) {
   const usuarioId = usuarioActual.id;
   await asegurarInstanciasFijasPersonales(usuarioId);
 
-  const finCiclo = calcularPeriodoActual(usuarioActual.frecuenciaCicloPersonal).fin;
+  const frecuencia = usuarioActual.frecuenciaCicloPersonal;
+  const periodoActual = calcularPeriodoPorIndice(frecuencia, indiceCiclo);
+  const periodoAnterior = calcularPeriodoPorIndice(frecuencia, indiceCiclo - 1);
+  const esActual = indiceCiclo === 0;
+  const finCiclo = periodoActual.fin;
   const [gastosPagados, ingresosRecibidos, gastosPendientes, ingresosPendientes, consumo, ingresosSinReintegros] = await Promise.all([
     // Vista de CAJA: todo lo que salió (incluye el 100 % de lo pagado del
     // hogar, los pagos de cuadre y de tarjeta).
@@ -56,15 +69,14 @@ export async function obtenerResumenPersonal(usuarioActual) {
   // Disponible (caja): lo que entró menos lo que salió. Una compra con
   // tarjeta de crédito no sale de la cuenta hasta que se paga la tarjeta
   // (ese pago es un gasto de origen pago_tarjeta, que sí cuenta).
+  // En un ciclo pasado: solo lo que había pasado hasta su último día.
+  const hastaCierre = (items) => (esActual ? items : items.filter((m) => new Date(m.fecha) <= finCiclo));
+  const gastosCaja = hastaCierre(gastosPagados);
   const conTarjeta = (g) => g.metodoPago?.tipo === 'tarjeta_credito';
-  const disponible = sumarMontos(ingresosRecibidos) - sumarMontos(gastosPagados.filter((g) => !conTarjeta(g)));
-  const cargosTarjeta = sumarMontos(gastosPagados.filter(conTarjeta));
-  const pagosTarjeta = sumarMontos(gastosPagados.filter((g) => g.origen === 'pago_tarjeta'));
+  const disponible = sumarMontos(hastaCierre(ingresosRecibidos)) - sumarMontos(gastosCaja.filter((g) => !conTarjeta(g)));
+  const cargosTarjeta = sumarMontos(gastosCaja.filter(conTarjeta));
+  const pagosTarjeta = sumarMontos(gastosCaja.filter((g) => g.origen === 'pago_tarjeta'));
   const deudaTarjetas = cargosTarjeta - pagosTarjeta;
-
-  const frecuencia = usuarioActual.frecuenciaCicloPersonal;
-  const periodoActual = calcularPeriodoActual(frecuencia);
-  const periodoAnterior = calcularPeriodoAnterior(frecuencia);
 
   // Neto del ciclo (consumo): ingresos reales menos lo que gastó, con su
   // parte del hogar y sin reintegros de cuadres.
@@ -79,8 +91,9 @@ export async function obtenerResumenPersonal(usuarioActual) {
     ? ((netoActual - netoAnterior) / Math.abs(netoAnterior)) * 100
     : null;
 
+  const delCiclo = (items) => (esActual ? items : items.filter((m) => dentroDelRango(m.fecha, periodoActual)));
   const compromisosPendientes = [
-    ...gastosPendientes.map((g) => ({
+    ...delCiclo(gastosPendientes).map((g) => ({
       tipo: 'gasto',
       id: g.id,
       monto: g.monto,
@@ -89,7 +102,7 @@ export async function obtenerResumenPersonal(usuarioActual) {
       categoria: g.categoria?.nombre ?? null,
       esObligatorio: g.esObligatorio,
     })),
-    ...ingresosPendientes.map((i) => ({
+    ...delCiclo(ingresosPendientes).map((i) => ({
       tipo: 'ingreso',
       id: i.id,
       monto: i.monto,
@@ -106,17 +119,16 @@ export async function obtenerResumenPersonal(usuarioActual) {
     const clave = claveMes(gasto.fecha);
     totalesPorMes.set(clave, (totalesPorMes.get(clave) ?? 0) + gasto.monto);
   }
-  const mesesConDatos = [...totalesPorMes.keys()].sort();
+  const mesCierre = claveMes(finCiclo);
+  const mesesConDatos = [...totalesPorMes.keys()].filter((m) => m <= mesCierre).sort();
   const ultimosMeses = mesesConDatos.slice(-MESES_VENTANA);
   const serieMensual = ultimosMeses.map((periodo) => ({
     periodo,
     total: totalesPorMes.get(periodo),
   }));
 
-  const desdeVentana = ultimosMeses[0];
-  const gastosVentana = desdeVentana ? consumo.filter((g) => claveMes(g.fecha) >= desdeVentana) : consumo;
   const totalesPorCategoria = new Map();
-  for (const gasto of gastosVentana) {
+  for (const gasto of consumo.filter((g) => dentroDelRango(g.fecha, periodoActual))) {
     const categoria = gasto.categoria || 'Sin categoría';
     totalesPorCategoria.set(categoria, (totalesPorCategoria.get(categoria) ?? 0) + gasto.monto);
   }
@@ -125,6 +137,7 @@ export async function obtenerResumenPersonal(usuarioActual) {
     .sort((a, b) => b.total - a.total);
 
   return {
+    ciclo: { indice: indiceCiclo, frecuencia, inicio: periodoActual.inicio, fin: periodoActual.fin },
     disponible,
     deudaTarjetas,
     neto: {

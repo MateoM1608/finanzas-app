@@ -7,6 +7,7 @@ import {
   eliminarLimite,
   obtenerResumenLimites,
 } from './limitesPersonales.service.js';
+import { leerCiclo } from '../../utils/cicloQuery.js';
 
 export const getLimites = asyncHandler(async (req, res) => {
   const limites = await listarLimites(req.usuario);
@@ -14,7 +15,7 @@ export const getLimites = asyncHandler(async (req, res) => {
 });
 
 export const getResumenLimites = asyncHandler(async (req, res) => {
-  const resumen = await obtenerResumenLimites(req.usuario);
+  const resumen = await obtenerResumenLimites(req.usuario, leerCiclo(req.query));
   res.json(resumen);
 });
 

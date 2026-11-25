@@ -54,6 +54,47 @@ const ahorrosRef = ref(null);
 const limitesRef = ref(null);
 const proximosRef = ref(null);
 
+// --- Navegación por ciclos (Etapa 6): 0 = el actual, -1 = el anterior… ---
+const CICLOS_HACIA_ATRAS = 24;
+const ciclo = ref(0);
+const infoCiclo = ref(null);
+// Al cambiar de ciclo, el filtro de Movimientos pasa a su rango cuando llega.
+let sincronizarFiltro = false;
+
+const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+const MESES_CORTOS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+const nombreCiclo = computed(() => {
+  const info = infoCiclo.value;
+  if (!info) return '';
+  const ini = new Date(info.inicio);
+  const fin = new Date(info.fin);
+  if (info.frecuencia === 'mensual') return `${MESES[ini.getUTCMonth()]} ${ini.getUTCFullYear()}`;
+  const mismoMes = ini.getUTCMonth() === fin.getUTCMonth();
+  const desde = mismoMes ? `${ini.getUTCDate()}` : `${ini.getUTCDate()} ${MESES_CORTOS[ini.getUTCMonth()]}`;
+  return `${desde}–${fin.getUTCDate()} ${MESES_CORTOS[fin.getUTCMonth()]} ${fin.getUTCFullYear()}`;
+});
+
+function moverCiclo(delta) {
+  const nuevo = Math.min(0, Math.max(-CICLOS_HACIA_ATRAS, ciclo.value + delta));
+  if (nuevo === ciclo.value) return;
+  sincronizarFiltro = true;
+  ciclo.value = nuevo;
+}
+
+function volverAlActual() {
+  sincronizarFiltro = true;
+  ciclo.value = 0;
+}
+
+function onCicloCargado(info) {
+  infoCiclo.value = info;
+  if (!sincronizarFiltro) return;
+  sincronizarFiltro = false;
+  verTodo.value = false;
+  filtroDesde.value = String(info.inicio).slice(0, 10);
+  filtroHasta.value = String(info.fin).slice(0, 10);
+}
+
 function recargarResumenes() {
   resumenRef.value?.recargar();
   proximosRef.value?.recargar();
@@ -494,8 +535,34 @@ function saldoCompra(compra) {
     </template>
 
     <div class="space-y-6">
-      <ResumenPersonalSection ref="resumenRef" />
-      <ProximosMesesSection ref="proximosRef" />
+      <!-- Ciclo que se está viendo -->
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <div class="flex items-center gap-1">
+          <button
+            type="button"
+            class="btn-icon"
+            aria-label="Ciclo anterior"
+            :disabled="ciclo <= -CICLOS_HACIA_ATRAS"
+            @click="moverCiclo(-1)"
+          >
+            <AppIcon name="chevronLeft" class="h-4 w-4" />
+          </button>
+          <span class="min-w-[10rem] text-center text-sm font-medium capitalize text-ink-primary" aria-live="polite">
+            {{ nombreCiclo || '…' }}
+          </span>
+          <button type="button" class="btn-icon" aria-label="Ciclo siguiente" :disabled="ciclo >= 0" @click="moverCiclo(1)">
+            <AppIcon name="chevronRight" class="h-4 w-4" />
+          </button>
+        </div>
+        <div v-if="ciclo < 0" class="flex flex-wrap items-center gap-2 rounded-xl border border-accent/30 bg-accent/5 px-3 py-1.5 text-[13px] text-ink-secondary">
+          <AppIcon name="clock" class="h-4 w-4 text-accent" />
+          Estás viendo un ciclo pasado.
+          <button type="button" class="btn-ghost btn-sm !py-0.5" @click="volverAlActual">Volver al actual</button>
+        </div>
+      </div>
+
+      <ResumenPersonalSection ref="resumenRef" :ciclo="ciclo" @ciclo="onCicloCargado" />
+      <ProximosMesesSection v-if="ciclo === 0" ref="proximosRef" />
 
       <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
         <section class="card card-pad">
@@ -506,12 +573,12 @@ function saldoCompra(compra) {
               </span>
               <div>
                 <h2 class="section-title">Límites</h2>
-                <p class="section-hint">Topes de gasto del ciclo actual.</p>
+                <p class="section-hint">{{ ciclo === 0 ? 'Topes de gasto del ciclo actual.' : 'Cómo te fue con tus topes en ese ciclo.' }}</p>
               </div>
             </div>
             <button type="button" class="btn-ghost btn-sm" @click="abrirConfig('limites')">Configurar</button>
           </div>
-          <LimitesPersonalesSection ref="limitesRef" />
+          <LimitesPersonalesSection ref="limitesRef" :ciclo="ciclo" />
         </section>
 
         <section class="card card-pad">
@@ -522,12 +589,12 @@ function saldoCompra(compra) {
               </span>
               <div>
                 <h2 class="section-title">Ahorros</h2>
-                <p class="section-hint">Metas y aportes del ciclo.</p>
+                <p class="section-hint">{{ ciclo === 0 ? 'Metas y aportes del ciclo.' : 'Metas y aportes de ese ciclo.' }}</p>
               </div>
             </div>
             <button type="button" class="btn-ghost btn-sm" @click="abrirConfig('ahorros')">Configurar</button>
           </div>
-          <AhorrosPersonalesSection ref="ahorrosRef" />
+          <AhorrosPersonalesSection ref="ahorrosRef" :ciclo="ciclo" />
         </section>
       </div>
 

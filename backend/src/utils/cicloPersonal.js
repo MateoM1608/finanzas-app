@@ -67,3 +67,18 @@ export function dentroDelRango(fecha, rango) {
   const f = inicioDeDiaUTC(new Date(fecha));
   return f >= rango.inicio && f <= rango.fin;
 }
+
+/** Cuántos ciclos hacia atrás se pueden consultar (Etapa 6). */
+export const CICLOS_HACIA_ATRAS = 24;
+
+/**
+ * Período por índice relativo: 0 = el actual, -1 = el anterior, -2… Solo
+ * hacia atrás: el futuro vive en "Mis próximos meses".
+ */
+export function calcularPeriodoPorIndice(frecuencia, indice = 0, fechaRef = hoyUTC()) {
+  let periodo = calcularPeriodo(frecuencia, fechaRef);
+  for (let i = 0; i > indice; i -= 1) {
+    periodo = calcularPeriodoAnterior(frecuencia, periodo.inicio);
+  }
+  return periodo;
+}

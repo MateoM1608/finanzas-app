@@ -55,19 +55,16 @@ export async function obtenerEvaluacionActual(limite, usuarioId, frecuencia) {
 }
 
 /**
- * Período anterior: el único "pasado" alcanzable hoy (la navegación histórica
- * genérica es la Etapa 6). Se snapshotea la primera vez que se consulta, para
- * no reescribir el historial si el usuario cambia reglaValor más adelante.
+ * Un período pasado: se snapshotea la primera vez que se consulta, para no
+ * reescribir el historial si el usuario cambia reglaValor más adelante.
  */
-export async function obtenerEvaluacionAnterior(limite, usuarioId, frecuencia) {
-  const rango = calcularPeriodoAnterior(frecuencia, hoyUTC());
-
+export async function obtenerEvaluacionPasada(limite, rango) {
   const existente = await prisma.limiteEvaluadoPeriodo.findUnique({
     where: { limiteId_periodoInicio: { limiteId: limite.id, periodoInicio: rango.inicio } },
   });
   if (existente) return existente;
 
-  const evaluacion = await calcularEvaluacion(limite, usuarioId, rango);
+  const evaluacion = await calcularEvaluacion(limite, limite.usuarioId, rango);
   try {
     return await prisma.limiteEvaluadoPeriodo.create({
       data: { limiteId: limite.id, ...evaluacion },
@@ -79,4 +76,9 @@ export async function obtenerEvaluacionAnterior(limite, usuarioId, frecuencia) {
       where: { limiteId_periodoInicio: { limiteId: limite.id, periodoInicio: rango.inicio } },
     });
   }
+}
+
+/** El período anterior al actual (snapshot, como cualquier período pasado). */
+export function obtenerEvaluacionAnterior(limite, usuarioId, frecuencia) {
+  return obtenerEvaluacionPasada({ ...limite, usuarioId }, calcularPeriodoAnterior(frecuencia, hoyUTC()));
 }

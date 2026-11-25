@@ -4,8 +4,8 @@ export function listarAhorros() {
   return api.get('/api/ahorros-personales').then((r) => r.data.ahorros);
 }
 
-export function obtenerResumenAhorros() {
-  return api.get('/api/ahorros-personales/resumen').then((r) => r.data);
+export function obtenerResumenAhorros(ciclo = 0) {
+  return api.get('/api/ahorros-personales/resumen', { params: ciclo ? { ciclo } : {} }).then((r) => r.data);
 }
 
 export function crearAhorro(payload) {

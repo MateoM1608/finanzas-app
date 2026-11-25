@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, watch } from 'vue';
 import { Bar, Doughnut } from 'vue-chartjs';
 import { obtenerResumenPersonal } from '../../api/resumenPersonal.js';
 import { extractErrorMessage } from '../../api/client.js';
@@ -15,22 +15,29 @@ function formatPeriodo(periodo) {
   return `${MESES_CORTOS[Number(mes) - 1]} ${anio.slice(2)}`;
 }
 
+// ciclo: 0 = el actual, -1 = el anterior… (navegación de Panel personal).
+const props = defineProps({ ciclo: { type: Number, default: 0 } });
+// Avisa al panel el rango del ciclo cargado (para el título y el filtro de movimientos).
+const emit = defineEmits(['ciclo']);
+
 const loading = ref(true);
 const error = ref('');
 const resumen = ref(null);
+const esActual = computed(() => props.ciclo === 0);
 
 async function cargar() {
   loading.value = true;
   error.value = '';
   try {
-    resumen.value = await obtenerResumenPersonal();
+    resumen.value = await obtenerResumenPersonal(props.ciclo);
+    emit('ciclo', resumen.value.ciclo);
   } catch (e) {
     error.value = extractErrorMessage(e);
   } finally {
     loading.value = false;
   }
 }
-onMounted(cargar);
+watch(() => props.ciclo, cargar, { immediate: true });
 defineExpose({ recargar: cargar });
 
 const { paleta, opcionesBarras, opcionesDona } = useChartTheme();
@@ -99,7 +106,7 @@ const porCategoriaChart = computed(() => {
         <section class="card card-pad relative overflow-hidden">
           <div class="pointer-events-none absolute inset-x-0 top-0 h-1 bg-accent" aria-hidden="true" />
           <div class="flex items-center justify-between">
-            <p class="stat-label">Disponible</p>
+            <p class="stat-label">{{ esActual ? 'Disponible' : 'Disponible al cierre' }}</p>
             <span class="grid h-8 w-8 place-items-center rounded-lg bg-accent/10 text-accent">
               <AppIcon name="wallet" class="h-4 w-4" />
             </span>
@@ -111,21 +118,22 @@ const porCategoriaChart = computed(() => {
             {{ formatCurrency(resumen.disponible) }}
           </p>
           <p class="mt-2.5 text-xs text-ink-tertiary">
-            Lo que entró menos lo que salió. Las compras con tarjeta de crédito cuentan al pagar la tarjeta.
+            <template v-if="esActual">Lo que entró menos lo que salió. Las compras con tarjeta de crédito cuentan al pagar la tarjeta.</template>
+            <template v-else>Lo que tenías el último día de ese ciclo.</template>
           </p>
           <router-link
             v-if="resumen.deudaTarjetas > 0"
             :to="{ name: 'tarjetas' }"
             class="mt-2 flex items-center justify-between gap-2 rounded-lg text-[13px] hover:underline"
           >
-            <span class="text-ink-secondary">Deuda de tarjetas</span>
+            <span class="text-ink-secondary">{{ esActual ? 'Deuda de tarjetas' : 'Deuda de tarjetas al cierre' }}</span>
             <span class="font-semibold text-warning">{{ formatCurrency(resumen.deudaTarjetas) }}</span>
           </router-link>
         </section>
 
         <section class="card card-pad">
           <div class="flex items-center justify-between">
-            <p class="stat-label">Neto de este ciclo</p>
+            <p class="stat-label">{{ esActual ? 'Neto de este ciclo' : 'Neto del ciclo' }}</p>
             <span
               v-if="resumen.neto.variacionPct != null"
               class="badge"
@@ -148,7 +156,7 @@ const porCategoriaChart = computed(() => {
 
         <section class="card card-pad">
           <div class="flex items-center justify-between">
-            <p class="stat-label">Pendientes</p>
+            <p class="stat-label">{{ esActual ? 'Pendientes' : 'Quedaron pendientes' }}</p>
             <span class="badge-neutral">{{ pendientes.total }}</span>
           </div>
           <div class="mt-3 space-y-1.5">
@@ -172,12 +180,14 @@ const porCategoriaChart = computed(() => {
         <section class="card card-pad xl:col-span-2 flex flex-col">
           <div class="mb-3">
             <h2 class="section-title">Compromisos pendientes</h2>
-            <p class="section-hint">No afectan tu disponible hasta que los marques.</p>
+            <p class="section-hint">
+              {{ esActual ? 'No afectan tu disponible hasta que los marques.' : 'Los de ese ciclo que siguen sin pagar o sin recibir.' }}
+            </p>
           </div>
           <div v-if="!resumen.compromisosPendientes.length" class="flex-1 grid place-items-center">
             <div class="empty">
               <AppIcon name="check" class="mx-auto mb-2 h-6 w-6 text-positive" />
-              Estás al día: no tienes pendientes.
+              {{ esActual ? 'Estás al día: no tienes pendientes.' : 'Nada de ese ciclo quedó pendiente.' }}
             </div>
           </div>
           <ul v-else class="list -my-1 max-h-[320px] overflow-y-auto pr-1">
@@ -211,7 +221,9 @@ const porCategoriaChart = computed(() => {
           <div class="flex flex-wrap items-start justify-between gap-3 mb-4">
             <div>
               <h2 class="section-title">Gastos</h2>
-              <p class="section-hint">Lo que gastaste tú: tu parte del hogar incluida, últimos meses.</p>
+              <p class="section-hint">
+                Lo que gastaste tú, con tu parte del hogar: {{ vistaGrafico === 'mensual' ? 'últimos meses' : 'en este ciclo' }}.
+              </p>
             </div>
             <div v-if="resumen.serieMensual.length" class="tabs" role="tablist" aria-label="Vista del gráfico">
               <button
@@ -245,7 +257,10 @@ const porCategoriaChart = computed(() => {
           </div>
           <div v-else class="h-60">
             <Bar v-if="vistaGrafico === 'mensual'" :data="serieMensualChart" :options="opcionesMensual" />
-            <Doughnut v-else :data="porCategoriaChart" :options="opcionesCategoria" />
+            <template v-else>
+              <Doughnut v-if="resumen.porCategoria.length" :data="porCategoriaChart" :options="opcionesCategoria" />
+              <div v-else class="empty h-full grid place-items-center">No hay gastos en este ciclo.</div>
+            </template>
           </div>
         </section>
       </div>

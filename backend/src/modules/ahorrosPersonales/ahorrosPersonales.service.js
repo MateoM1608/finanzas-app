@@ -1,10 +1,15 @@
 import { prisma } from '../../config/prisma.js';
 import { HttpError } from '../../middleware/errorHandler.js';
-import { calcularPeriodoActual, calcularPeriodoAnterior, dentroDelRango } from '../../utils/cicloPersonal.js';
+import { calcularPeriodoActual, calcularPeriodoAnterior, calcularPeriodoPorIndice, dentroDelRango } from '../../utils/cicloPersonal.js';
 import { evaluarPeriodoSiCorresponde } from '../../utils/evaluacionAhorro.js';
 import { hoyUTC } from '../../utils/fechas.js';
 
 const PERIODOS_VENTANA = 6;
+
+// Semáforo: amarillo (por debajo del pronóstico), azul (justo), verde (por encima).
+function estadoSemaforo(ahorrado, sugerido) {
+  return ahorrado < sugerido ? 'amarillo' : ahorrado === sugerido ? 'azul' : 'verde';
+}
 
 function sumarMontos(items) {
   return items.reduce((acc, i) => acc + i.monto, 0);
@@ -74,9 +79,17 @@ export async function registrarAporte(usuarioActual, ahorroId, data) {
  * calcula en vivo sumando AhorroTransaccion dentro del rango de cada
  * período — no se guarda como columna, para no tener que mantenerlo
  * sincronizado a mano cada vez que entra un aporte nuevo.
+ *
+ * `indiceCiclo` (Etapa 6): 0 = el actual, -1 = el anterior… Cada meta trae
+ * `cicloConsultado` (su pronóstico de ese ciclo si se evaluó, y lo aportado
+ * en él) y, en un ciclo pasado, el total ahorrado al cierre; las metas
+ * creadas después de ese ciclo no aparecen.
  */
-export async function obtenerResumenAhorros(usuarioActual) {
+export async function obtenerResumenAhorros(usuarioActual, indiceCiclo = 0) {
   const usuarioId = usuarioActual.id;
+  const rangoCiclo = calcularPeriodoPorIndice(usuarioActual.frecuenciaCicloPersonal, indiceCiclo);
+  const esActual = indiceCiclo === 0;
+  const finDelDia = new Date(rangoCiclo.fin.getTime() + 24 * 60 * 60 * 1000);
   // El anterior primero: un período sin obligatorios solo se evalúa una vez
   // terminado, y sin esto nadie lo dispararía (no hay cron).
   await evaluarPeriodoSiCorresponde(
@@ -86,7 +99,7 @@ export async function obtenerResumenAhorros(usuarioActual) {
   await evaluarPeriodoSiCorresponde(usuarioId, hoyUTC());
 
   const ahorros = await prisma.ahorroPersonal.findMany({
-    where: { usuarioId },
+    where: { usuarioId, ...(esActual ? {} : { creadoEn: { lt: finDelDia } }) },
     include: {
       categoria: true,
       transacciones: true,
@@ -99,14 +112,22 @@ export async function obtenerResumenAhorros(usuarioActual) {
     orderBy: { creadoEn: 'asc' },
   });
 
+  // Pronóstico de cada meta para el ciclo consultado (si ese período se evaluó).
+  const pronosticosCiclo = await prisma.ahorroPronostico.findMany({
+    where: { periodo: { usuarioId, periodoInicio: rangoCiclo.inicio } },
+  });
+  const pronosticoDe = new Map(pronosticosCiclo.map((p) => [p.ahorroId, p]));
+
   const metas = ahorros.map((ahorro) => {
-    const totalAhorrado = sumarMontos(ahorro.transacciones);
+    const transacciones = esActual ? ahorro.transacciones : ahorro.transacciones.filter((t) => new Date(t.fecha) <= rangoCiclo.fin);
+    const totalAhorrado = sumarMontos(transacciones);
+    const aportadoCiclo = sumarMontos(ahorro.transacciones.filter((t) => dentroDelRango(t.fecha, rangoCiclo)));
+    const pronostico = pronosticoDe.get(ahorro.id) ?? null;
 
     const periodos = ahorro.pronosticos.map((p) => {
       const rango = { inicio: p.periodo.periodoInicio, fin: p.periodo.periodoFin };
       const montoAhorradoReal = sumarMontos(ahorro.transacciones.filter((t) => dentroDelRango(t.fecha, rango)));
-      const estado =
-        montoAhorradoReal < p.montoSugerido ? 'amarillo' : montoAhorradoReal === p.montoSugerido ? 'azul' : 'verde';
+      const estado = estadoSemaforo(montoAhorradoReal, p.montoSugerido);
 
       return {
         periodoInicio: p.periodo.periodoInicio,
@@ -130,12 +151,22 @@ export async function obtenerResumenAhorros(usuarioActual) {
       totalAhorrado,
       progresoPct: ahorro.montoMetaTotal ? (totalAhorrado / ahorro.montoMetaTotal) * 100 : null,
       periodos,
+      cicloConsultado: {
+        montoAhorradoReal: aportadoCiclo,
+        montoSugerido: pronostico?.montoSugerido ?? null,
+        estado: pronostico ? estadoSemaforo(aportadoCiclo, pronostico.montoSugerido) : null,
+      },
     };
   });
 
   const totalAhorradoAcumulado = sumarMontos(
-    ahorros.filter((a) => a.activo).flatMap((a) => a.transacciones),
+    ahorros
+      .filter((a) => a.activo)
+      .flatMap((a) => a.transacciones)
+      .filter((t) => esActual || new Date(t.fecha) <= rangoCiclo.fin),
   );
+  const ciclo = { indice: indiceCiclo, inicio: rangoCiclo.inicio, fin: rangoCiclo.fin };
+  if (!esActual) return { ciclo, totalAhorradoAcumulado, metas, alertaSobregasto: false };
 
   const frecuencia = usuarioActual.frecuenciaCicloPersonal;
   const periodoActualRango = calcularPeriodoActual(frecuencia, hoyUTC());
@@ -153,5 +184,5 @@ export async function obtenerResumenAhorros(usuarioActual) {
       periodoActualEvaluado.gastosNoObligatoriosPeriodo + sumaPronosticos > periodoActualEvaluado.baseCalculoAhorro;
   }
 
-  return { totalAhorradoAcumulado, metas, alertaSobregasto };
+  return { ciclo, totalAhorradoAcumulado, metas, alertaSobregasto };
 }

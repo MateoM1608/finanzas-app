@@ -1,5 +1,6 @@
 import { api } from './client.js';
 
-export function obtenerResumenPersonal() {
-  return api.get('/api/resumen-personal').then((r) => r.data);
+// ciclo: 0 = el actual, -1 = el anterior…
+export function obtenerResumenPersonal(ciclo = 0) {
+  return api.get('/api/resumen-personal', { params: ciclo ? { ciclo } : {} }).then((r) => r.data);
 }

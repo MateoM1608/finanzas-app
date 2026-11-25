@@ -8,6 +8,7 @@ import {
   registrarAporte,
   obtenerResumenAhorros,
 } from './ahorrosPersonales.service.js';
+import { leerCiclo } from '../../utils/cicloQuery.js';
 
 export const getAhorros = asyncHandler(async (req, res) => {
   const ahorros = await listarAhorros(req.usuario);
@@ -15,7 +16,7 @@ export const getAhorros = asyncHandler(async (req, res) => {
 });
 
 export const getResumenAhorros = asyncHandler(async (req, res) => {
-  const resumen = await obtenerResumenAhorros(req.usuario);
+  const resumen = await obtenerResumenAhorros(req.usuario, leerCiclo(req.query));
   res.json(resumen);
 });
 

@@ -4,8 +4,8 @@ export function listarLimites() {
   return api.get('/api/limites-personales').then((r) => r.data.limites);
 }
 
-export function obtenerResumenLimites() {
-  return api.get('/api/limites-personales/resumen').then((r) => r.data);
+export function obtenerResumenLimites(ciclo = 0) {
+  return api.get('/api/limites-personales/resumen', { params: ciclo ? { ciclo } : {} }).then((r) => r.data);
 }
 
 export function crearLimite(payload) {
