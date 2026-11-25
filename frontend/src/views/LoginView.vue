@@ -50,7 +50,7 @@ async function onSubmit() {
       </div>
 
       <div class="max-w-md">
-        <h2 class="text-display text-ink-primary">Tu dinero y el de tu hogar, <span class="marker">en claro.</span></h2>
+        <h2 class="text-display text-ink-primary">Tu dinero y el de tu hogar, <span class="marker">sin enredos.</span></h2>
         <p class="mt-4 text-[15px] leading-relaxed text-ink-secondary">
           Lo personal sigue siendo privado; lo compartido se liquida sin cuentas a mano.
         </p>
