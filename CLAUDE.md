@@ -10,7 +10,7 @@ App web (con APK futuro) para manejar finanzas personales y de pareja: panel pri
 - **Frontend web:** Vue 3 + Vite, responsive/mobile-first (el APK con Capacitor + Ionic Vue viene en una fase posterior, reutilizando este mismo código)
 - **Auth:** JWT o cookie de sesión de larga duración (~1 año, sin expiración corta) + bcrypt
 - **Automatización:** n8n (ya instalado en el VPS, servicio aparte) — bot de Telegram con IA (Claude, vía tool calling) para registrar gastos/ingresos y responder preguntas de asesoría usando datos reales
-- **Infraestructura:** frontend y backend en Vercel — un solo repo, dos proyectos (carpeta raíz `frontend` y `backend`; el backend corre Express como función serverless en `iad1`, EE. UU.). El frontend reenvía `/api/*` al backend con un rewrite (`frontend/vercel.json`), así el navegador solo ve el dominio del frontend y la cookie de sesión `sameSite: lax` funciona. PostgreSQL sigue en la VPS Hostinger (n8n también vive ahí). Las migraciones NO corren en el build: se aplican a mano (`npx prisma migrate deploy`), avisando antes porque hoy solo hay una base
+- **Infraestructura:** frontend y backend en Vercel — un solo repo, dos proyectos (carpeta raíz `frontend` y `backend`; el backend corre Express como función serverless en `iad1`, EE. UU.). El frontend reenvía `/api/*` al backend con un rewrite (`frontend/vercel.json`), así el navegador solo ve el dominio del frontend y la cookie de sesión `sameSite: lax` funciona. Dos ambientes (desde 2026-12-08): **pruebas** (rama `despliegue-vercel` → proyectos `finanzas-frontend-pruebas`/`finanzas-backend-pruebas`, base PostgreSQL en la VPS Hostinger, donde también vive n8n) y **producción** (rama `master` → `finanzas-frontend`/`finanzas-backend`, base en Supabase, us-east-1, por el pooler). Cada proyecto construye solo desde su rama (*ignored build step*) y cada frontend reenvía `/api` al backend de su ambiente con la variable `BACKEND_URL`. Las migraciones NO corren en el build: se aplican a mano, avisando antes — pruebas con `npx prisma migrate deploy` (`backend/.env`) y producción con `npm run migrar-produccion -- --aplicar` (`backend/.env.produccion`, ignorado por git)
 
 ## Reglas de negocio clave
 
@@ -85,12 +85,10 @@ Detalle de endpoints y decisiones de diseño de cada fase: `backend/README.md` y
 
 ## Mejoras técnicas pendientes (backlog)
 
-- **Obligatorio antes de pasar a producción (con usuarios reales):**
-  - **SSL en Postgres:** hoy la conexión desde Vercel va con `sslmode=disable` (decisión temporal de desarrollo). Configurar certificado en el Postgres de la VPS y pasar a `sslmode=require` (o `verify-full`).
-  - **Separar una base de desarrollo** de la productiva (hoy `finanzas-db` es la única y se trata como desarrollo).
-  - **Cerrar el puerto público de Postgres** (hoy expuesto en la IP de la VPS para que Vercel llegue): restringir por firewall o usar túnel/pooler en vez de exponerlo a internet.
-  - **Copias de seguridad** automáticas de la base (y probar restaurarlas).
+- **Producción (2026-12-08):** la base productiva ya está separada, en Supabase (conexión cifrada, sin puerto propio expuesto, RLS en todas las tablas y sin permisos para `anon`/`authenticated`). Pendiente:
+  - **Copias de seguridad** de Supabase (revisar qué cubre el plan y probar restaurar) — y de la VPS si pruebas guarda algo que importe.
   - Decidir si el registro sigue abierto a cualquiera o solo por invitación.
+  - **Pruebas (VPS)** sigue con `sslmode=disable` y el puerto de Postgres expuesto: aceptable para datos de prueba; cuando se borren los datos reales que quedaron ahí, no guardar nada sensible en esa base.
 
 - **Índices de base de datos:** los cuadres ya filtran por índices explícitos (`[hogarId, estado]` en cuadres y gastos variables, `[conceptoId, estado]` en cuotas); revisar el resto de filtros frecuentes y que tengan índice explícito en `prisma/schema.prisma`, no solo los que Prisma crea automáticamente por relaciones/unique constraints.
 - **Badges/estado repetidos:** `PanelVariablesSection.vue` y `CuentasFijasHogarSection.vue` resuelven por su lado el badge de estado (sin cuadrar/en cuadre/cuadrado) — extraer si aparece una tercera vista con el mismo patrón.
@@ -99,7 +97,7 @@ Detalle de endpoints y decisiones de diseño de cada fase: `backend/README.md` y
 
 ## Notas de la base de datos de desarrollo
 
-`DATABASE_URL` apunta a la única base existente (`finanzas-db` en el VPS) — no hay una base de test separada todavía. Mientras el proyecto esté en desarrollo, esta base se trata como base de desarrollo (se puede resetear/limpiar libremente); una vez haya usuarios reales, habrá que separar una base productiva antes de seguir haciendo este tipo de limpiezas directas. Al cierre de la Fase 5 la base fue reseteada por completo (`prisma migrate reset`) — arranca vacía, sin usuarios/hogares de prueba. El 2026-11-25, tras la entrega B, se volvió a vaciar (TRUNCATE de todas las tablas, conservando estructura e historial de migraciones): arranca sin ningún usuario.
+Desde 2026-12-08 hay dos bases. `backend/.env` apunta a la de **pruebas** (`finanzas-db` en la VPS): se puede resetear/limpiar libremente y es la que usan las pruebas con usuarios temporales. `backend/.env.produccion` apunta a **producción** (Supabase), que nació vacía el 2026-12-08 (sin copiar nada de la VPS): ahí no se hacen pruebas ni limpiezas directas. Historia de la base de pruebas: Al cierre de la Fase 5 la base fue reseteada por completo (`prisma migrate reset`) — arranca vacía, sin usuarios/hogares de prueba. El 2026-11-25, tras la entrega B, se volvió a vaciar (TRUNCATE de todas las tablas, conservando estructura e historial de migraciones): arranca sin ningún usuario.
 
 ## Convenciones de trabajo
 
@@ -107,4 +105,5 @@ Detalle de endpoints y decisiones de diseño de cada fase: `backend/README.md` y
 - Todo dato personal debe quedar estrictamente scopeado por `usuario_id` a nivel de query — nunca filtrar a nivel de aplicación solamente.
 - Moneda: pesos colombianos (COP), sin decimales.
 - Antes de escribir código de una fase nueva, resume tu plan y espera confirmación.
+- Flujo de publicación: todo se trabaja y publica en `despliegue-vercel` (pruebas) y se verifica ahí; `master` (producción) solo recibe la fusión cuando la dirección la aprueba. Si hay migración: se aplica primero en pruebas y, antes de fusionar, en producción (`npm run migrar-produccion -- --aplicar`, que además activa RLS en las tablas nuevas). Una migración que quita columnas va después de publicar el código que ya no las usa, en cada ambiente.
 

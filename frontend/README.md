@@ -12,7 +12,7 @@ Requiere el backend corriendo (ver `../backend/README.md`) — la autenticación
 
 ## Despliegue en Vercel
 
-Proyecto de Vercel con carpeta raíz `frontend`, preset Vite. `vercel.json` hace dos cosas: reenvía `/api/*` al proyecto del backend (así el navegador solo habla con el dominio del frontend y la cookie de sesión, `sameSite: lax`, se envía sin problemas de dominio cruzado), y sirve `index.html` para cualquier otra ruta (fallback SPA del modo `history` de vue-router — recargar `/personal` no da 404). El rewrite de `/api` lleva `x-vercel-enable-rewrite-caching: 0` para que el CDN nunca cachee respuestas de la API. En producción `VITE_API_URL` va vacío (rutas relativas).
+Proyecto de Vercel con carpeta raíz `frontend`, preset Vite. `vercel.json` (con `routes`) hace dos cosas: reenvía `/api/*` a `${BACKEND_URL}/api/*` — la variable `BACKEND_URL` de cada proyecto dice a qué backend va (`finanzas-frontend` → `https://finanzas-backend-alpha.vercel.app`, producción, rama `master`; `finanzas-frontend-pruebas` → `https://finanzas-backend-pruebas.vercel.app`, rama `despliegue-vercel`) (así el navegador solo habla con el dominio del frontend y la cookie de sesión, `sameSite: lax`, se envía sin problemas de dominio cruzado), y sirve `index.html` para cualquier otra ruta (fallback SPA del modo `history` de vue-router — recargar `/personal` no da 404). El backend responde con `Cache-Control: no-store`, así que el CDN no guarda respuestas de la API. En producción `VITE_API_URL` va vacío (rutas relativas).
 
 ## Diseño
 

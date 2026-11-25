@@ -13,6 +13,7 @@
     "recalcular-historiales": "node scripts/recalcularHistorialesPersonales.js",
     "sincronizar-movimientos-hogar": "node scripts/sincronizarMovimientosHogar.js",
     "ahorros-en-caja": "node scripts/ahorrosEnCaja.js",
+    "migrar-produccion": "node scripts/migrarProduccion.js",
     "postinstall": "prisma generate"
   },
   "dependencies": {
