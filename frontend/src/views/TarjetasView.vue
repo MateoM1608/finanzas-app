@@ -9,11 +9,13 @@ import AppLayout from '../components/AppLayout.vue';
 import AppIcon from '../components/AppIcon.vue';
 import AlertError from '../components/AlertError.vue';
 import FormField from '../components/FormField.vue';
+import ExtractosSection from '../components/tarjetas/ExtractosSection.vue';
 
 /**
  * Tarjetas y cuentas: informe de cada método de pago (privado). Para una
  * tarjeta de crédito: deuda, compras a cuotas vivas, próximos cargos con
- * capital e intereses, y pagos hechos a la tarjeta.
+ * capital e intereses, pagos hechos a la tarjeta y la revisión de sus
+ * extractos contra el banco.
  */
 const route = useRoute();
 const router = useRouter();
@@ -85,6 +87,16 @@ function abrirPago() {
   pago.fecha = hoyISO();
   pago.desdeId = '';
   pagando.value = true;
+}
+
+// Un ajuste de extracto puede crear o cambiar cargos: refresca deuda e informe.
+async function recargar() {
+  try {
+    metodos.value = await listarMetodosPago();
+    await cargarInforme();
+  } catch (e) {
+    error.value = extractErrorMessage(e);
+  }
 }
 
 async function onRegistrarPago() {
@@ -201,6 +213,8 @@ async function onRegistrarPago() {
               </button>
             </div>
           </form>
+
+          <ExtractosSection v-if="esTarjeta && metodo" :metodo="metodo" @cambio="recargar" />
 
           <div v-if="esTarjeta" class="grid grid-cols-1 gap-6 xl:grid-cols-2">
             <!-- Compras a cuotas vivas -->

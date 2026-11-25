@@ -87,6 +87,10 @@ export async function eliminarGastoPersonal(usuarioId, gastoId) {
   if (gasto.origenCuadreId) {
     throw new HttpError(409, 'Este gasto viene de un cuadre del hogar ya cerrado — no se puede eliminar');
   }
+  const deExtracto = await prisma.extractoAjuste.count({ where: { gastoId, tipo: { in: ['cargo', 'no_reconocido'] } } });
+  if (deExtracto) {
+    throw new HttpError(409, 'Este cargo viene de la revisión de un extracto — quítalo desde Tarjetas → Extractos');
+  }
 
   await prisma.gastoPersonal.delete({ where: { id: gastoId } });
 }

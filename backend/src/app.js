@@ -21,6 +21,7 @@ import { comprasCuotasPersonalesRouter } from './modules/comprasCuotasPersonales
 import { comprasCuotasHogarRouter } from './modules/comprasCuotasHogar/comprasCuotasHogar.routes.js';
 import { proyeccionPersonalRouter } from './modules/proyeccionPersonal/proyeccionPersonal.routes.js';
 import { informeMetodosRouter } from './modules/informeMetodos/informeMetodos.routes.js';
+import { extractosTarjetaRouter } from './modules/extractosTarjeta/extractosTarjeta.routes.js';
 import { limitesPersonalesRouter } from './modules/limitesPersonales/limitesPersonales.routes.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 
@@ -58,6 +59,7 @@ app.use('/api/compras-cuotas-personales', comprasCuotasPersonalesRouter);
 app.use('/api/compras-cuotas-hogar', comprasCuotasHogarRouter);
 app.use('/api/proyeccion-personal', proyeccionPersonalRouter);
 app.use('/api/informe-metodos', informeMetodosRouter);
+app.use('/api/extractos-tarjeta', extractosTarjetaRouter);
 
 app.use(notFoundHandler);
 app.use(errorHandler);

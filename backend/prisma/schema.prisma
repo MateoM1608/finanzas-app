@@ -140,6 +140,7 @@ model Usuario {
   comprasCuotasPersonales       CompraCuotasPersonal[]
   comprasCuotasHogarComoPagador CompraCuotasHogar[]               @relation("compraHogarPagador")
   balancesCuadre                CuadreBalanceMiembro[]
+  extractosTarjeta              ExtractoTarjeta[]
 
   @@index([hogarId])
   @@map("usuarios")
@@ -210,6 +211,7 @@ model MetodoPagoPersonal {
   pagosCuentasHogar GastoRecurrenteInstancia[]
   pagosGastosHogar  GastoVariablePareja[]
   pagosRecibidos    GastoPersonal[]            @relation("pagoTarjeta")
+  extractos         ExtractoTarjeta[]
 
   @@index([usuarioId])
   @@map("metodos_pago_personales")
@@ -321,6 +323,7 @@ model GastoPersonal {
   origenCuadre   Cuadre?                   @relation(fields: [origenCuadreId], references: [id])
   metodoPago     MetodoPagoPersonal?       @relation(fields: [metodoPagoId], references: [id])
   categoria      CategoriaPersonal?        @relation(fields: [categoriaId], references: [id])
+  ajustesExtracto ExtractoAjuste[]
 
   @@unique([origenConfigId, fecha])
   @@unique([origenCuadreId, usuarioId, fecha])
@@ -771,4 +774,93 @@ model CompraCuotasHogar {
 
   @@index([hogarId])
   @@map("compras_cuotas_hogar")
+}
+
+// ---------------------------------------------------------------------------
+// Extractos de tarjeta (entrega C2): revisión del extracto del banco contra
+// lo que la app esperaba en cada ciclo de corte. Privado del usuario.
+// ---------------------------------------------------------------------------
+
+enum EstadoExtracto {
+  pendiente
+  revisado
+}
+
+enum TipoAjusteExtracto {
+  correccion    // el banco cobró otro valor por un cargo que la app tenía
+  cargo         // cargo que la app no tenía (interés, cuota de manejo…): crea un gasto
+  no_reconocido // cargo del banco que el usuario no reconoce: reclamo
+  no_cobrado    // la app lo esperaba y el banco no lo cobró en este extracto
+}
+
+enum ConceptoCargoExtracto {
+  interes
+  mora
+  cuota_manejo
+  seguro
+  comision
+  avance
+  otro
+}
+
+enum EstadoReclamo {
+  pendiente
+  reversado // el banco lo devolvió
+  aceptado  // sí era un cargo válido: se registró como gasto
+}
+
+// Quién propuso el ajuste: el usuario a mano, o la lectura del PDF con IA
+// (C3, futura) que el usuario confirmó.
+enum OrigenAjusteExtracto {
+  manual
+  ia
+}
+
+// Un extracto por tarjeta y fecha de corte. Ciclo: (corte anterior, corte].
+model ExtractoTarjeta {
+  id            String         @id @default(uuid())
+  usuarioId     String         @map("usuario_id")
+  metodoPagoId  String         @map("metodo_pago_id")
+  fechaCorte    DateTime       @map("fecha_corte")
+  fechaPago     DateTime?      @map("fecha_pago")
+  // Lo que el banco cobra en el extracto (el usuario lo copia del PDF).
+  totalBanco    Int?           @map("total_banco")
+  estado        EstadoExtracto @default(pendiente)
+  // Lo que la app esperaba al marcarlo revisado (no se reescribe después).
+  totalEsperado Int?           @map("total_esperado")
+  notas         String?
+  revisadoEn    DateTime?      @map("revisado_en")
+  creadoEn      DateTime       @default(now()) @map("creado_en")
+
+  usuario    Usuario            @relation(fields: [usuarioId], references: [id])
+  metodoPago MetodoPagoPersonal @relation(fields: [metodoPagoId], references: [id])
+  ajustes    ExtractoAjuste[]
+
+  @@unique([metodoPagoId, fechaCorte])
+  @@index([usuarioId])
+  @@map("extractos_tarjeta")
+}
+
+model ExtractoAjuste {
+  id            String                 @id @default(uuid())
+  extractoId    String                 @map("extracto_id")
+  tipo          TipoAjusteExtracto
+  origen        OrigenAjusteExtracto   @default(manual)
+  // correccion / no_cobrado: el cargo de la app; cargo / reclamo aceptado: el gasto creado.
+  gastoId       String?                @map("gasto_id")
+  concepto      ConceptoCargoExtracto?
+  descripcion   String?
+  // correccion: valor anterior (para deshacer) y el del banco.
+  montoAntes    Int?                   @map("monto_antes")
+  monto         Int?
+  fecha         DateTime?
+  estadoReclamo EstadoReclamo?         @map("estado_reclamo")
+  creadoEn      DateTime               @default(now()) @map("creado_en")
+
+  extracto ExtractoTarjeta @relation(fields: [extractoId], references: [id], onDelete: Cascade)
+  gasto    GastoPersonal?  @relation(fields: [gastoId], references: [id], onDelete: SetNull)
+
+  @@index([extractoId])
+  @@index([gastoId])
+  @@map("extracto_ajustes")
 }
