@@ -1,5 +1,6 @@
 import { asyncHandler } from '../../middleware/asyncHandler.js';
-import { registerSchema, loginSchema, cambiarPasswordSchema } from './auth.schema.js';
+import { registerSchema, loginSchema, cambiarPasswordSchema, generarCodigosSchema, recuperarSchema } from './auth.schema.js';
+import { estadoCodigos, generarCodigos, recuperarConCodigo } from './recuperacion.service.js';
 import {
   registerUsuario,
   authenticateUsuario,
@@ -51,6 +52,24 @@ export const postCambiarPassword = asyncHandler(async (req, res) => {
   const usuario = await cambiarPassword(req.usuario, data, ipDe(req));
   setSessionCookie(res, usuario);
   res.status(204).send();
+});
+
+// Códigos de recuperación: ver el estado, generar unos nuevos (pide la
+// contraseña) y, sin sesión, cambiar la contraseña con uno (deja la sesión iniciada).
+export const getCodigosRecuperacion = asyncHandler(async (req, res) => {
+  res.json(await estadoCodigos(req.usuario));
+});
+
+export const postCodigosRecuperacion = asyncHandler(async (req, res) => {
+  const codigos = await generarCodigos(req.usuario, generarCodigosSchema.parse(req.body), ipDe(req));
+  res.status(201).json({ codigos });
+});
+
+export const postRecuperar = asyncHandler(async (req, res) => {
+  const data = recuperarSchema.parse(req.body);
+  const usuario = await recuperarConCodigo(data, ipDe(req));
+  setSessionCookie(res, usuario);
+  res.json({ usuario: serializeUsuario(usuario) });
 });
 
 export const postCerrarOtrasSesiones = asyncHandler(async (req, res) => {

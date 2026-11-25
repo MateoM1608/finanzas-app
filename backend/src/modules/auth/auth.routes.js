@@ -1,5 +1,15 @@
 import { Router } from 'express';
-import { register, login, logout, me, postCambiarPassword, postCerrarOtrasSesiones } from './auth.controller.js';
+import {
+  register,
+  login,
+  logout,
+  me,
+  postCambiarPassword,
+  postCerrarOtrasSesiones,
+  getCodigosRecuperacion,
+  postCodigosRecuperacion,
+  postRecuperar,
+} from './auth.controller.js';
 import { requireAuth } from '../../middleware/auth.js';
 
 export const authRouter = Router();
@@ -10,3 +20,6 @@ authRouter.post('/logout', logout);
 authRouter.get('/me', requireAuth, me);
 authRouter.post('/cambiar-password', requireAuth, postCambiarPassword);
 authRouter.post('/cerrar-otras-sesiones', requireAuth, postCerrarOtrasSesiones);
+authRouter.get('/codigos-recuperacion', requireAuth, getCodigosRecuperacion);
+authRouter.post('/codigos-recuperacion', requireAuth, postCodigosRecuperacion);
+authRouter.post('/recuperar', postRecuperar);

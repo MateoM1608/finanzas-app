@@ -114,6 +114,9 @@ async function onSubmit() {
             <button type="submit" class="btn-primary w-full" :disabled="loading">
               {{ loading ? 'Ingresando…' : 'Ingresar' }}
             </button>
+            <p class="text-center text-[13px]">
+              <router-link :to="{ name: 'recuperar' }" class="text-ink-secondary hover:text-accent">¿Olvidaste tu contraseña?</router-link>
+            </p>
           </form>
 
           <p class="mt-6 text-center text-sm text-ink-secondary">

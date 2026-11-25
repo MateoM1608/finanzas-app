@@ -7,6 +7,7 @@ import { salirDelHogar } from '../../api/hogares.js';
 import { confirmar } from '../../composables/useConfirm.js';
 import AlertError from '../AlertError.vue';
 import FormField from '../FormField.vue';
+import CodigosRecuperacion from './CodigosRecuperacion.vue';
 
 /**
  * Tu cuenta (seguridad, 2026-12-06): cambiar la contraseña, cerrar la sesión
@@ -104,6 +105,8 @@ async function salir() {
         </div>
       </form>
     </section>
+
+    <CodigosRecuperacion />
 
     <section class="card card-pad">
       <h3 class="section-title">Sesiones abiertas</h3>

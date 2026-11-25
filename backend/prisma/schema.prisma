@@ -136,6 +136,7 @@ model Usuario {
 
   hogar                         Hogar?                            @relation(fields: [hogarId], references: [id])
   invitacionesCreadas           InvitacionHogar[]                 @relation("invitacionesCreadas")
+  codigosRecuperacion           CodigoRecuperacion[]
   gastosPersonales              GastoPersonal[]
   ingresosPersonales            IngresoPersonal[]
   metodosPagoPersonales         MetodoPagoPersonal[]
@@ -1306,4 +1307,20 @@ model IntentoAcceso {
   bloqueadoHasta DateTime? @map("bloqueado_hasta")
 
   @@map("intentos_acceso")
+}
+
+// Códigos de recuperación (2026-12-06): 8 de un solo uso por usuario para
+// cambiar la contraseña sin haber iniciado sesión. Se guardan con bcrypt, como
+// la contraseña; generar unos nuevos borra los anteriores.
+model CodigoRecuperacion {
+  id         String    @id @default(uuid())
+  usuarioId  String    @map("usuario_id")
+  codigoHash String    @map("codigo_hash")
+  usadoEn    DateTime? @map("usado_en")
+  creadoEn   DateTime  @default(now()) @map("creado_en")
+
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@index([usuarioId])
+  @@map("codigos_recuperacion")
 }
