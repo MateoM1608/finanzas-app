@@ -465,7 +465,40 @@ function onMovimientoEditado(actualizado) {
 const exportando = ref(false);
 const filtroDesde = ref('');
 const filtroHasta = ref('');
+// Búsqueda por texto (descripción, categoría, cuenta o valor) y filtros por
+// categoría y cuenta ('' = todas, 'sin' = sin definir). Se suman a las fechas.
+const busqueda = ref('');
+const filtroCategoria = ref('');
+const filtroCuenta = ref('');
 const hayFiltro = computed(() => Boolean(filtroDesde.value || filtroHasta.value));
+const hayFiltroExtra = computed(() => Boolean(busqueda.value.trim() || filtroCategoria.value || filtroCuenta.value));
+watch([busqueda, filtroCategoria, filtroCuenta], () => {
+  verTodo.value = false;
+});
+
+function normalizar(texto) {
+  return String(texto ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+}
+
+function coincide(m) {
+  if (filtroCategoria.value && (filtroCategoria.value === 'sin' ? m.categoriaId : m.categoriaId !== filtroCategoria.value)) return false;
+  if (filtroCuenta.value && (filtroCuenta.value === 'sin' ? m.metodoPagoId : m.metodoPagoId !== filtroCuenta.value)) return false;
+  const q = normalizar(busqueda.value.trim());
+  if (!q) return true;
+  const digitos = q.replace(/[$.\s]/g, '');
+  if (/^\d+$/.test(digitos) && String(m.monto).includes(digitos)) return true;
+  return [m.descripcion, m.categoria?.nombre, m.metodoPago?.nombre].some((t) => normalizar(t).includes(q));
+}
+
+function limpiarFiltros() {
+  busqueda.value = '';
+  filtroCategoria.value = '';
+  filtroCuenta.value = '';
+  aplicarRango('todo');
+}
 
 function enRango(fecha) {
   const f = String(fecha).slice(0, 10);
@@ -496,7 +529,7 @@ function aplicarRango(tipo) {
 
 // Filas de la lista: { tipo: 'gasto' | 'ingreso', mov }, más recientes primero.
 function filas(lista, tipo) {
-  return lista.filter((m) => enRango(m.fecha)).map((mov) => ({ tipo, mov }));
+  return lista.filter((m) => enRango(m.fecha) && coincide(m)).map((mov) => ({ tipo, mov }));
 }
 function porFechaDesc(a, b) {
   const fa = String(a.mov.fecha).slice(0, 10);
@@ -727,19 +760,50 @@ function saldoCompra(compra) {
           v-if="tabMovimientos !== 'compras'"
           class="mx-5 sm:mx-6 mb-3 flex flex-wrap items-end gap-3 rounded-xl border border-border bg-surface-sunken/60 p-3"
         >
-          <div>
-            <label class="label !mb-1" for="mov-desde">Desde</label>
-            <input id="mov-desde" v-model="filtroDesde" type="date" class="field !w-auto !py-1.5 !text-[13px]" @change="verTodo = false" />
+          <div class="grid w-full grid-cols-2 gap-2 sm:grid-cols-[1fr_auto_auto]">
+            <div class="col-span-2 sm:col-span-1">
+              <label class="sr-only" for="mov-buscar">Buscar</label>
+              <input
+                id="mov-buscar"
+                v-model="busqueda"
+                type="search"
+                class="field !py-1.5"
+                placeholder="Buscar: mercado, Nequi, 45000…"
+                autocomplete="off"
+              />
+            </div>
+            <div>
+              <label class="sr-only" for="mov-categoria">Categoría</label>
+              <select id="mov-categoria" v-model="filtroCategoria" class="field !py-1.5 sm:!w-auto sm:!text-[13px]">
+                <option value="">Todas las categorías</option>
+                <option value="sin">Sin categoría</option>
+                <option v-for="c in categorias" :key="c.id" :value="c.id">{{ c.nombre }}</option>
+              </select>
+            </div>
+            <div>
+              <label class="sr-only" for="mov-cuenta">Cuenta</label>
+              <select id="mov-cuenta" v-model="filtroCuenta" class="field !py-1.5 sm:!w-auto sm:!text-[13px]">
+                <option value="">Todas las cuentas</option>
+                <option value="sin">Sin cuenta</option>
+                <option v-for="m in metodos" :key="m.id" :value="m.id">{{ m.nombre }}</option>
+              </select>
+            </div>
           </div>
-          <div>
-            <label class="label !mb-1" for="mov-hasta">Hasta</label>
-            <input id="mov-hasta" v-model="filtroHasta" type="date" class="field !w-auto !py-1.5 !text-[13px]" @change="verTodo = false" />
+          <div class="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:gap-3">
+            <div class="min-w-0">
+              <label class="label !mb-1" for="mov-desde">Desde</label>
+              <input id="mov-desde" v-model="filtroDesde" type="date" class="field !py-1.5 sm:!w-auto sm:!text-[13px]" @change="verTodo = false" />
+            </div>
+            <div class="min-w-0">
+              <label class="label !mb-1" for="mov-hasta">Hasta</label>
+              <input id="mov-hasta" v-model="filtroHasta" type="date" class="field !py-1.5 sm:!w-auto sm:!text-[13px]" @change="verTodo = false" />
+            </div>
           </div>
           <div class="flex flex-wrap gap-1">
             <button type="button" class="btn-ghost btn-sm" @click="aplicarRango('mes')">Este mes</button>
             <button type="button" class="btn-ghost btn-sm" @click="aplicarRango('mesAnterior')">Mes anterior</button>
             <button type="button" class="btn-ghost btn-sm" @click="aplicarRango('30dias')">Últimos 30 días</button>
-            <button v-if="hayFiltro" type="button" class="btn-ghost btn-sm" @click="aplicarRango('todo')">Quitar filtro</button>
+            <button v-if="hayFiltro || hayFiltroExtra" type="button" class="btn-ghost btn-sm" @click="limpiarFiltros">Quitar filtros</button>
             <button type="button" class="btn-ghost btn-sm" @click="exportando = true">
               <AppIcon name="arrowDownLeft" class="h-4 w-4" /> Exportar
             </button>
@@ -763,7 +827,9 @@ function saldoCompra(compra) {
           <div v-else-if="!totalLista" class="empty py-10">
             <AppIcon name="receipt" class="mx-auto mb-2 h-6 w-6" />
             {{
-              hayFiltro && tabMovimientos !== 'compras'
+              hayFiltroExtra && tabMovimientos !== 'compras'
+                ? 'Nada coincide con la búsqueda o los filtros.'
+                : hayFiltro && tabMovimientos !== 'compras'
                 ? 'No hay movimientos entre esas fechas.'
                 : tabMovimientos === 'gastos'
                   ? 'Aún no has registrado gastos personales.'
@@ -773,7 +839,7 @@ function saldoCompra(compra) {
                       ? 'Aún no has registrado ingresos personales.'
                       : 'Aún no tienes movimientos.'
             }}
-            <div v-if="tabMovimientos !== 'compras' && !hayFiltro" class="mt-4">
+            <div v-if="tabMovimientos !== 'compras' && !hayFiltro && !hayFiltroExtra" class="mt-4">
               <button
                 type="button"
                 class="btn-secondary btn-sm"
