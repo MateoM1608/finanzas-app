@@ -1,3 +1,4 @@
+import { fechaApp, MONTO_MAX } from '../../utils/validacion.js';
 import { z } from 'zod';
 
 const dia = z.number().int().min(1).max(31).nullable().optional();
@@ -16,13 +17,13 @@ export const guardarMetodoPagoSchema = z.object({
     .or(z.literal('').transform(() => null)),
   diaCorte: dia,
   diaPago: dia,
-  cupo: z.number().int().positive().nullable().optional(),
+  cupo: z.number().int().positive().max(MONTO_MAX).nullable().optional(),
   tasaMensual: z.number().min(0).max(10).optional(),
   sistemaInteres: z.enum(['capital_fijo', 'cuota_fija']).optional(),
 });
 
 export const pagoTarjetaSchema = z.object({
-  monto: z.number().int().positive(),
-  fecha: z.coerce.date(),
+  monto: z.number().int().positive().max(MONTO_MAX),
+  fecha: fechaApp,
   metodoPagoId: z.string().uuid().nullable().optional(),
 });

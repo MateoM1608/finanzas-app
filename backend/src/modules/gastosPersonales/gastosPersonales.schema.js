@@ -1,8 +1,9 @@
+import { fechaApp, MONTO_MAX } from '../../utils/validacion.js';
 import { z } from 'zod';
 
 export const crearGastoPersonalSchema = z.object({
-  monto: z.number().int().positive(),
-  fecha: z.coerce.date(),
+  monto: z.number().int().positive().max(MONTO_MAX),
+  fecha: fechaApp,
   descripcion: z.string().trim().min(1).max(255).optional(),
   estado: z.enum(['pagado', 'pendiente']).optional(),
   esObligatorio: z.boolean().optional(),
@@ -11,8 +12,8 @@ export const crearGastoPersonalSchema = z.object({
 });
 
 export const actualizarGastoPersonalSchema = z.object({
-  monto: z.number().int().positive().optional(),
-  fecha: z.coerce.date().optional(),
+  monto: z.number().int().positive().max(MONTO_MAX).optional(),
+  fecha: fechaApp.optional(),
   descripcion: z.string().trim().min(1).max(255).nullable().optional(),
   estado: z.enum(['pagado', 'pendiente']).optional(),
   esObligatorio: z.boolean().optional(),

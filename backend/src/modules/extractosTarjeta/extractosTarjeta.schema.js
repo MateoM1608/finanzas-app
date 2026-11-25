@@ -1,9 +1,10 @@
+import { fechaApp, MONTO_MAX } from '../../utils/validacion.js';
 import { z } from 'zod';
 
-const monto = z.number().int().positive();
+const monto = z.number().int().positive().max(MONTO_MAX);
 
 export const guardarExtractoSchema = z.object({
-  totalBanco: z.number().int().min(0).nullable().optional(),
+  totalBanco: z.number().int().min(0).max(MONTO_MAX).nullable().optional(),
   notas: z.string().trim().max(500).nullable().optional(),
 });
 
@@ -23,7 +24,7 @@ export const ajusteSchema = z.discriminatedUnion('tipo', [
     tipo: z.literal('no_reconocido'),
     monto,
     descripcion: z.string().trim().min(1).max(200),
-    fecha: z.coerce.date().optional(),
+    fecha: fechaApp.optional(),
   }),
 ]);
 

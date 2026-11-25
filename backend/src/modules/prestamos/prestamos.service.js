@@ -120,7 +120,7 @@ async function porcentajesHogar(tx, prestamo) {
 async function crearCuotas(tx, prestamo, plan, desdeNumero, desdeFecha, porcentajes) {
   if (!plan.length) return;
   const hoy = hoyUTC();
-  const fechas = fechasDeCuotas(desdeFecha, plan.length);
+  const fechas = fechasDeCuotas(desdeFecha, plan.length, new Date(prestamo.fechaPrimeraCuota).getUTCDate());
   if (!prestamo.hogarId) {
     await tx.gastoPersonal.createMany({
       data: plan.map((c, i) => ({

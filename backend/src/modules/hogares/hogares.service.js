@@ -171,10 +171,14 @@ export async function unirseHogar(usuarioActual, codigo) {
       throw new HttpError(410, 'Ese código de invitación expiró');
     }
 
-    await tx.invitacionHogar.update({
-      where: { id: invitacion.id },
+    // Condicional: si otra unión lo marcó primero, esta no lo cuenta.
+    const marcado = await tx.invitacionHogar.updateMany({
+      where: { id: invitacion.id, usado: false },
       data: { usado: true },
     });
+    if (marcado.count !== 1) {
+      throw new HttpError(410, 'Ese código de invitación ya fue usado');
+    }
 
     const usuario = await tx.usuario.update({
       where: { id: usuarioActual.id },

@@ -343,7 +343,10 @@ export function armarTabla(usuario, clave, rango) {
 /** CSV para Excel en español: separador ";", BOM UTF-8 (tildes) y fin de línea CRLF. */
 export function aCsv(tabla) {
   const celda = (v) => {
-    const texto = v == null ? '' : String(v);
+    let texto = v == null ? '' : String(v);
+    // Un texto que empieza con = + - @ Excel lo ejecuta como fórmula (lo pudo
+    // escribir el otro miembro en un gasto del hogar): se neutraliza con '.
+    if (typeof v === 'string' && /^[=+\-@\t\r]/.test(texto)) texto = `'${texto}`;
     return /[";\r\n]/.test(texto) ? `"${texto.replace(/"/g, '""')}"` : texto;
   };
   const lineas = [

@@ -50,6 +50,8 @@ const repartoEdicion = reactive({}); // usuarioId -> string
 const guardandoRepartoId = ref(null);
 
 const auth = useAuthStore();
+// Crear, editar y borrar gastos del hogar pide permiso; sin él, solo se ve.
+const puedeEditar = computed(() => Boolean(auth.usuario?.esAdmin || auth.usuario?.puedeEditarGastos));
 const LIMITE_LISTA = 8;
 const verTodo = ref(false);
 // Las cuotas futuras de una compra no se listan hasta su fecha (se ven en
@@ -205,7 +207,7 @@ function estadoInfo(gasto) {
 }
 
 function esEditable(gasto) {
-  return gasto.estado === 'pagado' && !gasto.compraId;
+  return puedeEditar.value && gasto.estado === 'pagado' && !gasto.compraId;
 }
 
 function inicializarRepartoManual() {
@@ -371,7 +373,7 @@ onMounted(cargar);
         <h3 id="gastos-variables-titulo" class="section-title">Gastos variables</h3>
         <p class="section-hint">Mercado, compras y gastos puntuales. Ya están pagados, así que entran al saldo de una vez.</p>
       </div>
-      <button class="btn-primary" @click="mostrarForm = true">
+      <button v-if="puedeEditar" class="btn-primary" @click="mostrarForm = true">
         <AppIcon name="plus" class="h-4 w-4" />
         Agregar gasto variable
       </button>
@@ -519,7 +521,7 @@ onMounted(cargar);
         <div v-if="gasto.compraId" class="mt-2 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
           <p class="min-w-0 text-[13px] text-ink-tertiary">Reparto: {{ formatReparto(gasto.repartos) }}</p>
           <button
-            v-if="gasto.estado === 'por_pagar'"
+            v-if="puedeEditar && gasto.estado === 'por_pagar'"
             type="button"
             class="btn-secondary btn-sm ml-auto"
             :disabled="pagandoId === gasto.id"
@@ -529,7 +531,7 @@ onMounted(cargar);
             Lo pagué
           </button>
           <button
-            v-else-if="gasto.estado === 'pagado' && gasto.compra?.modoCobro === 'manual'"
+            v-else-if="puedeEditar && gasto.estado === 'pagado' && gasto.compra?.modoCobro === 'manual'"
             type="button"
             class="btn-ghost btn-sm ml-auto"
             :disabled="pagandoId === gasto.id"
@@ -627,7 +629,7 @@ onMounted(cargar);
               <template v-if="compra.metodoPago"> · {{ compra.metodoPago.nombre }}</template>
             </p>
           </div>
-          <div class="flex shrink-0 items-center gap-1">
+          <div v-if="puedeEditar" class="flex shrink-0 items-center gap-1">
           <button
             type="button"
             class="btn-icon !p-1.5"

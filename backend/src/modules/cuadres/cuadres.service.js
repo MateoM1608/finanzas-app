@@ -139,7 +139,8 @@ async function refrescarBorrador(hogarId, cuadreId) {
 
   await prisma.$transaction(async (tx) => {
     if (nuevos.length) {
-      await tx.cuadreItem.createMany({ data: nuevos });
+      // Dos consultas a la vez pueden intentar agregar lo mismo.
+      await tx.cuadreItem.createMany({ data: nuevos, skipDuplicates: true });
       await actualizarEstadoOrigenes(tx, hastaHoy, 'en_cuadre');
     }
     for (const item of desactualizados) {
@@ -197,8 +198,12 @@ export async function iniciarCuadre(usuarioActual) {
     };
   }
 
-  const cuadre = await prisma.cuadre.create({
-    data: { hogarId, creadoPorUsuarioId: usuarioActual.id },
+  // Si los dos inician a la vez, el candado deja pasar uno y el otro
+  // encuentra el borrador ya creado (nunca quedan dos abiertos).
+  const cuadre = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${hogarId}))::text`;
+    const abierto = await tx.cuadre.findFirst({ where: { hogarId, estado: 'abierto' } });
+    return abierto ?? tx.cuadre.create({ data: { hogarId, creadoPorUsuarioId: usuarioActual.id } });
   });
   await refrescarBorrador(hogarId, cuadre.id);
   return { cuadre: await obtenerCuadreEnriquecido(cuadre.id), motivo: null };
@@ -212,6 +217,11 @@ export async function marcarItem(usuarioActual, cuadreId, itemId, incluido) {
   const item = await prisma.cuadreItem.findUnique({ where: { id: itemId } });
   if (!item || item.cuadreId !== cuadreId) {
     throw new HttpError(404, 'Ítem no encontrado en este cuadre');
+  }
+  // Con la pantalla desactualizada se podía marcar algo cuyo pago ya se deshizo.
+  const origen = (await obtenerOrigenesDetalladosPorLote([item])).get(origenClave(item));
+  if (!origen || !['pagado', 'en_cuadre'].includes(origen.estado)) {
+    throw new HttpError(409, 'Este gasto ya no está pagado: actualiza la pantalla del cuadre');
   }
 
   await prisma.$transaction(async (tx) => {

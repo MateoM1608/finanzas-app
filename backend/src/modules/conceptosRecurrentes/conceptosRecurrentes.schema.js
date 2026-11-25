@@ -1,3 +1,4 @@
+import { fechaApp, MONTO_MAX } from '../../utils/validacion.js';
 import { z } from 'zod';
 
 // Día del mes de una cuenta fija: 1-31, o null = último día del mes.
@@ -7,7 +8,7 @@ const camposCalendario = {
   frecuencia: z.enum(['mensual', 'quincenal']),
   diaMes: diaMes.optional(),
   diaMes2: diaMes.optional(),
-  fechaInicio: z.coerce.date(),
+  fechaInicio: fechaApp,
 };
 
 function diasQuincenaValidos(data) {
@@ -21,7 +22,7 @@ export const crearConceptoSchema = z
   .object({
     nombre: z.string().trim().min(1).max(100),
     tipoMonto: z.enum(['fijo', 'variable']),
-    montoDefault: z.number().int().positive().optional(),
+    montoDefault: z.number().int().positive().max(MONTO_MAX).optional(),
     responsableUsuarioId: z.string().uuid().nullable().optional(),
     ...camposCalendario,
   })
@@ -38,7 +39,7 @@ export const actualizarConceptoSchema = z.object({
   nombre: z.string().trim().min(1).max(100).optional(),
   activo: z.boolean().optional(),
   tipoMonto: z.enum(['fijo', 'variable']).optional(),
-  montoDefault: z.number().int().positive().nullable().optional(),
+  montoDefault: z.number().int().positive().max(MONTO_MAX).nullable().optional(),
   responsableUsuarioId: z.string().uuid().nullable().optional(),
   frecuencia: camposCalendario.frecuencia.optional(),
   diaMes: diaMes.optional(),

@@ -1,7 +1,8 @@
+import { fechaApp, MONTO_MAX } from '../../utils/validacion.js';
 import { z } from 'zod';
 
 const uuid = z.string().uuid();
-const monto = z.number().int().positive();
+const monto = z.number().int().positive().max(MONTO_MAX);
 
 export const crearPrestamoSchema = z
   .object({
@@ -15,20 +16,20 @@ export const crearPrestamoSchema = z
     plazoMeses: z.number().int().min(1).max(360).optional(),
     saldoActual: monto.optional(),
     cuotasRestantes: z.number().int().min(1).max(360).optional(),
-    cuotasPagadas: z.number().int().min(0).max(360).optional(),
+    cuotasPagadas: z.number().int().min(0).max(MONTO_MAX).max(360).optional(),
     // Tasa en %: efectiva anual (tasaEsAnual) o mensual.
     tasa: z.number().min(0).max(200).optional(),
     tasaEsAnual: z.boolean().optional(),
     sistemaInteres: z.enum(['cuota_fija', 'capital_fijo']).optional(),
-    seguroMensual: z.number().int().min(0).optional(),
-    fechaDesembolso: z.coerce.date().optional(),
-    fechaPrimeraCuota: z.coerce.date(),
+    seguroMensual: z.number().int().min(0).max(MONTO_MAX).optional(),
+    fechaDesembolso: fechaApp.optional(),
+    fechaPrimeraCuota: fechaApp,
     modoCobro: z.enum(['automatico', 'manual']).optional(),
     metodoPagoId: uuid.nullable().optional(),
     pagoUsuarioId: uuid.optional(),
     categoriaId: uuid.nullable().optional(),
     // Personal, préstamo nuevo: la plata llegó a una cuenta.
-    desembolso: z.object({ metodoPagoId: uuid.nullable().optional(), fecha: z.coerce.date().optional() }).optional(),
+    desembolso: z.object({ metodoPagoId: uuid.nullable().optional(), fecha: fechaApp.optional() }).optional(),
   })
   .refine((d) => (d.enCurso ? d.saldoActual && d.cuotasRestantes : d.montoPrestado && d.plazoMeses), {
     message: 'Un préstamo nuevo necesita monto y plazo; uno en curso, saldo actual y cuotas que faltan',
@@ -46,14 +47,14 @@ export const actualizarPrestamoSchema = z.object({
 });
 
 export const pagarCuotaSchema = z.object({
-  fecha: z.coerce.date().optional(),
+  fecha: fechaApp.optional(),
   monto: monto.optional(),
   metodoPagoId: uuid.nullable().optional(),
   pagoUsuarioId: uuid.optional(),
 });
 
 export const abonoSchema = z.object({
-  fecha: z.coerce.date().optional(),
+  fecha: fechaApp.optional(),
   monto,
   modo: z.enum(['reducir_plazo', 'reducir_cuota']),
   metodoPagoId: uuid.nullable().optional(),

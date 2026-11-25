@@ -1,3 +1,4 @@
+import { MONTO_MAX } from '../../utils/validacion.js';
 import { z } from 'zod';
 
 export const crearLimiteSchema = z.object({
@@ -5,7 +6,7 @@ export const crearLimiteSchema = z.object({
   tipoObjetivo: z.enum(['categoria', 'obligatorios', 'no_obligatorios', 'todo_gasto']),
   categoriaId: z.string().uuid().nullable().optional(),
   reglaTipo: z.enum(['porcentaje', 'monto_fijo']),
-  reglaValor: z.number().int().positive(),
+  reglaValor: z.number().int().positive().max(MONTO_MAX),
 });
 
 export const actualizarLimiteSchema = z.object({
@@ -13,6 +14,6 @@ export const actualizarLimiteSchema = z.object({
   tipoObjetivo: z.enum(['categoria', 'obligatorios', 'no_obligatorios', 'todo_gasto']).optional(),
   categoriaId: z.string().uuid().nullable().optional(),
   reglaTipo: z.enum(['porcentaje', 'monto_fijo']).optional(),
-  reglaValor: z.number().int().positive().optional(),
+  reglaValor: z.number().int().positive().max(MONTO_MAX).optional(),
   activo: z.boolean().optional(),
 });

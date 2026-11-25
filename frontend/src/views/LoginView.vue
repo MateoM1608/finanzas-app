@@ -1,6 +1,6 @@
 <script setup>
 import { ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRouter, useRoute } from 'vue-router';
 import { useAuthStore } from '../stores/auth.js';
 import { extractErrorMessage } from '../api/client.js';
 import FormField from '../components/FormField.vue';
@@ -9,6 +9,7 @@ import AppIcon from '../components/AppIcon.vue';
 import ThemeToggle from '../components/ThemeToggle.vue';
 
 const router = useRouter();
+const route = useRoute();
 const auth = useAuthStore();
 
 const usuario = ref('');
@@ -89,6 +90,9 @@ async function onSubmit() {
           </div>
 
           <form class="card card-pad space-y-5" @submit.prevent="onSubmit">
+            <p v-if="route.query.motivo === 'sesion' && !error" class="rounded-xl border border-warning/30 bg-warning/10 px-3.5 py-2.5 text-sm text-warning">
+              Tu sesión terminó. Vuelve a iniciar sesión.
+            </p>
             <AlertError :message="error" />
 
             <FormField

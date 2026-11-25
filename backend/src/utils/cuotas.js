@@ -21,11 +21,13 @@ export function dividirEnCuotas(total, numeroCuotas) {
  * Fechas de las N cuotas: una por mes desde la primera, el mismo día del mes
  * (si el mes es más corto, su último día — 31 en febrero → 28/29).
  */
-export function fechasDeCuotas(fechaPrimeraCuota, numeroCuotas) {
+export function fechasDeCuotas(fechaPrimeraCuota, numeroCuotas, diaFijo = null) {
   const primera = new Date(fechaPrimeraCuota);
   const anio = primera.getUTCFullYear();
   const mes = primera.getUTCMonth();
-  const dia = primera.getUTCDate();
+  // diaFijo: el día del plan original (ej. 31), para que una cuota que cayó
+  // en un mes corto (28 de febrero) no corra todas las siguientes al 28.
+  const dia = diaFijo ?? primera.getUTCDate();
   return Array.from({ length: numeroCuotas }, (_, i) => {
     const m = mes + i;
     const a = anio + Math.floor(m / 12);

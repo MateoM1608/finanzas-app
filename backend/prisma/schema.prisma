@@ -120,6 +120,9 @@ model Usuario {
   nombre                  String
   usuario                 String          @unique
   passwordHash            String          @map("password_hash")
+  // Bloqueo por contraseñas erradas seguidas (login).
+  intentosFallidos        Int             @default(0) @map("intentos_fallidos")
+  bloqueadoHasta          DateTime?       @map("bloqueado_hasta")
   hogarId                 String?         @map("hogar_id")
   esAdmin                 Boolean         @default(false) @map("es_admin")
   puedeEditarGastos       Boolean         @default(false) @map("puede_editar_gastos")

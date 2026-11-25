@@ -5,6 +5,7 @@ import { extractErrorMessage } from '../../api/client.js';
 import { formatCurrency, formatearBalances } from '../../utils/format.js';
 import AlertError from '../AlertError.vue';
 import AppIcon from '../AppIcon.vue';
+import { useAuthStore } from '../../stores/auth.js';
 
 /** Saldo en vivo: quién le debe a quién con todo lo pagado y sin cuadrar hasta hoy. */
 const saldo = ref(null);
@@ -24,6 +25,8 @@ async function cargar() {
 onMounted(cargar);
 defineExpose({ recargar: cargar });
 
+const auth = useAuthStore();
+const puedeCuadrar = computed(() => Boolean(auth.usuario?.esAdmin || auth.usuario?.puedeEditarGastos));
 const alDia = computed(() => !saldo.value || saldo.value.balances.every((b) => b.balance === 0));
 const frase = computed(() => (saldo.value ? formatearBalances(saldo.value.balances) : ''));
 </script>
@@ -55,8 +58,11 @@ const frase = computed(() => (saldo.value ? formatearBalances(saldo.value.balanc
           <template v-else>No hay gastos pagados pendientes de cuadrar.</template>
         </p>
       </div>
+      <p v-if="saldo.cantidadSinCuadrar && !puedeCuadrar" class="shrink-0 self-start text-[13px] text-ink-tertiary sm:max-w-[14rem]">
+        Para cuadrar, pídele a quien administra el hogar que lo inicie (o que te dé permiso de editar gastos).
+      </p>
       <router-link
-        v-if="saldo.cantidadSinCuadrar"
+        v-else-if="saldo.cantidadSinCuadrar"
         :to="{ name: 'cuadres', query: { iniciar: '1' } }"
         class="btn-primary shrink-0 self-start sm:self-auto"
       >
