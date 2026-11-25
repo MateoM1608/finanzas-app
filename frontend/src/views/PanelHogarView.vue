@@ -6,6 +6,7 @@ import SaldoHogarSection from '../components/hogar/SaldoHogarSection.vue';
 import CuentasFijasHogarSection from '../components/hogar/CuentasFijasHogarSection.vue';
 import PanelVariablesSection from '../components/hogar/PanelVariablesSection.vue';
 import ResumenHogarSection from '../components/hogar/ResumenHogarSection.vue';
+import MetasHogarSection from '../components/hogar/MetasHogarSection.vue';
 
 const saldoRef = ref(null);
 const resumenRef = ref(null);
@@ -32,6 +33,7 @@ function onCambio() {
         <CuentasFijasHogarSection @cambio="onCambio" />
         <PanelVariablesSection @cambio="onCambio" />
       </div>
+      <MetasHogarSection />
       <ResumenHogarSection ref="resumenRef" />
     </div>
   </AppLayout>

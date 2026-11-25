@@ -23,6 +23,13 @@ export function crearIngresoPersonal(usuarioId, data) {
   });
 }
 
+/** Los retiros de inversiones y metas del hogar se manejan desde allí. */
+function requireNoEsRetiro(ingreso) {
+  if (ingreso.origen === 'retiro_inversion' || ingreso.origen === 'retiro_meta_hogar') {
+    throw new HttpError(409, 'Este ingreso es un retiro de una inversión o meta: quítalo desde allí');
+  }
+}
+
 export async function actualizarIngresoPersonal(usuarioId, ingresoId, data) {
   const ingreso = await prisma.ingresoPersonal.findUnique({ where: { id: ingresoId } });
   if (!ingreso || ingreso.usuarioId !== usuarioId) {
@@ -31,6 +38,7 @@ export async function actualizarIngresoPersonal(usuarioId, ingresoId, data) {
   if (ingreso.origen === 'liquidacion_hogar') {
     throw new HttpError(409, 'Este ingreso es el reintegro de un cuadre del hogar y no se puede cambiar');
   }
+  requireNoEsRetiro(ingreso);
 
   return prisma.ingresoPersonal.update({
     where: { id: ingresoId },
@@ -47,6 +55,7 @@ export async function eliminarIngresoPersonal(usuarioId, ingresoId) {
   if (ingreso.origen === 'liquidacion_hogar') {
     throw new HttpError(409, 'Este ingreso es el reintegro de un cuadre del hogar y no se puede eliminar');
   }
+  requireNoEsRetiro(ingreso);
   if (ingreso.origenConfigId) {
     throw new HttpError(
       409,

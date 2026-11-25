@@ -1,3 +1,4 @@
+import { ORIGENES_NO_INGRESO } from '../../utils/consumo.js';
 import { prisma } from '../../config/prisma.js';
 import { calcularFechasPendientes } from '../../utils/instanciasFijas.js';
 import { fechasDeCuenta, periodoDeCuota } from '../../utils/cuentasFijas.js';
@@ -104,7 +105,7 @@ export async function obtenerProyeccion(usuarioActual, numeroMeses = 6) {
     }),
     prisma.ingresoFijoConfig.findMany({ where: { usuarioId, activo: true } }),
     prisma.ingresoPersonal.findMany({
-      where: { usuarioId, fecha: { gte: inicio, lte: fin }, origen: { notIn: ['liquidacion_hogar', 'desembolso_prestamo'] } },
+      where: { usuarioId, fecha: { gte: inicio, lte: fin }, origen: { notIn: ORIGENES_NO_INGRESO } },
       select: { origenConfigId: true, fecha: true, monto: true, descripcion: true },
     }),
   ]);

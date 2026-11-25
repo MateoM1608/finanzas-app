@@ -13,8 +13,21 @@ import { prisma } from '../config/prisma.js';
  * Una compra con tarjeta de crédito sí es consumo en su fecha (aunque no
  * baje el Disponible hasta pagar la tarjeta).
  */
-// Un abono extra a capital de un préstamo paga deuda: baja la caja pero no es consumo.
-export const ORIGENES_NO_CONSUMO = ['pago_hogar', 'liquidacion_hogar', 'pago_tarjeta', 'cuadre_hogar', 'abono_prestamo'];
+// Un abono extra a capital paga deuda y un aporte a una inversión o meta del
+// hogar es ahorro: bajan la caja pero no son consumo.
+export const ORIGENES_NO_CONSUMO = [
+  'pago_hogar',
+  'liquidacion_hogar',
+  'pago_tarjeta',
+  'cuadre_hogar',
+  'abono_prestamo',
+  'aporte_inversion',
+  'aporte_meta_hogar',
+];
+
+// Entradas de caja que no son ingreso real: reintegros de cuadres, desembolsos
+// de préstamos y retiros de inversiones o metas (es plata propia que vuelve).
+export const ORIGENES_NO_INGRESO = ['liquidacion_hogar', 'desembolso_prestamo', 'retiro_inversion', 'retiro_meta_hogar'];
 
 const CATEGORIA_HOGAR = 'Hogar';
 
@@ -80,7 +93,7 @@ export async function gastosDeConsumo(usuarioId, rango, { estado = 'pagado' } = 
 export function ingresosReales(usuarioId, rango) {
   const fecha = rango ? { gte: rango.gte ?? rango.inicio, lte: rango.lte ?? rango.fin } : undefined;
   return prisma.ingresoPersonal.findMany({
-    where: { usuarioId, estado: 'recibido', origen: { notIn: ['liquidacion_hogar', 'desembolso_prestamo'] }, ...(fecha ? { fecha } : {}) },
+    where: { usuarioId, estado: 'recibido', origen: { notIn: ORIGENES_NO_INGRESO }, ...(fecha ? { fecha } : {}) },
   });
 }
 

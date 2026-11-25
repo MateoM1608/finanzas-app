@@ -2,6 +2,9 @@ import { prisma } from '../../config/prisma.js';
 import { calcularPeriodoPorIndice, dentroDelRango } from '../../utils/cicloPersonal.js';
 import { asegurarInstanciasFijasPersonales } from '../../utils/instanciasFijasPersonales.js';
 import { gastosDeConsumo, ingresosReales } from '../../utils/consumo.js';
+import { valorInversionesDe } from '../inversiones/inversiones.service.js';
+import { misAportesEnMetas } from '../metasHogar/metasHogar.service.js';
+import { deudaPrestamosDe } from '../prestamos/prestamos.service.js';
 
 const MESES_VENTANA = 6;
 
@@ -136,8 +139,27 @@ export async function obtenerResumenPersonal(usuarioActual, indiceCiclo = 0) {
     .map(([categoria, total]) => ({ categoria, total }))
     .sort((a, b) => b.total - a.total);
 
+  // Patrimonio (solo en el ciclo actual): lo que tengo menos lo que debo.
+  let patrimonio = null;
+  if (esActual) {
+    const [inversiones, metasHogar, prestamos] = await Promise.all([
+      valorInversionesDe(usuarioActual),
+      misAportesEnMetas(usuarioActual),
+      deudaPrestamosDe(usuarioActual),
+    ]);
+    patrimonio = {
+      total: disponible + inversiones + metasHogar - deudaTarjetas - prestamos,
+      disponible,
+      inversiones,
+      metasHogar,
+      deudaTarjetas,
+      prestamos,
+    };
+  }
+
   return {
     ciclo: { indice: indiceCiclo, frecuencia, inicio: periodoActual.inicio, fin: periodoActual.fin },
+    patrimonio,
     disponible,
     deudaTarjetas,
     neto: {

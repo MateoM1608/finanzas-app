@@ -484,9 +484,20 @@ const ORIGEN_MOVIMIENTO = {
   pago_hogar: { badge: 'Pago del hogar', icono: 'home' },
   liquidacion_hogar: { badge: 'Cuadre', icono: 'scale' },
   pago_tarjeta: { badge: 'Pago de tarjeta', icono: 'wallet' },
+  abono_prestamo: { badge: 'Abono a préstamo', icono: 'receipt' },
+  desembolso_prestamo: { badge: 'Desembolso', icono: 'receipt' },
+  aporte_inversion: { badge: 'Inversión', icono: 'trendingUp' },
+  retiro_inversion: { badge: 'Inversión', icono: 'trendingUp' },
+  aporte_meta_hogar: { badge: 'Meta del hogar', icono: 'piggy' },
+  retiro_meta_hogar: { badge: 'Meta del hogar', icono: 'piggy' },
 };
 function esDelHogar(mov) {
   return mov.origen === 'pago_hogar' || mov.origen === 'liquidacion_hogar';
+}
+// Movimientos que se manejan desde Patrimonio (préstamos, inversiones) o la meta del hogar.
+const ORIGENES_DE_OTRA_PANTALLA = ['abono_prestamo', 'aporte_inversion', 'retiro_inversion', 'aporte_meta_hogar', 'retiro_meta_hogar'];
+function esDeOtraPantalla(mov) {
+  return Boolean(mov.prestamoId) || ORIGENES_DE_OTRA_PANTALLA.includes(mov.origen);
 }
 
 // En los movimientos del hogar solo se puede cambiar el método (con qué se
@@ -764,7 +775,7 @@ function saldoCompra(compra) {
                     {{ gasto.metodoPago ? 'Cambiar método' : 'Elegir método' }}
                   </button>
                   <button
-                    v-if="!esDelHogar(gasto)"
+                    v-if="!esDelHogar(gasto) && !esDeOtraPantalla(gasto)"
                     type="button"
                     class="btn-ghost btn-sm"
                     :class="gasto.estado === 'pendiente' ? '!text-accent' : ''"
@@ -775,7 +786,7 @@ function saldoCompra(compra) {
                     {{ gasto.estado === 'pagado' ? 'Marcar pendiente' : 'Marcar pagado' }}
                   </button>
                   <button
-                    v-if="!gasto.origenConfigId && !esDelHogar(gasto) && !gasto.compraId && !gasto.prestamoId && gasto.origen !== 'abono_prestamo'"
+                    v-if="!gasto.origenConfigId && !esDelHogar(gasto) && !gasto.compraId && !esDeOtraPantalla(gasto)"
                     type="button"
                     class="btn-icon !p-1.5 hover:!text-negative sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100"
                     :disabled="eliminandoGastoId === gasto.id"
@@ -802,6 +813,7 @@ function saldoCompra(compra) {
                     <span v-if="ingreso.estado === 'pendiente'" class="badge-warning">Pendiente</span>
                     <span v-if="ingreso.origenConfigId" class="badge-neutral">Fijo</span>
                     <span v-if="ingreso.origen === 'liquidacion_hogar'" class="badge-neutral">Reintegro del cuadre</span>
+                    <span v-else-if="ORIGEN_MOVIMIENTO[ingreso.origen]" class="badge-neutral">{{ ORIGEN_MOVIMIENTO[ingreso.origen].badge }}</span>
                   </p>
                   <p class="mt-0.5 text-[13px] text-ink-tertiary">
                     {{ formatDate(ingreso.fecha) }}
@@ -839,7 +851,7 @@ function saldoCompra(compra) {
                     {{ ingreso.metodoPago ? 'Cambiar dónde entró' : 'Elegir dónde entró' }}
                   </button>
                   <button
-                    v-if="!esDelHogar(ingreso)"
+                    v-if="!esDelHogar(ingreso) && !esDeOtraPantalla(ingreso)"
                     type="button"
                     class="btn-ghost btn-sm"
                     :class="ingreso.estado === 'pendiente' ? '!text-accent' : ''"
@@ -850,7 +862,7 @@ function saldoCompra(compra) {
                     {{ ingreso.estado === 'recibido' ? 'Marcar pendiente' : 'Marcar recibido' }}
                   </button>
                   <button
-                    v-if="!ingreso.origenConfigId && !esDelHogar(ingreso)"
+                    v-if="!ingreso.origenConfigId && !esDelHogar(ingreso) && !esDeOtraPantalla(ingreso)"
                     type="button"
                     class="btn-icon !p-1.5 hover:!text-negative sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100"
                     :disabled="eliminandoIngresoId === ingreso.id"

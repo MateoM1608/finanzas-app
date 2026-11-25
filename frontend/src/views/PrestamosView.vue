@@ -1,5 +1,6 @@
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue';
+import { ref, reactive, computed, onMounted, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import {
   listarPrestamos,
   crearPrestamo,
@@ -23,9 +24,12 @@ import AppModal from '../components/AppModal.vue';
 import AlertError from '../components/AlertError.vue';
 import FormField from '../components/FormField.vue';
 import PrestamoForm from '../components/prestamos/PrestamoForm.vue';
+import InversionesSection from '../components/patrimonio/InversionesSection.vue';
+import { obtenerResumenPersonal } from '../api/resumenPersonal.js';
 
 /**
- * Préstamos personales y del hogar: saldo, cuotas (con "Lo pagué" para los
+ * Patrimonio: lo que tienes menos lo que debes, con dos vistas (Préstamos e
+ * Inversiones, ?vista=inversiones). Préstamos personales y del hogar: saldo, cuotas (con "Lo pagué" para los
  * manuales), abonos extra a capital y un orden sugerido de pago.
  */
 const auth = useAuthStore();
@@ -56,6 +60,21 @@ async function cargar() {
     error.value = extractErrorMessage(e);
   }
 }
+
+// --- Patrimonio y vista ---
+const route = useRoute();
+const router = useRouter();
+const vista = ref(route.query.vista === 'inversiones' ? 'inversiones' : 'prestamos');
+watch(vista, (v) => router.replace({ query: v === 'inversiones' ? { vista: v } : {} }));
+const patrimonio = ref(null);
+async function cargarPatrimonio() {
+  try {
+    patrimonio.value = (await obtenerResumenPersonal()).patrimonio;
+  } catch {
+    // El patrimonio es informativo: si falla, la pantalla sigue.
+  }
+}
+cargarPatrimonio();
 
 onMounted(async () => {
   try {
@@ -94,6 +113,7 @@ async function ejecutar(fn, { recargarTodo = false } = {}) {
       reemplazar(r);
       await cargar();
     }
+    cargarPatrimonio();
     return true;
   } catch (e) {
     error.value = extractErrorMessage(e);
@@ -227,15 +247,45 @@ function progreso(p) {
 </script>
 
 <template>
-  <AppLayout title="Préstamos" subtitle="Lo que debes, cuánto te falta y en qué orden conviene pagar.">
+  <AppLayout title="Patrimonio" subtitle="Lo que tienes y lo que debes: préstamos e inversiones.">
     <template #actions>
-      <button type="button" class="btn-primary" @click="creando = true">
+      <button v-if="vista === 'prestamos'" type="button" class="btn-primary" @click="creando = true">
         <AppIcon name="plus" class="h-4 w-4" :stroke-width="2.2" />
         Registrar préstamo
       </button>
     </template>
 
     <div class="space-y-6">
+      <!-- Patrimonio: lo que tienes − lo que debes -->
+      <section v-if="patrimonio" class="card card-pad">
+        <div class="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
+          <div>
+            <p class="stat-label">Tu patrimonio</p>
+            <p class="stat-value-lg" :class="patrimonio.total < 0 ? 'text-negative' : 'text-ink-primary'">{{ formatCurrency(patrimonio.total) }}</p>
+          </div>
+          <dl class="grid grid-cols-2 gap-x-5 gap-y-1 text-[13px] sm:flex sm:flex-wrap sm:gap-x-6">
+            <div class="flex justify-between gap-2 sm:block"><dt class="text-ink-tertiary">Disponible</dt><dd class="font-medium text-ink-primary">{{ formatCurrency(patrimonio.disponible) }}</dd></div>
+            <div class="flex justify-between gap-2 sm:block"><dt class="text-ink-tertiary">Inversiones</dt><dd class="font-medium text-positive">+{{ formatCurrency(patrimonio.inversiones) }}</dd></div>
+            <div v-if="patrimonio.metasHogar" class="flex justify-between gap-2 sm:block"><dt class="text-ink-tertiary"><span class="sm:hidden">Metas</span><span class="hidden sm:inline">Metas del hogar</span></dt><dd class="font-medium text-positive">+{{ formatCurrency(patrimonio.metasHogar) }}</dd></div>
+            <div class="flex justify-between gap-2 sm:block"><dt class="text-ink-tertiary">Tarjetas</dt><dd class="font-medium text-warning">−{{ formatCurrency(patrimonio.deudaTarjetas) }}</dd></div>
+            <div class="flex justify-between gap-2 sm:block"><dt class="text-ink-tertiary">Préstamos</dt><dd class="font-medium text-warning">−{{ formatCurrency(patrimonio.prestamos) }}</dd></div>
+          </dl>
+        </div>
+        <p class="stat-hint">Incluye tu parte de las inversiones y préstamos del hogar.</p>
+      </section>
+
+      <div class="tabs w-full sm:w-auto" role="tablist" aria-label="Patrimonio">
+        <button type="button" role="tab" class="tab flex-1 sm:flex-none" :class="{ 'tab-active': vista === 'prestamos' }" :aria-selected="vista === 'prestamos'" @click="vista = 'prestamos'">
+          Préstamos
+        </button>
+        <button type="button" role="tab" class="tab flex-1 sm:flex-none" :class="{ 'tab-active': vista === 'inversiones' }" :aria-selected="vista === 'inversiones'" @click="vista = 'inversiones'">
+          Inversiones
+        </button>
+      </div>
+
+      <InversionesSection v-if="vista === 'inversiones'" @cambio="cargarPatrimonio" />
+
+      <template v-else>
       <AlertError :message="error" />
       <div v-if="cargando" class="card card-pad"><p class="empty">Cargando…</p></div>
 
@@ -472,6 +522,7 @@ function progreso(p) {
             </div>
           </div>
         </section>
+      </template>
       </template>
     </div>
 

@@ -23,6 +23,8 @@ import { proyeccionPersonalRouter } from './modules/proyeccionPersonal/proyeccio
 import { informeMetodosRouter } from './modules/informeMetodos/informeMetodos.routes.js';
 import { extractosTarjetaRouter } from './modules/extractosTarjeta/extractosTarjeta.routes.js';
 import { prestamosRouter } from './modules/prestamos/prestamos.routes.js';
+import { inversionesRouter } from './modules/inversiones/inversiones.routes.js';
+import { metasHogarRouter } from './modules/metasHogar/metasHogar.routes.js';
 import { limitesPersonalesRouter } from './modules/limitesPersonales/limitesPersonales.routes.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 
@@ -62,6 +64,8 @@ app.use('/api/proyeccion-personal', proyeccionPersonalRouter);
 app.use('/api/informe-metodos', informeMetodosRouter);
 app.use('/api/extractos-tarjeta', extractosTarjetaRouter);
 app.use('/api/prestamos', prestamosRouter);
+app.use('/api/inversiones', inversionesRouter);
+app.use('/api/metas-hogar', metasHogarRouter);
 
 app.use(notFoundHandler);
 app.use(errorHandler);

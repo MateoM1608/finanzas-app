@@ -715,3 +715,9 @@ export async function eliminarAbono(usuarioActual, id, abonoId) {
   );
   return obtenerPrestamo(usuarioActual, id);
 }
+
+/** Para el patrimonio: capital que debo en mis préstamos + mi parte de los del hogar. */
+export async function deudaPrestamosDe(usuarioActual) {
+  const { resumen } = await listarPrestamos(usuarioActual);
+  return resumen.deudaPersonal + resumen.miParteHogar;
+}

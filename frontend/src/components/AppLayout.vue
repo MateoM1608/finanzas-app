@@ -18,7 +18,7 @@ const NAV = [
   { name: 'panel-personal', label: 'Personal', icon: 'wallet' },
   { name: 'panel-hogar', label: 'Hogar', icon: 'home' },
   { name: 'cuadres', label: 'Cuadres', icon: 'scale' },
-  { name: 'prestamos', label: 'Préstamos', icon: 'receipt' },
+  { name: 'patrimonio', label: 'Patrimonio', icon: 'trendingUp' },
   { name: 'settings', label: 'Configuración', short: 'Ajustes', icon: 'settings' },
 ];
 

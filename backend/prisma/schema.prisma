@@ -32,6 +32,12 @@ enum OrigenGasto {
   // y desembolso recibido (sube el Disponible, no es ingreso real).
   abono_prestamo
   desembolso_prestamo
+  // Inversiones y metas del hogar (D2): el aporte baja la caja sin ser
+  // consumo; el retiro la sube sin ser ingreso real.
+  aporte_inversion
+  retiro_inversion
+  aporte_meta_hogar
+  retiro_meta_hogar
 }
 
 // Frecuencia propia de cada cuenta fija del hogar (ya no hay frecuencia de
@@ -147,6 +153,10 @@ model Usuario {
   extractosTarjeta              ExtractoTarjeta[]
   prestamosCreados              Prestamo[]                        @relation("prestamoUsuario")
   prestamosComoPagador          Prestamo[]                        @relation("prestamoPagador")
+  inversiones                   Inversion[]
+  movimientosInversion          InversionMovimiento[]
+  metasHogarCreadas             MetaHogar[]
+  movimientosMetaHogar          MetaHogarMovimiento[]
 
   @@index([hogarId])
   @@map("usuarios")
@@ -166,6 +176,8 @@ model Hogar {
   cuadres              Cuadre[]
   comprasCuotas        CompraCuotasHogar[]
   prestamos            Prestamo[]
+  inversiones          Inversion[]
+  metas                MetaHogar[]
 
   @@map("hogares")
 }
@@ -209,18 +221,20 @@ model MetodoPagoPersonal {
   tasaMensual    Float          @default(0) @map("tasa_mensual")
   sistemaInteres SistemaInteres @default(capital_fijo) @map("sistema_interes")
 
-  usuario           Usuario                    @relation(fields: [usuarioId], references: [id])
-  gastos            GastoPersonal[]
-  gastosFijosConfig GastoFijoConfig[]
-  ingresos          IngresoPersonal[]
-  comprasPersonales CompraCuotasPersonal[]
-  comprasHogar      CompraCuotasHogar[]
-  pagosCuentasHogar GastoRecurrenteInstancia[]
-  pagosGastosHogar  GastoVariablePareja[]
-  pagosRecibidos    GastoPersonal[]            @relation("pagoTarjeta")
-  extractos         ExtractoTarjeta[]
-  prestamos         Prestamo[]
-  abonosPrestamo    PrestamoAbono[]
+  usuario              Usuario                    @relation(fields: [usuarioId], references: [id])
+  gastos               GastoPersonal[]
+  gastosFijosConfig    GastoFijoConfig[]
+  ingresos             IngresoPersonal[]
+  comprasPersonales    CompraCuotasPersonal[]
+  comprasHogar         CompraCuotasHogar[]
+  pagosCuentasHogar    GastoRecurrenteInstancia[]
+  pagosGastosHogar     GastoVariablePareja[]
+  pagosRecibidos       GastoPersonal[]            @relation("pagoTarjeta")
+  extractos            ExtractoTarjeta[]
+  prestamos            Prestamo[]
+  abonosPrestamo       PrestamoAbono[]
+  movimientosInversion InversionMovimiento[]
+  movimientosMetaHogar MetaHogarMovimiento[]
 
   @@index([usuarioId])
   @@map("metodos_pago_personales")
@@ -331,6 +345,9 @@ model GastoPersonal {
   fechaVencimiento DateTime? @map("fecha_vencimiento")
   // Abono extra a capital de un préstamo personal (origen abono_prestamo).
   abonoPrestamoId  String?   @unique @map("abono_prestamo_id")
+  // Aporte a una inversión o a una meta del hogar (caja, no consumo).
+  inversionMovId   String?   @unique @map("inversion_mov_id")
+  metaHogarMovId   String?   @unique @map("meta_hogar_mov_id")
 
   usuario         Usuario                   @relation(fields: [usuarioId], references: [id])
   compra          CompraCuotasPersonal?     @relation(fields: [compraId], references: [id])
@@ -344,6 +361,8 @@ model GastoPersonal {
   ajustesExtracto ExtractoAjuste[]
   prestamo        Prestamo?                 @relation(fields: [prestamoId], references: [id])
   abonoPrestamo   PrestamoAbono?            @relation("abonoGastoPersonal", fields: [abonoPrestamoId], references: [id], onDelete: Cascade)
+  inversionMov    InversionMovimiento?      @relation("inversionGasto", fields: [inversionMovId], references: [id], onDelete: Cascade)
+  metaHogarMov    MetaHogarMovimiento?      @relation("metaHogarGasto", fields: [metaHogarMovId], references: [id], onDelete: Cascade)
 
   @@unique([origenConfigId, fecha])
   @@unique([origenCuadreId, usuarioId, fecha])
@@ -368,13 +387,18 @@ model IngresoPersonal {
 
   // Reintegro recibido al cuadrar (origen liquidacion_hogar).
   origenCuadreId String? @map("origen_cuadre_id")
+  // Retiro de una inversión o de una meta del hogar (caja, no ingreso real).
+  inversionMovId String? @unique @map("inversion_mov_id")
+  metaHogarMovId String? @unique @map("meta_hogar_mov_id")
 
-  usuario      Usuario             @relation(fields: [usuarioId], references: [id])
-  origenCuadre Cuadre?             @relation(fields: [origenCuadreId], references: [id])
-  desembolsoDe Prestamo?           @relation("desembolsoPrestamo")
-  origenConfig IngresoFijoConfig?  @relation(fields: [origenConfigId], references: [id])
-  metodoPago   MetodoPagoPersonal? @relation(fields: [metodoPagoId], references: [id])
-  categoria    CategoriaPersonal?  @relation(fields: [categoriaId], references: [id])
+  usuario      Usuario              @relation(fields: [usuarioId], references: [id])
+  origenCuadre Cuadre?              @relation(fields: [origenCuadreId], references: [id])
+  desembolsoDe Prestamo?            @relation("desembolsoPrestamo")
+  inversionMov InversionMovimiento? @relation("inversionIngreso", fields: [inversionMovId], references: [id], onDelete: Cascade)
+  metaHogarMov MetaHogarMovimiento? @relation("metaHogarIngreso", fields: [metaHogarMovId], references: [id], onDelete: Cascade)
+  origenConfig IngresoFijoConfig?   @relation(fields: [origenConfigId], references: [id])
+  metodoPago   MetodoPagoPersonal?  @relation(fields: [metodoPagoId], references: [id])
+  categoria    CategoriaPersonal?   @relation(fields: [categoriaId], references: [id])
 
   @@unique([origenConfigId, fecha])
   @@unique([origenCuadreId, usuarioId])
@@ -982,4 +1006,121 @@ model PrestamoAbono {
 
   @@index([prestamoId])
   @@map("prestamo_abonos")
+}
+
+// ---------------------------------------------------------------------------
+// Inversiones y metas de ahorro en pareja (entrega D2).
+// ---------------------------------------------------------------------------
+
+enum TipoInversion {
+  cdt
+  fondo
+  acciones
+  cripto
+  finca_raiz
+  otro
+}
+
+enum TipoMovimientoAhorro {
+  aporte
+  retiro
+}
+
+// Personal (hogarId null) o del hogar. El valor actual sale de la última
+// valoración; sin valoraciones, de lo puesto (o, si es CDT con tasa, de la
+// estimación a hoy).
+model Inversion {
+  id               String        @id @default(uuid())
+  usuarioId        String        @map("usuario_id")
+  hogarId          String?       @map("hogar_id")
+  nombre           String
+  tipo             TipoInversion @default(otro)
+  entidad          String?
+  fechaInicio      DateTime      @map("fecha_inicio")
+  // CDT: tasa efectiva anual (%) y vencimiento, para estimar el valor.
+  tasaEA           Float?        @map("tasa_ea")
+  fechaVencimiento DateTime?     @map("fecha_vencimiento")
+  activa           Boolean       @default(true)
+  creadoEn         DateTime      @default(now()) @map("creado_en")
+
+  usuario      Usuario               @relation(fields: [usuarioId], references: [id])
+  hogar        Hogar?                @relation(fields: [hogarId], references: [id])
+  movimientos  InversionMovimiento[]
+  valoraciones InversionValoracion[]
+
+  @@index([usuarioId])
+  @@index([hogarId])
+  @@map("inversiones")
+}
+
+// Aporte o retiro de un miembro (siempre de quien lo registra: mueve su caja).
+model InversionMovimiento {
+  id           String               @id @default(uuid())
+  inversionId  String               @map("inversion_id")
+  usuarioId    String               @map("usuario_id")
+  tipo         TipoMovimientoAhorro
+  monto        Int
+  fecha        DateTime
+  metodoPagoId String?              @map("metodo_pago_id")
+  creadoEn     DateTime             @default(now()) @map("creado_en")
+
+  inversion  Inversion           @relation(fields: [inversionId], references: [id], onDelete: Cascade)
+  usuario    Usuario             @relation(fields: [usuarioId], references: [id])
+  metodoPago MetodoPagoPersonal? @relation(fields: [metodoPagoId], references: [id])
+  gasto      GastoPersonal?      @relation("inversionGasto")
+  ingreso    IngresoPersonal?    @relation("inversionIngreso")
+
+  @@index([inversionId])
+  @@map("inversion_movimientos")
+}
+
+model InversionValoracion {
+  id          String   @id @default(uuid())
+  inversionId String   @map("inversion_id")
+  fecha       DateTime
+  valor       Int
+  creadoEn    DateTime @default(now()) @map("creado_en")
+
+  inversion Inversion @relation(fields: [inversionId], references: [id], onDelete: Cascade)
+
+  @@unique([inversionId, fecha])
+  @@map("inversion_valoraciones")
+}
+
+model MetaHogar {
+  id          String    @id @default(uuid())
+  hogarId     String    @map("hogar_id")
+  creadoPorId String    @map("creado_por_id")
+  nombre      String
+  montoMeta   Int       @map("monto_meta")
+  fechaMeta   DateTime? @map("fecha_meta")
+  activa      Boolean   @default(true)
+  creadoEn    DateTime  @default(now()) @map("creado_en")
+
+  hogar       Hogar                 @relation(fields: [hogarId], references: [id])
+  creadoPor   Usuario               @relation(fields: [creadoPorId], references: [id])
+  movimientos MetaHogarMovimiento[]
+
+  @@index([hogarId])
+  @@map("metas_hogar")
+}
+
+model MetaHogarMovimiento {
+  id           String               @id @default(uuid())
+  metaId       String               @map("meta_id")
+  usuarioId    String               @map("usuario_id")
+  tipo         TipoMovimientoAhorro
+  monto        Int
+  fecha        DateTime
+  metodoPagoId String?              @map("metodo_pago_id")
+  creadoEn     DateTime             @default(now()) @map("creado_en")
+
+  meta       MetaHogar           @relation(fields: [metaId], references: [id], onDelete: Cascade)
+  usuario    Usuario             @relation(fields: [usuarioId], references: [id])
+  metodoPago MetodoPagoPersonal? @relation(fields: [metodoPagoId], references: [id])
+  gasto      GastoPersonal?      @relation("metaHogarGasto")
+  ingreso    IngresoPersonal?    @relation("metaHogarIngreso")
+
+  @@index([metaId])
+  @@map("meta_hogar_movimientos")
 }

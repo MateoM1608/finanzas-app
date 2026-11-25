@@ -126,6 +126,16 @@ const porCategoriaChart = computed(() => {
             <span class="text-ink-secondary">{{ esActual ? 'Deuda de tarjetas' : 'Deuda de tarjetas al cierre' }}</span>
             <span class="font-semibold text-warning">{{ formatCurrency(resumen.deudaTarjetas) }}</span>
           </router-link>
+          <router-link
+            v-if="resumen.patrimonio && (resumen.patrimonio.inversiones || resumen.patrimonio.prestamos || resumen.patrimonio.metasHogar)"
+            :to="{ name: 'patrimonio' }"
+            class="mt-1.5 flex items-center justify-between gap-2 rounded-lg text-[13px] hover:underline"
+          >
+            <span class="text-ink-secondary">Patrimonio</span>
+            <span class="font-semibold" :class="resumen.patrimonio.total < 0 ? 'text-negative' : 'text-ink-primary'">{{
+              formatCurrency(resumen.patrimonio.total)
+            }}</span>
+          </router-link>
         </section>
 
         <section class="card card-pad">

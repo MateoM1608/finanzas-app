@@ -49,11 +49,13 @@ const routes = [
     meta: { requiresAuth: true, requiresHogar: true },
   },
   {
-    path: '/prestamos',
-    name: 'prestamos',
+    // Patrimonio: préstamos e inversiones (?vista=inversiones).
+    path: '/patrimonio',
+    name: 'patrimonio',
     component: () => import('../views/PrestamosView.vue'),
     meta: { requiresAuth: true, requiresHogar: true },
   },
+  { path: '/prestamos', redirect: '/patrimonio' },
   {
     path: '/cuadres',
     name: 'cuadres',
