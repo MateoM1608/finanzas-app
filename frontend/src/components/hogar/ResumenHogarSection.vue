@@ -1,7 +1,8 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { Bar } from 'vue-chartjs';
 import { obtenerResumenHogar } from '../../api/cuadres.js';
+import { gastoPorCategoriaHogar } from '../../api/categoriasHogar.js';
 import { extractErrorMessage } from '../../api/client.js';
 import { formatCurrency, formatDate } from '../../utils/format.js';
 import AlertError from '../AlertError.vue';
@@ -18,8 +19,22 @@ const loading = ref(true);
 const error = ref('');
 const resumen = ref(null);
 
+// Gasto por categoría de un mes (E4).
+const mesCategorias = ref('');
+const porCategoria = ref(null);
+
+async function cargarCategorias() {
+  try {
+    porCategoria.value = await gastoPorCategoriaHogar(mesCategorias.value || undefined);
+  } catch {
+    // Informativo.
+  }
+}
+watch(mesCategorias, cargarCategorias);
+
 async function cargar() {
   error.value = '';
+  cargarCategorias();
   try {
     resumen.value = await obtenerResumenHogar();
   } catch (e) {
@@ -71,6 +86,12 @@ const esteMes = computed(() => {
   const fila = serie.value.find((m) => m.periodo === claveMesActual());
   return fila ? fila.totalCuentasFijas + fila.totalVariables : 0;
 });
+const mesesParaCategorias = computed(() => {
+  const actual = claveMesActual();
+  const meses = new Set([actual, ...serie.value.map((m) => m.periodo)]);
+  return [...meses].sort().reverse();
+});
+
 const totalVentana = computed(() => serie.value.reduce((acc, m) => acc + m.totalCuentasFijas + m.totalVariables, 0));
 </script>
 
@@ -132,6 +153,38 @@ const totalVentana = computed(() => serie.value.reduce((acc, m) => acc + m.total
         <div v-else class="h-60 mt-4">
           <Bar :data="chartData" :options="opcionesApilado" />
         </div>
+      </div>
+
+      <div class="card card-pad">
+        <div class="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h3 class="section-title">Gasto por categoría</h3>
+            <p class="section-hint">Lo pagado en el mes. Las categorías se configuran en Configuración.</p>
+          </div>
+          <select v-model="mesCategorias" class="field !w-auto !py-1.5" aria-label="Mes del gasto por categoría">
+            <option v-for="(m, i) in mesesParaCategorias" :key="m" :value="i === 0 ? '' : m">
+              {{ i === 0 ? 'Este mes' : etiquetaMes(m) }}
+            </option>
+          </select>
+        </div>
+        <p v-if="!porCategoria" class="empty">Cargando…</p>
+        <p v-else-if="!porCategoria.categorias.length" class="empty">No hay gastos pagados en ese mes.</p>
+        <ul v-else class="mt-4 space-y-3">
+          <li v-for="c in porCategoria.categorias" :key="c.clave">
+            <div class="flex items-baseline justify-between gap-3 text-sm">
+              <span class="truncate" :class="c.clave === 'sin_categoria' ? 'text-ink-tertiary' : 'text-ink-primary'">{{ c.nombre }}</span>
+              <span class="shrink-0 font-medium text-ink-primary">
+                {{ formatCurrency(c.monto) }} <span class="text-xs font-normal text-ink-tertiary">· {{ c.porcentaje }} %</span>
+              </span>
+            </div>
+            <div class="mt-1.5 h-1.5 overflow-hidden rounded-full bg-surface-sunken">
+              <div class="h-full rounded-full bg-accent" :style="{ width: c.porcentaje + '%' }" />
+            </div>
+          </li>
+          <li class="flex justify-between border-t border-border pt-3 text-sm font-semibold text-ink-primary">
+            <span>Total</span><span>{{ formatCurrency(porCategoria.total) }}</span>
+          </li>
+        </ul>
       </div>
     </template>
   </section>

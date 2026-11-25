@@ -1,5 +1,6 @@
 import { prisma } from '../config/prisma.js';
 import { notificar } from './notificaciones.js';
+import { revisarTopesHogar } from './topesHogar.js';
 
 /**
  * Actividad del hogar (entrega E3): deja constancia de quién hizo qué y avisa
@@ -40,6 +41,8 @@ export async function registrarActividad(
         clave: `actividad:${actividad.id}`,
       });
     }
+    // Lo que se registra o paga en el hogar puede acercar o pasar un tope (E4).
+    await revisarTopesHogar(hogarId);
     return actividad;
   } catch (error) {
     console.error('No se pudo registrar la actividad del hogar', error);

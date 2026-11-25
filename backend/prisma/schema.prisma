@@ -190,6 +190,8 @@ model Hogar {
   inversiones          Inversion[]
   metas                MetaHogar[]
   actividad            ActividadHogar[]
+  categorias           CategoriaHogar[]
+  topes                TopeHogar[]
 
   @@map("hogares")
 }
@@ -454,6 +456,9 @@ model ConceptoRecurrentePareja {
   hogar       Hogar                      @relation(fields: [hogarId], references: [id])
   responsable Usuario?                   @relation(fields: [responsableUsuarioId], references: [id])
   instancias  GastoRecurrenteInstancia[]
+  // Categoría del hogar (E4): todas sus cuotas cuentan en ella.
+  categoriaId String?                    @map("categoria_id")
+  categoria   CategoriaHogar?            @relation(fields: [categoriaId], references: [id])
 
   @@index([hogarId])
   @@map("conceptos_recurrentes_pareja")
@@ -562,8 +567,11 @@ model GastoVariablePareja {
   seguro          Int?
   mora            Int?
   abonoPrestamoId String?          @unique @map("abono_prestamo_id")
+  // Categoría del hogar (E4). Las cuotas de una compra copian la de la compra.
+  categoriaId     String?          @map("categoria_id")
   creadoEn        DateTime         @default(now()) @map("creado_en")
 
+  categoria      CategoriaHogar?              @relation(fields: [categoriaId], references: [id])
   prestamo       Prestamo?                    @relation(fields: [prestamoId], references: [id])
   abonoPrestamo  PrestamoAbono?               @relation("abonoGastoHogar", fields: [abonoPrestamoId], references: [id], onDelete: Cascade)
   hogar          Hogar                        @relation(fields: [hogarId], references: [id])
@@ -860,8 +868,10 @@ model CompraCuotasHogar {
   metodoPagoId      String?          @map("metodo_pago_id")
   tasaMensual       Float            @default(0) @map("tasa_mensual")
   sistemaInteres    SistemaInteres   @default(capital_fijo) @map("sistema_interes")
+  categoriaId       String?          @map("categoria_id")
   creadoEn          DateTime         @default(now()) @map("creado_en")
 
+  categoria  CategoriaHogar?       @relation(fields: [categoriaId], references: [id])
   hogar      Hogar                 @relation(fields: [hogarId], references: [id])
   pagador    Usuario               @relation("compraHogarPagador", fields: [pagoUsuarioId], references: [id])
   metodoPago MetodoPagoPersonal?   @relation(fields: [metodoPagoId], references: [id])
@@ -1228,4 +1238,59 @@ model ActividadHogar {
 
   @@index([hogarId, creadoEn])
   @@map("actividad_hogar")
+}
+
+// ---------------------------------------------------------------------------
+// Categorías y topes del hogar (entrega E4). Compartidas por los miembros.
+// Un tope es mensual (mes calendario), de una categoría o del total del hogar
+// (categoriaId null). Cuenta lo pagado con fecha en el mes. El mes pasado se
+// guarda en TopeHogarMes la primera vez que se consulta (foto), para que
+// cambiar el monto no reescriba lo que ya pasó.
+// ---------------------------------------------------------------------------
+
+model CategoriaHogar {
+  id       String   @id @default(uuid())
+  hogarId  String   @map("hogar_id")
+  nombre   String
+  activo   Boolean  @default(true)
+  creadoEn DateTime @default(now()) @map("creado_en")
+
+  hogar           Hogar                      @relation(fields: [hogarId], references: [id], onDelete: Cascade)
+  gastosVariables GastoVariablePareja[]
+  cuentasFijas    ConceptoRecurrentePareja[]
+  comprasCuotas   CompraCuotasHogar[]
+  topes           TopeHogar[]
+
+  @@unique([hogarId, nombre])
+  @@map("categorias_hogar")
+}
+
+model TopeHogar {
+  id           String   @id @default(uuid())
+  hogarId      String   @map("hogar_id")
+  categoriaId  String?  @map("categoria_id")
+  montoMensual Int      @map("monto_mensual")
+  activo       Boolean  @default(true)
+  creadoEn     DateTime @default(now()) @map("creado_en")
+
+  hogar     Hogar           @relation(fields: [hogarId], references: [id], onDelete: Cascade)
+  categoria CategoriaHogar? @relation(fields: [categoriaId], references: [id])
+  meses     TopeHogarMes[]
+
+  @@index([hogarId])
+  @@map("topes_hogar")
+}
+
+model TopeHogarMes {
+  id           String   @id @default(uuid())
+  topeId       String   @map("tope_id")
+  mes          DateTime // primer día del mes (UTC)
+  montoTope    Int      @map("monto_tope")
+  montoGastado Int      @map("monto_gastado")
+  evaluadoEn   DateTime @default(now()) @map("evaluado_en")
+
+  tope TopeHogar @relation(fields: [topeId], references: [id], onDelete: Cascade)
+
+  @@unique([topeId, mes])
+  @@map("topes_hogar_mes")
 }

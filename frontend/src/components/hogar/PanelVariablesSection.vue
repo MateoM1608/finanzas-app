@@ -20,6 +20,7 @@ import { listarMetodosPago } from '../../api/metodosPagoPersonales.js';
 import { useAuthStore } from '../../stores/auth.js';
 import { confirmar } from '../../composables/useConfirm.js';
 import { listarMiembros } from '../../api/hogares.js';
+import { listarCategoriasHogar } from '../../api/categoriasHogar.js';
 import { extractErrorMessage } from '../../api/client.js';
 import { formatCurrency, formatDate, formatReparto, hoyISO, modoCobroSugerido, formatTasa } from '../../utils/format.js';
 import FormField from '../FormField.vue';
@@ -75,6 +76,27 @@ const hInteres = ref('sin');
 const hTasa = ref('');
 const hSistema = ref('capital_fijo');
 const metodoPagoId = ref('');
+// Categorías del hogar (E4): opcional al registrar, se cambia en cualquier momento.
+const categorias = ref([]);
+const categoriaId = ref('');
+const categoriasActivas = computed(() => categorias.value.filter((c) => c.activo));
+const categoriasPara = (gasto) => categorias.value.filter((c) => c.activo || c.id === gasto.categoriaId);
+const cambiandoCategoriaId = ref(null);
+
+async function onCambiarCategoria(gasto, valor) {
+  error.value = '';
+  cambiandoCategoriaId.value = gasto.id;
+  try {
+    const actualizado = await actualizarGastoVariable(gasto.id, { categoriaId: valor || null });
+    const idx = gastos.value.findIndex((g) => g.id === gasto.id);
+    gastos.value[idx] = actualizado;
+    emit('cambio');
+  } catch (e) {
+    error.value = extractErrorMessage(e);
+  } finally {
+    cambiandoCategoriaId.value = null;
+  }
+}
 const eliminandoCompraId = ref(null);
 const editandoCompra = ref(null);
 const guardandoCompra = ref(false);
@@ -226,12 +248,14 @@ const repartoManualValido = computed(
 async function cargar() {
   loading.value = true;
   try {
-    const [listaGastos, listaMiembros, listaCompras, metodos] = await Promise.all([
+    const [listaGastos, listaMiembros, listaCompras, metodos, listaCategorias] = await Promise.all([
       listarGastosVariables(),
       listarMiembros(),
       listarComprasHogar(),
       listarMetodosPago(),
+      listarCategoriasHogar().catch(() => []),
     ]);
+    categorias.value = listaCategorias;
     gastos.value = ordenar(listaGastos);
     miembros.value = listaMiembros;
     compras.value = listaCompras;
@@ -253,6 +277,7 @@ async function onCrear() {
       valorTotal: Number(valorTotal.value),
       pagoUsuarioId: pagoUsuarioId.value,
       fecha: fecha.value,
+      categoriaId: categoriaId.value || undefined,
     };
     if (personalizarReparto.value) {
       payload.repartos = miembros.value.map((m) => ({
@@ -274,6 +299,7 @@ async function onCrear() {
         pagoUsuarioId: payload.pagoUsuarioId,
         metodoPagoId: pagaYo.value && metodoPagoId.value ? metodoPagoId.value : undefined,
         repartos: payload.repartos,
+        categoriaId: payload.categoriaId,
       });
       await Promise.all([cargarCompras(), recargarGastos()]);
       aCuotas.value = false;
@@ -285,6 +311,7 @@ async function onCrear() {
       metodoPagoId.value = '';
     }
     item.value = '';
+    categoriaId.value = '';
     valorTotal.value = '';
     pagoUsuarioId.value = '';
     fecha.value = hoyISO();
@@ -393,6 +420,13 @@ onMounted(cargar);
           </select>
         </div>
         <FormField v-model="fecha" type="date" label="Fecha del gasto" required />
+        <div v-if="categoriasActivas.length">
+          <label class="label" for="gasto-hogar-categoria">Categoría</label>
+          <select id="gasto-hogar-categoria" v-model="categoriaId" class="field">
+            <option value="">Sin categoría</option>
+            <option v-for="c in categoriasActivas" :key="c.id" :value="c.id">{{ c.nombre }}</option>
+          </select>
+        </div>
 
         <div v-if="pagaYo">
           <label class="label" for="gasto-hogar-metodo">Con qué lo pagaste (solo lo ves tú)</label>
@@ -509,6 +543,21 @@ onMounted(cargar);
             <p class="text-[13px] text-ink-tertiary mt-1">
               {{ formatDate(gasto.fecha) }} · Pagó {{ gasto.pagador.nombre }}<template v-if="gasto.metodoPago"> con {{ gasto.metodoPago.nombre }}</template>
             </p>
+            <template v-if="categorias.length">
+              <label :for="`categoria-${gasto.id}`" class="sr-only">Categoría de {{ gasto.item }}</label>
+              <select
+                v-if="puedeEditar && !gasto.compraId"
+                :id="`categoria-${gasto.id}`"
+                class="field mt-1.5 !w-auto !py-0.5 !pl-2.5 !pr-7 !text-xs !rounded-full"
+                :value="gasto.categoriaId ?? ''"
+                :disabled="cambiandoCategoriaId === gasto.id"
+                @change="onCambiarCategoria(gasto, $event.target.value)"
+              >
+                <option value="">Sin categoría</option>
+                <option v-for="c in categoriasPara(gasto)" :key="c.id" :value="c.id">{{ c.nombre }}</option>
+              </select>
+              <span v-else-if="gasto.categoria" class="badge-neutral mt-1.5">{{ gasto.categoria.nombre }}</span>
+            </template>
           </div>
           <span
             class="shrink-0 text-right text-sm font-medium text-ink-primary"
@@ -660,6 +709,7 @@ onMounted(cargar);
         tipo="hogar"
         :compra="editandoCompra"
         :metodos="misMetodos"
+        :categorias="categorias"
         :miembros="miembros"
         :usuario-actual-id="auth.usuario?.id ?? ''"
         :guardando="guardandoCompra"

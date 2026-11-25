@@ -143,6 +143,7 @@ async function tablaHogar(usuario, rango) {
     { key: 'fecha', header: 'Fecha' },
     { key: 'tipo', header: 'Tipo' },
     { key: 'concepto', header: 'Concepto' },
+    { key: 'categoria', header: 'Categoría' },
     { key: 'valor', header: 'Valor', tipo: 'pesos' },
     { key: 'pago', header: 'Pagó' },
     { key: 'estado', header: 'Estado' },
@@ -154,11 +155,11 @@ async function tablaHogar(usuario, rango) {
   const [cuotas, variables] = await Promise.all([
     prisma.gastoRecurrenteInstancia.findMany({
       where: { concepto: { hogarId: usuario.hogarId }, estado: { not: 'por_pagar' }, ...(fecha && { fecha }) },
-      include: { concepto: { select: { nombre: true } }, repartos: true },
+      include: { concepto: { select: { nombre: true, categoria: { select: { nombre: true } } } }, repartos: true },
     }),
     prisma.gastoVariablePareja.findMany({
       where: { hogarId: usuario.hogarId, estado: { not: 'por_pagar' }, ...(fecha && { fecha }) },
-      include: { repartos: true },
+      include: { repartos: true, categoria: { select: { nombre: true } } },
     }),
   ]);
   const fila = (base, repartos) => ({
@@ -172,6 +173,7 @@ async function tablaHogar(usuario, rango) {
           fecha: fechaTexto(c.fecha),
           tipo: 'Cuenta fija',
           concepto: c.concepto.nombre,
+          categoria: c.concepto.categoria?.nombre ?? '',
           valor: c.monto ?? 0,
           pago: nombre.get(c.pagoUsuarioId) ?? '',
           estado: ESTADO[c.estado] ?? c.estado,
@@ -185,6 +187,7 @@ async function tablaHogar(usuario, rango) {
           fecha: fechaTexto(g.fecha),
           tipo: tipoGastoHogar(g),
           concepto: g.numeroCuota ? `${g.item} (cuota ${g.numeroCuota})` : g.item,
+          categoria: g.prestamoId && !g.abonoPrestamoId ? 'Préstamos' : (g.categoria?.nombre ?? ''),
           valor: g.valorTotal,
           pago: nombre.get(g.pagoUsuarioId) ?? '',
           estado: ESTADO[g.estado] ?? g.estado,

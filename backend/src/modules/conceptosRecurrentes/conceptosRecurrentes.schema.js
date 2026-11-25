@@ -24,6 +24,7 @@ export const crearConceptoSchema = z
     tipoMonto: z.enum(['fijo', 'variable']),
     montoDefault: z.number().int().positive().max(MONTO_MAX).optional(),
     responsableUsuarioId: z.string().uuid().nullable().optional(),
+    categoriaId: z.string().uuid().nullable().optional(),
     ...camposCalendario,
   })
   .refine((data) => data.tipoMonto === 'variable' || data.montoDefault !== undefined, {
@@ -41,6 +42,7 @@ export const actualizarConceptoSchema = z.object({
   tipoMonto: z.enum(['fijo', 'variable']).optional(),
   montoDefault: z.number().int().positive().max(MONTO_MAX).nullable().optional(),
   responsableUsuarioId: z.string().uuid().nullable().optional(),
+  categoriaId: z.string().uuid().nullable().optional(),
   frecuencia: camposCalendario.frecuencia.optional(),
   diaMes: diaMes.optional(),
   diaMes2: diaMes.optional(),

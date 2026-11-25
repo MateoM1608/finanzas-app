@@ -11,6 +11,7 @@ import FormField from '../FormField.vue';
 const props = defineProps({
   inicial: { type: Object, default: null },
   miembros: { type: Array, default: () => [] },
+  categorias: { type: Array, default: () => [] }, // del hogar (E4)
   guardando: { type: Boolean, default: false },
   textoGuardar: { type: String, default: 'Guardar' },
   idBase: { type: String, default: 'cuenta' },
@@ -27,12 +28,17 @@ const form = reactive({
   tipoMonto: props.inicial?.tipoMonto ?? 'fijo',
   montoDefault: props.inicial?.montoDefault ?? '',
   responsableUsuarioId: props.inicial?.responsableUsuarioId ?? '',
+  categoriaId: props.inicial?.categoriaId ?? '',
   frecuencia: props.inicial?.frecuencia ?? 'mensual',
   diaMes: props.inicial ? diaAString(props.inicial.diaMes) : '',
   diaMes2: props.inicial ? diaAString(props.inicial.diaMes2) : '',
   fechaInicio: props.inicial?.fechaInicio ? props.inicial.fechaInicio.slice(0, 10) : hoyISO(),
 });
 if (!props.inicial && form.frecuencia === 'quincenal') form.diaMes = '15';
+
+const categoriasVisibles = computed(() =>
+  props.categorias.filter((c) => c.activo || c.id === props.inicial?.categoriaId),
+);
 
 const DIAS = Array.from({ length: 31 }, (_, i) => i + 1);
 
@@ -53,6 +59,7 @@ function onSubmit() {
     nombre: form.nombre,
     tipoMonto: form.tipoMonto,
     responsableUsuarioId: form.responsableUsuarioId || null,
+    categoriaId: form.categoriaId || null,
     frecuencia: form.frecuencia,
     diaMes: form.diaMes === '' ? null : Number(form.diaMes),
     diaMes2: form.frecuencia === 'quincenal' ? (form.diaMes2 === '' ? null : Number(form.diaMes2)) : null,
@@ -113,6 +120,14 @@ function onSubmit() {
           <option v-for="d in DIAS" :key="d" :value="String(d)">{{ d }}</option>
         </select>
       </div>
+    </div>
+
+    <div v-if="categoriasVisibles.length">
+      <label class="label" :for="`${idBase}-categoria`">Categoría del hogar</label>
+      <select :id="`${idBase}-categoria`" v-model="form.categoriaId" class="field">
+        <option value="">Sin categoría</option>
+        <option v-for="c in categoriasVisibles" :key="c.id" :value="c.id">{{ c.nombre }}</option>
+      </select>
     </div>
 
     <FormField

@@ -4,6 +4,7 @@ import { HttpError } from '../../middleware/errorHandler.js';
 import { calcularCuotas, fechasDeCuotas, interesDeCompra } from '../../utils/cuotas.js';
 import { obtenerSplitVigenteGastosVariables, calcularReparto } from '../../utils/reparto.js';
 import { sincronizarPagoGasto } from '../../utils/movimientosHogar.js';
+import { validarCategoriaHogar } from '../categoriasHogar/categoriasHogar.service.js';
 
 /**
  * Compras a cuotas del hogar: crean de una vez todas sus cuotas como
@@ -31,6 +32,7 @@ function requirePermisoEdicion(usuarioActual) {
 const INCLUDE_COMPRA = {
   pagador: { select: { id: true, nombre: true } },
   metodoPago: true,
+  categoria: { select: { id: true, nombre: true } },
   cuotas: {
     select: { id: true, numeroCuota: true, valorTotal: true, fecha: true, estado: true },
     orderBy: { numeroCuota: 'asc' },
@@ -96,6 +98,7 @@ export async function crearCompra(usuarioActual, data) {
 
   const porcentajes = await resolverPorcentajes(hogarId, data);
   data.registradoPorId = usuarioActual.id;
+  data.categoriaId = await validarCategoriaHogar(hogarId, data.categoriaId);
 
   const compra = await prisma.$transaction(async (tx) => {
     const nueva = await tx.compraCuotasHogar.create({
@@ -111,6 +114,7 @@ export async function crearCompra(usuarioActual, data) {
         sistemaInteres: data.sistemaInteres ?? 'capital_fijo',
         pagoUsuarioId: data.pagoUsuarioId,
         metodoPagoId: data.metodoPagoId ?? null,
+        categoriaId: data.categoriaId,
       },
     });
     const primera = await generarCuotas(tx, nueva.id, hogarId, data, porcentajes);
@@ -139,6 +143,7 @@ async function generarCuotas(tx, compraId, hogarId, datos, porcentajes) {
         estado: estadoInicial,
         compraId,
         numeroCuota: i + 1,
+        categoriaId: datos.categoriaId ?? null,
         // Automáticas: nacen pagadas por quien registró la compra.
         registradoPorId: estadoInicial === 'pagado' ? (datos.registradoPorId ?? null) : null,
       },
@@ -191,6 +196,10 @@ export async function actualizarCompra(usuarioActual, compraId, data) {
     pagoUsuarioId: data.pagoUsuarioId ?? actual.pagoUsuarioId,
     tasaMensual: data.tasaMensual ?? actual.tasaMensual,
     sistemaInteres: data.sistemaInteres ?? actual.sistemaInteres,
+    categoriaId:
+      data.categoriaId === undefined
+        ? actual.categoriaId
+        : await validarCategoriaHogar(hogarId, data.categoriaId, actual.categoriaId),
   };
   if (datos.pagoUsuarioId !== actual.pagoUsuarioId) {
     const pagador = await prisma.usuario.count({ where: { id: datos.pagoUsuarioId, hogarId } });
@@ -251,8 +260,9 @@ export async function actualizarCompra(usuarioActual, compraId, data) {
       await tx.gastoVariableParejaReparto.deleteMany({ where: { gasto: { compraId } } });
       await tx.gastoVariablePareja.deleteMany({ where: { compraId } });
       datos.fechaPrimeraCuota = await generarCuotas(tx, compraId, hogarId, datos, porcentajes);
-    } else if (datos.item !== actual.item) {
-      await tx.gastoVariablePareja.updateMany({ where: { compraId }, data: { item: datos.item } });
+    } else if (datos.item !== actual.item || datos.categoriaId !== actual.categoriaId) {
+      // Nombre y categoría se cambian en todas las cuotas, aunque ya estén cuadradas.
+      await tx.gastoVariablePareja.updateMany({ where: { compraId }, data: { item: datos.item, categoriaId: datos.categoriaId } });
     }
     await tx.compraCuotasHogar.update({ where: { id: compraId }, data: { ...datos, metodoPagoId } });
     // Con el método y el nombre ya guardados en la compra, los movimientos de

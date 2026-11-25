@@ -2,6 +2,7 @@
 import { confirmar } from '../../composables/useConfirm.js';
 import { ref, onMounted } from 'vue';
 import { listarMiembros } from '../../api/hogares.js';
+import { listarCategoriasHogar } from '../../api/categoriasHogar.js';
 import {
   listarConceptos,
   crearConcepto,
@@ -21,6 +22,7 @@ defineProps({
 
 const conceptos = ref([]);
 const miembros = ref([]);
+const categorias = ref([]);
 const loading = ref(true);
 const error = ref('');
 const guardandoId = ref(null);
@@ -32,7 +34,12 @@ const eliminandoId = ref(null);
 async function cargar() {
   loading.value = true;
   try {
-    const [listaConceptos, listaMiembros] = await Promise.all([listarConceptos(), listarMiembros()]);
+    const [listaConceptos, listaMiembros, listaCategorias] = await Promise.all([
+      listarConceptos(),
+      listarMiembros(),
+      listarCategoriasHogar().catch(() => []),
+    ]);
+    categorias.value = listaCategorias;
     conceptos.value = listaConceptos;
     miembros.value = listaMiembros;
   } catch (e) {
@@ -152,6 +159,7 @@ onMounted(cargar);
             <p class="mt-0.5 text-[13px] text-ink-secondary">
               {{ describirCalendario(concepto) }}
               · {{ concepto.responsable ? `La paga ${concepto.responsable.nombre}` : 'La paga cualquiera' }}
+              <template v-if="concepto.categoria"> · {{ concepto.categoria.nombre }}</template>
             </p>
           </div>
 
@@ -196,6 +204,7 @@ onMounted(cargar);
       <CuentaFijaForm
         id-base="cuenta-nueva"
         :miembros="miembros"
+        :categorias="categorias"
         :guardando="creando"
         texto-guardar="Agregar cuenta"
         @guardar="onCrear"
@@ -207,6 +216,7 @@ onMounted(cargar);
         :id-base="`cuenta-${editando.id}`"
         :inicial="editando"
         :miembros="miembros"
+        :categorias="categorias"
         :guardando="guardandoId === editando.id"
         texto-guardar="Guardar cambios"
         @guardar="onGuardarEdicion"

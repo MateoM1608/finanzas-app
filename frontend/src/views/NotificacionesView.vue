@@ -31,12 +31,13 @@ async function cargar() {
 }
 onMounted(cargar);
 
-const ICONO = { atrasado: 'alert', vence_hoy: 'bell', vence_pronto: 'clock', actividad: 'users' };
+const ICONO = { atrasado: 'alert', vence_hoy: 'bell', vence_pronto: 'clock', actividad: 'users', tope_hogar: 'gauge' };
 const COLOR = {
   atrasado: 'bg-negative/10 text-negative',
   vence_hoy: 'bg-warning/10 text-warning',
   vence_pronto: 'bg-accent/10 text-accent',
   actividad: 'bg-positive/10 text-positive',
+  tope_hogar: 'bg-warning/10 text-warning',
 };
 
 function hace(fecha) {

@@ -37,6 +37,9 @@ const form = reactive({
   sistemaInteres: c.sistemaInteres ?? 'capital_fijo',
 });
 
+// Las activas, más la que ya tenía (aunque se haya desactivado).
+const categoriasVisibles = computed(() => props.categorias.filter((x) => x.activo !== false || x.id === c.categoriaId));
+
 const pagaYo = computed(() => props.tipo === 'personal' || form.pagoUsuarioId === props.usuarioActualId);
 const valorCuota = computed(() =>
   Number(form.numeroCuotas) >= 2 ? Math.floor(Number(form.montoTotal) / Number(form.numeroCuotas)) : null,
@@ -69,7 +72,12 @@ function onSubmit() {
       esObligatorio: form.esObligatorio,
     });
   } else {
-    Object.assign(payload, { item: form.nombre, fechaCompra: form.fechaCompra, pagoUsuarioId: form.pagoUsuarioId });
+    Object.assign(payload, {
+      item: form.nombre,
+      fechaCompra: form.fechaCompra,
+      pagoUsuarioId: form.pagoUsuarioId,
+      categoriaId: form.categoriaId || null,
+    });
     if (pagaYo.value) payload.metodoPagoId = form.metodoPagoId || null;
   }
   emit('guardar', payload);
@@ -112,6 +120,13 @@ function onSubmit() {
         <option v-for="m in miembros" :key="m.id" :value="m.id">{{ m.nombre }}</option>
       </select>
     </div>
+    <div v-if="tipo === 'hogar'">
+      <label class="label" :for="`compra-${compra.id}-categoria-hogar`">Categoría del hogar</label>
+      <select :id="`compra-${compra.id}-categoria-hogar`" v-model="form.categoriaId" class="field">
+        <option value="">Sin categoría</option>
+        <option v-for="cat in categoriasVisibles" :key="cat.id" :value="cat.id">{{ cat.nombre }}</option>
+      </select>
+    </div>
     <div v-if="pagaYo">
       <label class="label" :for="`compra-${compra.id}-metodo`">
         {{ tipo === 'hogar' ? 'Tu método de pago (solo lo ves tú)' : 'Método de pago' }}
@@ -143,7 +158,7 @@ function onSubmit() {
     </p>
     <p class="sm:col-span-2 text-[13px] text-ink-tertiary">
       Si ya hay cuotas {{ tipo === 'hogar' ? 'cuadradas o' : '' }} marcadas como pagadas a mano, solo se puede cambiar el
-      nombre{{ tipo === 'personal' ? ', la categoría, el método o si es obligatoria' : ' o el método de pago' }}.
+      nombre{{ tipo === 'personal' ? ', la categoría, el método o si es obligatoria' : ', la categoría o el método de pago' }}.
     </p>
 
     <div class="flex justify-end gap-2 sm:col-span-2">

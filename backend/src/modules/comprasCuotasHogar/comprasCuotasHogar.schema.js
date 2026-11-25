@@ -12,6 +12,7 @@ export const crearCompraHogarSchema = z.object({
   sistemaInteres: z.enum(['capital_fijo', 'cuota_fija']).optional(),
   pagoUsuarioId: z.string().uuid(),
   metodoPagoId: z.string().uuid().nullable().optional(),
+  categoriaId: z.string().uuid().nullable().optional(),
   repartos: z
     .array(z.object({ usuarioId: z.string().uuid(), monto: z.number().int().nonnegative() }))
     .optional(),
@@ -28,6 +29,7 @@ export const actualizarCompraHogarSchema = z.object({
   sistemaInteres: z.enum(['capital_fijo', 'cuota_fija']).optional(),
   pagoUsuarioId: z.string().uuid().optional(),
   metodoPagoId: z.string().uuid().nullable().optional(),
+  categoriaId: z.string().uuid().nullable().optional(),
   repartos: z
     .array(z.object({ usuarioId: z.string().uuid(), monto: z.number().int().nonnegative() }))
     .optional(),

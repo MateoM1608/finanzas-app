@@ -1,6 +1,7 @@
 import { prisma } from '../../config/prisma.js';
 import { HttpError } from '../../middleware/errorHandler.js';
 import { hoyUTC } from '../../utils/fechas.js';
+import { validarCategoriaHogar } from '../categoriasHogar/categoriasHogar.service.js';
 
 /**
  * Cuentas fijas del hogar (modelo ConceptoRecurrentePareja): arriendo,
@@ -38,7 +39,10 @@ async function requireConceptoDelHogar(hogarId, conceptoId) {
   return concepto;
 }
 
-const INCLUDE_CONCEPTO = { responsable: { select: { id: true, nombre: true } } };
+const INCLUDE_CONCEPTO = {
+  responsable: { select: { id: true, nombre: true } },
+  categoria: { select: { id: true, nombre: true } },
+};
 
 function normalizarCalendario(data) {
   return {
@@ -61,6 +65,7 @@ export async function crearConcepto(usuarioActual, data) {
   const hogarId = requireHogarId(usuarioActual);
   requirePermisoEdicion(usuarioActual);
   await validarResponsableDelHogar(hogarId, data.responsableUsuarioId);
+  const categoriaId = await validarCategoriaHogar(hogarId, data.categoriaId);
 
   return prisma.conceptoRecurrentePareja.create({
     data: {
@@ -69,6 +74,7 @@ export async function crearConcepto(usuarioActual, data) {
       tipoMonto: data.tipoMonto,
       montoDefault: data.tipoMonto === 'fijo' ? data.montoDefault : null,
       responsableUsuarioId: data.responsableUsuarioId ?? null,
+      categoriaId,
       fechaInicio: data.fechaInicio,
       ...normalizarCalendario(data),
     },
@@ -100,6 +106,8 @@ export async function actualizarConcepto(usuarioActual, conceptoId, data) {
     throw new HttpError(400, 'En una cuenta quincenal el primer día debe ser antes que el segundo');
   }
   const fechaInicioFinal = data.fechaInicio ?? concepto.fechaInicio;
+  const categoriaId =
+    data.categoriaId === undefined ? undefined : await validarCategoriaHogar(hogarId, data.categoriaId, concepto.categoriaId);
 
   const cambiaCalendario =
     calendario.frecuencia !== concepto.frecuencia ||
@@ -116,6 +124,7 @@ export async function actualizarConcepto(usuarioActual, conceptoId, data) {
         activo: data.activo ?? undefined,
         tipoMonto: data.tipoMonto ?? undefined,
         montoDefault: montoPorCuota,
+        categoriaId,
         responsableUsuarioId:
           data.responsableUsuarioId === undefined ? undefined : data.responsableUsuarioId,
         fechaInicio: fechaInicioFinal,

@@ -5,11 +5,13 @@ import { obtenerSplitVigenteGastosVariables, calcularReparto } from '../../utils
 import { hoyUTC } from '../../utils/fechas.js';
 import { sincronizarPagoCuota, sincronizarPagoGasto } from '../../utils/movimientosHogar.js';
 import { validarMetodoDelPagador, ocultarMetodoAjeno } from '../../utils/metodoPagoPrivado.js';
+import { validarCategoriaHogar } from '../categoriasHogar/categoriasHogar.service.js';
 
 const INCLUDE_GASTO = {
   compra: { select: { id: true, numeroCuotas: true, modoCobro: true } },
   pagador: { select: { id: true, nombre: true } },
   metodoPago: { select: { id: true, nombre: true } },
+  categoria: { select: { id: true, nombre: true } },
   repartos: { include: { usuario: { select: { id: true, nombre: true } } } },
 };
 
@@ -84,6 +86,7 @@ export async function crearGastoVariable(usuarioActual, data) {
   await validarMiembroDelHogar(hogarId, data.pagoUsuarioId);
   const repartos = await resolverRepartos(hogarId, data.valorTotal, data.repartos, data.fecha);
   const metodoPagoId = await validarMetodoDelPagador(usuarioActual, data.pagoUsuarioId, data.metodoPagoId);
+  const categoriaId = await validarCategoriaHogar(hogarId, data.categoriaId);
 
   const creado = await prisma.$transaction(async (tx) => {
     const gasto = await tx.gastoVariablePareja.create({
@@ -94,6 +97,7 @@ export async function crearGastoVariable(usuarioActual, data) {
         pagoUsuarioId: data.pagoUsuarioId,
         fecha: data.fecha,
         metodoPagoId,
+        categoriaId,
         registradoPorId: usuarioActual.id,
       },
     });
@@ -120,6 +124,17 @@ export async function actualizarGastoVariable(usuarioActual, gastoId, data) {
   if (gasto.compraId) {
     throw new HttpError(409, 'Es una cuota de una compra a cuotas — elimina la compra y vuelve a crearla para cambiarla');
   }
+  // La categoría no mueve plata: se puede cambiar aunque el gasto ya esté en
+  // un cuadre o cuadrado.
+  if (Object.keys(data).every((k) => k === 'categoriaId')) {
+    const categoriaId = await validarCategoriaHogar(hogarId, data.categoriaId ?? null, gasto.categoriaId);
+    const conCategoria = await prisma.gastoVariablePareja.update({
+      where: { id: gastoId },
+      data: { categoriaId },
+      include: INCLUDE_GASTO,
+    });
+    return ocultarMetodoAjeno(conCategoria, usuarioActual);
+  }
   if (gasto.estado === 'cuadrado') {
     throw new HttpError(409, 'Este gasto ya se cuadró y no se puede editar');
   }
@@ -142,6 +157,8 @@ export async function actualizarGastoVariable(usuarioActual, gastoId, data) {
   } else if (pagadorFinal !== gasto.pagoUsuarioId) {
     metodoPagoId = null;
   }
+  const categoriaId =
+    data.categoriaId === undefined ? undefined : await validarCategoriaHogar(hogarId, data.categoriaId, gasto.categoriaId);
   const valorTotalFinal = data.valorTotal ?? gasto.valorTotal;
   const fechaFinal = data.fecha ?? gasto.fecha;
   const debeRecalcularReparto =
@@ -155,6 +172,7 @@ export async function actualizarGastoVariable(usuarioActual, gastoId, data) {
       where: { id: gastoId },
       data: {
         metodoPagoId,
+        categoriaId,
         item: data.item ?? undefined,
         valorTotal: data.valorTotal ?? undefined,
         pagoUsuarioId: data.pagoUsuarioId ?? undefined,
