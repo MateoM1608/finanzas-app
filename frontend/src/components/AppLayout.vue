@@ -1,5 +1,6 @@
 <script setup>
-import { computed } from 'vue';
+import { computed, ref, watch } from 'vue';
+import { contarNotificaciones } from '../api/avisos.js';
 import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/auth.js';
 import AppIcon from './AppIcon.vue';
@@ -40,6 +41,22 @@ const iniciales = computed(() =>
     .join(''),
 );
 
+// Notificaciones sin leer: se consultan al abrir cada pantalla.
+const noLeidas = ref(0);
+watch(
+  () => route.fullPath,
+  async () => {
+    if (!auth.usuario) return;
+    try {
+      noLeidas.value = await contarNotificaciones();
+    } catch {
+      // Es informativo: si falla, la pantalla sigue.
+    }
+  },
+  { immediate: true },
+);
+const textoCampana = computed(() => (noLeidas.value ? `Notificaciones: ${noLeidas.value} sin leer` : 'Notificaciones'));
+
 function activo(item) {
   return route.name === item.name;
 }
@@ -61,6 +78,10 @@ async function onLogout() {
           <AppIcon name="logo" class="h-[18px] w-[18px]" :stroke-width="2.4" />
         </span>
         <span class="text-[15px] font-semibold tracking-tight">Finanzas</span>
+        <router-link :to="{ name: 'notificaciones' }" class="btn-icon relative ml-auto !p-1.5" :aria-label="textoCampana" :title="textoCampana">
+          <AppIcon name="bell" class="h-[18px] w-[18px]" />
+          <span v-if="noLeidas" class="absolute -right-0.5 -top-0.5 grid h-4 min-w-4 place-items-center rounded-full bg-negative px-1 text-[10px] font-semibold text-white">{{ noLeidas > 9 ? '9+' : noLeidas }}</span>
+        </router-link>
       </div>
 
       <nav class="flex-1 px-3 pt-4 space-y-0.5" aria-label="Principal">
@@ -106,6 +127,10 @@ async function onLogout() {
         <span class="text-[15px] font-semibold tracking-tight">Finanzas</span>
       </div>
       <div class="flex items-center gap-1">
+        <router-link :to="{ name: 'notificaciones' }" class="btn-icon relative" :aria-label="textoCampana" :title="textoCampana">
+          <AppIcon name="bell" class="h-5 w-5" />
+          <span v-if="noLeidas" class="absolute right-0.5 top-0.5 grid h-4 min-w-4 place-items-center rounded-full bg-negative px-1 text-[10px] font-semibold text-white">{{ noLeidas > 9 ? '9+' : noLeidas }}</span>
+        </router-link>
         <ThemeToggle />
         <button type="button" class="btn-icon" aria-label="Cerrar sesión" title="Cerrar sesión" @click="onLogout">
           <AppIcon name="logout" class="h-5 w-5" />

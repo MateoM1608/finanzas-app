@@ -7,14 +7,17 @@ import CuentasFijasHogarSection from '../components/hogar/CuentasFijasHogarSecti
 import PanelVariablesSection from '../components/hogar/PanelVariablesSection.vue';
 import ResumenHogarSection from '../components/hogar/ResumenHogarSection.vue';
 import MetasHogarSection from '../components/hogar/MetasHogarSection.vue';
+import AvisosPagar from '../components/AvisosPagar.vue';
 
 const saldoRef = ref(null);
 const resumenRef = ref(null);
+const avisosRef = ref(null);
 
 // Pagar una cuenta o registrar un gasto mueve el saldo y el informe.
 function onCambio() {
   saldoRef.value?.recargar();
   resumenRef.value?.recargar();
+  avisosRef.value?.recargar();
 }
 </script>
 
@@ -28,6 +31,7 @@ function onCambio() {
     </template>
 
     <div class="space-y-6">
+      <AvisosPagar ref="avisosRef" ambito="hogar" />
       <SaldoHogarSection ref="saldoRef" />
       <div class="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
         <CuentasFijasHogarSection @cambio="onCambio" />

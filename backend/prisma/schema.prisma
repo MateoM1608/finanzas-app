@@ -164,6 +164,8 @@ model Usuario {
   movimientosInversion          InversionMovimiento[]
   metasHogarCreadas             MetaHogar[]
   movimientosMetaHogar          MetaHogarMovimiento[]
+  notificacions                 Notificacion[]
+  dispositivoNotificacions      DispositivoNotificacion[]
 
   @@index([hogarId])
   @@map("usuarios")
@@ -243,6 +245,8 @@ model MetodoPagoPersonal {
   movimientosInversion InversionMovimiento[]
   movimientosMetaHogar MetaHogarMovimiento[]
   transaccionesAhorro  AhorroTransaccion[]
+  notificaciones       Notificacion[]
+  dispositivos         DispositivoNotificacion[]
 
   @@index([usuarioId])
   @@map("metodos_pago_personales")
@@ -1150,4 +1154,54 @@ model MetaHogarMovimiento {
 
   @@index([metaId])
   @@map("meta_hogar_movimientos")
+}
+
+// ---------------------------------------------------------------------------
+// Notificaciones (entrega E2). Toda notificación pasa por notificar() (src/
+// utils/notificaciones.js): se guarda en la bandeja del usuario y se ofrece al
+// canal push, que por ahora no hace nada y luego enviará por Firebase (FCM) a
+// los dispositivos registrados.
+// ---------------------------------------------------------------------------
+
+model Notificacion {
+  id            String    @id @default(uuid())
+  usuarioId     String    @map("usuario_id")
+  // vence_pronto | vence_hoy | atrasado (y otros tipos a futuro)
+  tipo          String
+  titulo        String
+  mensaje       String
+  // Ruta de la app a la que lleva (ej. "/hogar").
+  enlace        String?
+  // Evita repetir la misma notificación (ej. "cuota_hogar:<id>:atrasado").
+  clave         String
+  leida         Boolean   @default(false)
+  // Cuándo se envió al teléfono (null = todavía no, o sin push configurado).
+  enviadaPushEn DateTime? @map("enviada_push_en")
+  creadaEn      DateTime  @default(now()) @map("creada_en")
+
+  usuario              Usuario             @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  metodoPagoPersonal   MetodoPagoPersonal? @relation(fields: [metodoPagoPersonalId], references: [id])
+  metodoPagoPersonalId String?
+
+  @@unique([usuarioId, clave])
+  @@index([usuarioId, leida, creadaEn])
+  @@map("notificaciones")
+}
+
+// Teléfonos registrados para notificaciones push (token de Firebase Cloud
+// Messaging). Se llenará cuando exista la APK.
+model DispositivoNotificacion {
+  id          String   @id @default(uuid())
+  usuarioId   String   @map("usuario_id")
+  token       String   @unique
+  plataforma  String   @default("android")
+  creadoEn    DateTime @default(now()) @map("creado_en")
+  ultimoUsoEn DateTime @default(now()) @map("ultimo_uso_en")
+
+  usuario              Usuario             @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  metodoPagoPersonal   MetodoPagoPersonal? @relation(fields: [metodoPagoPersonalId], references: [id])
+  metodoPagoPersonalId String?
+
+  @@index([usuarioId])
+  @@map("dispositivos_notificacion")
 }

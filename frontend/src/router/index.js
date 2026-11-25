@@ -57,6 +57,12 @@ const routes = [
   },
   { path: '/prestamos', redirect: '/patrimonio' },
   {
+    path: '/notificaciones',
+    name: 'notificaciones',
+    component: () => import('../views/NotificacionesView.vue'),
+    meta: { requiresAuth: true, requiresHogar: true },
+  },
+  {
     path: '/cuadres',
     name: 'cuadres',
     component: () => import('../views/CuadresView.vue'),

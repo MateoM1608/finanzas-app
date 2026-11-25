@@ -20,6 +20,7 @@ import FormField from '../components/FormField.vue';
 import AlertError from '../components/AlertError.vue';
 import AppModal from '../components/AppModal.vue';
 import ExportarDatos from '../components/ExportarDatos.vue';
+import AvisosPagar from '../components/AvisosPagar.vue';
 import EditarMovimientoModal from '../components/personal/EditarMovimientoModal.vue';
 import AppIcon from '../components/AppIcon.vue';
 import ConfiguracionPersonalSection from '../components/personal/ConfiguracionPersonalSection.vue';
@@ -106,7 +107,10 @@ function onCambioAhorro() {
   cargarIngresos();
 }
 
+const avisosRef = ref(null);
+
 function recargarResumenes() {
+  avisosRef.value?.recargar();
   resumenRef.value?.recargar();
   proximosRef.value?.recargar();
   ahorrosRef.value?.recargar();
@@ -664,6 +668,7 @@ function saldoCompra(compra) {
         </div>
       </div>
 
+      <AvisosPagar v-if="ciclo === 0" ref="avisosRef" ambito="personal" />
       <ResumenPersonalSection ref="resumenRef" :ciclo="ciclo" @ciclo="onCicloCargado" />
       <ProximosMesesSection v-if="ciclo === 0" ref="proximosRef" />
 

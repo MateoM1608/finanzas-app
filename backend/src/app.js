@@ -26,6 +26,7 @@ import { prestamosRouter } from './modules/prestamos/prestamos.routes.js';
 import { inversionesRouter } from './modules/inversiones/inversiones.routes.js';
 import { metasHogarRouter } from './modules/metasHogar/metasHogar.routes.js';
 import { exportarRouter } from './modules/exportar/exportar.routes.js';
+import { avisosRouter, notificacionesRouter } from './modules/avisos/avisos.routes.js';
 import { limitesPersonalesRouter } from './modules/limitesPersonales/limitesPersonales.routes.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 
@@ -77,6 +78,8 @@ app.use('/api/prestamos', prestamosRouter);
 app.use('/api/inversiones', inversionesRouter);
 app.use('/api/metas-hogar', metasHogarRouter);
 app.use('/api/exportar', exportarRouter);
+app.use('/api/avisos', avisosRouter);
+app.use('/api/notificaciones', notificacionesRouter);
 
 app.use(notFoundHandler);
 app.use(errorHandler);
