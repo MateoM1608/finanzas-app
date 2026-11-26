@@ -4,7 +4,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { listarMetodosPago, registrarPagoTarjeta } from '../api/metodosPagoPersonales.js';
 import { obtenerInformeMetodo } from '../api/informeMetodos.js';
 import { extractErrorMessage } from '../api/client.js';
-import { formatCurrency, formatDate, hoyISO, describirMetodo } from '../utils/format.js';
+import { formatCurrency, formatDate, hoyISO, describirMetodo, formatUsd, formatTrm, aCentavos } from '../utils/format.js';
 import AppLayout from '../components/AppLayout.vue';
 import AppIcon from '../components/AppIcon.vue';
 import AlertError from '../components/AlertError.vue';
@@ -78,16 +78,37 @@ const ETIQUETA_ORIGEN = { pago_hogar: 'Hogar', liquidacion_hogar: 'Cuadre', pago
 
 // --- Registrar pago de la tarjeta ---
 const pagando = ref(false);
-const pago = reactive({ monto: '', fecha: '', desdeId: '' });
+// moneda: 'pesos' (la parte en pesos) o 'usd' (cuántos US$ cubre y cuántos pesos costó).
+const pago = reactive({ monto: '', fecha: '', desdeId: '', moneda: 'pesos', usd: '' });
 const guardandoPago = ref(false);
 const cuentasOrigen = computed(() => metodos.value.filter((m) => m.tipo !== 'tarjeta_credito'));
 
+const deudaPesos = computed(() => metodo.value?.deudaPesos ?? informe.value?.tarjeta?.deuda ?? 0);
+const deudaUsd = computed(() => metodo.value?.deudaUsd ?? 0);
+
+function sugerirPago() {
+  if (pago.moneda === 'usd') {
+    pago.usd = deudaUsd.value > 0 ? String(deudaUsd.value / 100) : '';
+    const trm = metodo.value?.trmDeuda;
+    pago.monto = deudaUsd.value > 0 && trm ? Math.round((deudaUsd.value * trm) / 100) : '';
+  } else {
+    pago.monto = deudaPesos.value > 0 ? deudaPesos.value : '';
+  }
+}
+watch(() => pago.moneda, sugerirPago);
+
 function abrirPago() {
-  pago.monto = informe.value?.tarjeta?.deuda > 0 ? informe.value.tarjeta.deuda : '';
+  pago.moneda = 'pesos';
+  pago.usd = '';
+  sugerirPago();
   pago.fecha = hoyISO();
   pago.desdeId = '';
   pagando.value = true;
 }
+const tasaPago = computed(() => {
+  const usd = aCentavos(pago.usd);
+  return pago.moneda === 'usd' && usd && Number(pago.monto) > 0 ? (Number(pago.monto) * 100) / usd : null;
+});
 
 // Un ajuste de extracto puede crear o cambiar cargos: refresca deuda e informe.
 async function recargar() {
@@ -107,6 +128,7 @@ async function onRegistrarPago() {
       monto: Number(pago.monto),
       fecha: pago.fecha,
       metodoPagoId: pago.desdeId || undefined,
+      ...(pago.moneda === 'usd' ? { montoUsd: aCentavos(pago.usd) } : {}),
     });
     pagando.value = false;
     metodos.value = await listarMetodosPago();
@@ -166,7 +188,19 @@ async function onRegistrarPago() {
               <div class="pointer-events-none absolute inset-x-0 top-0 h-1 bg-warning" aria-hidden="true" />
               <p class="stat-label">Deuda hoy</p>
               <p class="stat-value-lg" :class="informe.tarjeta.deuda > 0 ? 'text-warning' : 'text-ink-primary'">
-                {{ formatCurrency(informe.tarjeta.deuda) }}
+                {{ formatCurrency(deudaUsd ? deudaPesos : informe.tarjeta.deuda) }}
+              </p>
+              <template v-if="deudaUsd">
+                <p class="mt-1 text-lg font-bold text-warning">+ {{ formatUsd(deudaUsd) }}</p>
+                <p class="mt-1 text-xs text-ink-tertiary">
+                  En total ≈ {{ formatCurrency(informe.tarjeta.deuda) }}
+                  <template v-if="metodo?.trmDeuda">(dólares a la TRM de hoy, {{ formatTrm(metodo.trmDeuda) }})</template>
+                </p>
+              </template>
+              <p v-if="metodo?.cupo" class="mt-1 text-xs text-ink-secondary">
+                Cupo disponible:
+                <span class="font-semibold" :class="metodo.cupoDisponible < 0 ? 'text-negative' : ''">{{ formatCurrency(metodo.cupoDisponible) }}</span>
+                de {{ formatCurrency(metodo.cupo) }}
               </p>
               <button type="button" class="btn-secondary btn-sm mt-3" @click="abrirPago">Registrar pago</button>
             </section>
@@ -197,7 +231,39 @@ async function onRegistrarPago() {
           <!-- Registrar pago -->
           <form v-if="pagando" class="card card-pad grid grid-cols-1 gap-4 sm:grid-cols-3" @submit.prevent="onRegistrarPago">
             <p class="sm:col-span-3 section-title">Pago de {{ metodo?.nombre }}</p>
-            <FormField v-model="pago.monto" type="number" label="Valor pagado (COP)" required />
+            <div v-if="deudaUsd || pago.moneda === 'usd'" class="sm:col-span-3">
+              <span class="label">Qué parte pagas</span>
+              <div class="tabs" role="radiogroup" aria-label="Parte de la deuda que pagas">
+                <button
+                  v-for="op in [{ id: 'pesos', label: 'Parte en pesos' }, { id: 'usd', label: 'Parte en dólares' }]"
+                  :key="op.id"
+                  type="button"
+                  role="radio"
+                  class="tab"
+                  :class="{ 'tab-active': pago.moneda === op.id }"
+                  :aria-checked="pago.moneda === op.id"
+                  @click="pago.moneda = op.id"
+                >
+                  {{ op.label }}
+                </button>
+              </div>
+            </div>
+            <FormField
+              v-if="pago.moneda === 'usd'"
+              v-model="pago.usd"
+              type="number"
+              step="0.01"
+              label="Dólares que pagas (US$)"
+              required
+              :hint="deudaUsd ? `Debes ${formatUsd(deudaUsd)}.` : ''"
+            />
+            <FormField
+              v-model="pago.monto"
+              type="number"
+              :label="pago.moneda === 'usd' ? 'Lo que te costó en pesos (COP)' : 'Valor pagado (COP)'"
+              required
+              :hint="tasaPago ? `Tasa: ${formatTrm(tasaPago)} pesos por dólar.` : ''"
+            />
             <FormField v-model="pago.fecha" type="date" label="Fecha" required />
             <div>
               <label class="label" for="pago-desde">Desde</label>
@@ -208,7 +274,7 @@ async function onRegistrarPago() {
             </div>
             <div class="flex justify-end gap-2 sm:col-span-3">
               <button type="button" class="btn-ghost" @click="pagando = false">Cancelar</button>
-              <button type="submit" class="btn-primary" :disabled="guardandoPago">
+              <button type="submit" class="btn-primary" :disabled="guardandoPago || (pago.moneda === 'usd' && !aCentavos(pago.usd))">
                 {{ guardandoPago ? 'Guardando…' : 'Registrar pago' }}
               </button>
             </div>
@@ -303,7 +369,10 @@ async function onRegistrarPago() {
                       <p class="text-sm text-ink-primary">{{ formatDate(p.fecha) }}</p>
                       <p class="text-xs text-ink-tertiary">Desde {{ p.metodoPago?.nombre ?? 'sin definir' }}</p>
                     </div>
-                    <span class="shrink-0 whitespace-nowrap text-sm font-semibold text-positive">{{ formatCurrency(p.monto) }}</span>
+                    <span class="shrink-0 text-right">
+                      <span class="block whitespace-nowrap text-sm font-semibold text-positive">{{ formatCurrency(p.monto) }}</span>
+                      <span v-if="p.montoUsd" class="block text-xs text-ink-tertiary">por {{ formatUsd(p.montoUsd) }}</span>
+                    </span>
                   </li>
                 </ul>
               </template>

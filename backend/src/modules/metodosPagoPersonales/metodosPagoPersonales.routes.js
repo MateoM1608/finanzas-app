@@ -7,12 +7,14 @@ import {
   patchMetodoPago,
   putSaldoInicial,
   deleteMetodoPago,
+  getTrm,
 } from './metodosPagoPersonales.controller.js';
 
 export const metodosPagoPersonalesRouter = Router();
 
 metodosPagoPersonalesRouter.use(requireAuth);
 metodosPagoPersonalesRouter.get('/', getMetodosPago);
+metodosPagoPersonalesRouter.get('/trm', getTrm);
 metodosPagoPersonalesRouter.post('/', postMetodoPago);
 metodosPagoPersonalesRouter.patch('/:id', patchMetodoPago);
 metodosPagoPersonalesRouter.delete('/:id', deleteMetodoPago);

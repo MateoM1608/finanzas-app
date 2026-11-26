@@ -35,6 +35,7 @@ const SELECT_CARGO = {
   id: true,
   fecha: true,
   monto: true,
+  montoUsd: true,
   capital: true,
   interes: true,
   descripcion: true,
@@ -107,28 +108,41 @@ function lineasDelCiclo(cargos, ciclo) {
         fecha: c.fecha,
         descripcion: describirCargo(c),
         monto: c.monto,
+        // Cargo en dólares (centavos): va en la parte en dólares del extracto.
+        montoUsd: c.montoUsd ?? null,
         interes: c.interes ?? 0,
         estado: c.estado,
         tipo: ajusteCargo ? 'ajuste' : esCuota(c) ? 'cuota' : 'compra',
         delHogar,
         // Un movimiento del hogar refleja el 100 % del gasto del hogar: su
         // valor se cambia desde Hogar, no desde el extracto.
-        corregible: !delHogar && !ajusteCargo,
+        // Uno en dólares se corrige desde el gasto (sus US$ y su tasa).
+        corregible: !delHogar && !ajusteCargo && !c.montoUsd,
         ajusteIds: c.ajustesExtracto.map((a) => a.id),
       };
     });
 }
 
+/**
+ * Totales del extracto, separados como los del banco: la parte en pesos
+ * (cargos sin dólares, ajustes y reclamos, que son en pesos) y la parte en
+ * dólares (centavos de US$).
+ */
 function totales(lineas, extracto) {
   const ajustes = extracto?.ajustes ?? [];
-  const esperado = lineas.reduce((acc, l) => acc + l.monto, 0);
+  const enPesos = lineas.filter((l) => l.montoUsd == null);
+  const enUsd = lineas.filter((l) => l.montoUsd != null);
+  const esperado = enPesos.reduce((acc, l) => acc + l.monto, 0);
+  const esperadoUsd = enUsd.reduce((acc, l) => acc + l.montoUsd, 0);
   const idsNoCobrados = new Set(ajustes.filter((a) => a.tipo === 'no_cobrado').map((a) => a.gastoId));
-  const noCobrado = lineas.filter((l) => idsNoCobrados.has(l.id)).reduce((acc, l) => acc + l.monto, 0);
+  const noCobrado = enPesos.filter((l) => idsNoCobrados.has(l.id)).reduce((acc, l) => acc + l.monto, 0);
+  const noCobradoUsd = enUsd.filter((l) => idsNoCobrados.has(l.id)).reduce((acc, l) => acc + l.montoUsd, 0);
   // Reclamos que el banco cobró y la app no tiene (los aceptados ya son un gasto en `esperado`).
   const reclamos = ajustes
     .filter((a) => a.tipo === 'no_reconocido' && a.estadoReclamo !== 'aceptado')
     .reduce((acc, a) => acc + (a.monto ?? 0), 0);
   const totalBanco = extracto?.totalBanco ?? null;
+  const totalBancoUsd = extracto?.totalBancoUsd ?? null;
   return {
     esperado,
     noCobrado,
@@ -136,6 +150,10 @@ function totales(lineas, extracto) {
     totalBanco,
     // Lo que queda sin explicar: positivo = el banco cobró de más.
     diferencia: totalBanco == null ? null : totalBanco - (esperado - noCobrado) - reclamos,
+    esperadoUsd,
+    noCobradoUsd,
+    totalBancoUsd,
+    diferenciaUsd: totalBancoUsd == null ? null : totalBancoUsd - (esperadoUsd - noCobradoUsd),
   };
 }
 
@@ -251,6 +269,7 @@ export async function guardarExtracto(usuarioActual, metodoId, fechaTexto, data)
     where: { id: extracto.id },
     data: {
       ...(data.totalBanco !== undefined && { totalBanco: data.totalBanco }),
+      ...(data.totalBancoUsd !== undefined && { totalBancoUsd: data.totalBancoUsd }),
       ...(data.notas !== undefined && { notas: data.notas || null }),
     },
   });
@@ -267,12 +286,17 @@ export async function revisarExtracto(usuarioActual, metodoId, fechaTexto, revis
     const { totales: t } = await detalle(usuarioId, metodo, ciclo, actual);
     await prisma.extractoTarjeta.update({
       where: { id: actual.id },
-      data: { estado: 'revisado', totalEsperado: t.esperado, revisadoEn: new Date() },
+      data: {
+        estado: 'revisado',
+        totalEsperado: t.esperado,
+        totalEsperadoUsd: t.esperadoUsd || null,
+        revisadoEn: new Date(),
+      },
     });
   } else if (actual) {
     await prisma.extractoTarjeta.update({
       where: { id: actual.id },
-      data: { estado: 'pendiente', totalEsperado: null, revisadoEn: null },
+      data: { estado: 'pendiente', totalEsperado: null, totalEsperadoUsd: null, revisadoEn: null },
     });
   }
   return obtenerCiclo(usuarioActual, metodoId, fechaTexto);
@@ -315,7 +339,9 @@ export async function agregarAjuste(usuarioActual, metodoId, fechaTexto, data) {
         409,
         linea.delHogar
           ? 'Este cargo es un pago del hogar: cambia su valor desde Hogar, o registra la diferencia como cargo extra'
-          : 'Este cargo ya es un ajuste del extracto: quítalo y vuelve a crearlo',
+          : linea.montoUsd != null
+            ? 'Este cargo es en dólares: cambia sus US$ o su tasa desde Movimientos (o desde la compra a cuotas)'
+            : 'Este cargo ya es un ajuste del extracto: quítalo y vuelve a crearlo',
       );
     }
   }

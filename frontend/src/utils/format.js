@@ -112,3 +112,21 @@ export function modoCobroSugerido(metodo) {
 export function formatTasa(tasa) {
   return `${String(tasa).replace('.', ',')} % mensual`;
 }
+
+const usdFormatter = new Intl.NumberFormat('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+/** Dólares guardados en centavos (1234 → "US$ 12,34"). */
+export function formatUsd(centavos) {
+  return `US$ ${usdFormatter.format((centavos ?? 0) / 100)}`;
+}
+
+/** Texto de un input en dólares ("12.5", "12,50") → centavos enteros (o null). */
+export function aCentavos(texto) {
+  const n = Number(String(texto ?? '').replace(',', '.'));
+  return Number.isFinite(n) && n > 0 ? Math.round(n * 100) : null;
+}
+
+/** Tasa de cambio con dos decimales ("3.630,89"). */
+export function formatTrm(trm) {
+  return usdFormatter.format(trm ?? 0);
+}

@@ -353,6 +353,15 @@ model GastoPersonal {
   numeroCuota    Int?               @map("numero_cuota")
   capital        Int?
   interes        Int?
+  // Compra en dólares con tarjeta de crédito: el valor en US$ (en centavos) y
+  // la tasa con que se pasó a pesos. `monto` (pesos) es lo que cuenta para el
+  // consumo; la deuda de la tarjeta lleva aparte los dólares. En un pago de
+  // tarjeta (origen pago_tarjeta) con montoUsd: los US$ que cubre ese pago y
+  // `monto` los pesos que costó. En capital/interés de una cuota en dólares,
+  // los centavos van en capitalUsd (interés = montoUsd − capitalUsd).
+  montoUsd       Int?               @map("monto_usd")
+  capitalUsd     Int?               @map("capital_usd")
+  trm            Float?
   creadoEn       DateTime           @default(now()) @map("creado_en")
 
   // Movimiento de caja del pago de un gasto del hogar (origen pago_hogar):
@@ -463,19 +472,19 @@ model ConceptoRecurrentePareja {
   fechaInicio          DateTime             @map("fecha_inicio")
   creadoEn             DateTime             @default(now()) @map("creado_en")
 
-  hogar       Hogar                      @relation(fields: [hogarId], references: [id])
-  responsable Usuario?                   @relation(fields: [responsableUsuarioId], references: [id])
-  instancias  GastoRecurrenteInstancia[]
+  hogar                  Hogar                      @relation(fields: [hogarId], references: [id])
+  responsable            Usuario?                   @relation(fields: [responsableUsuarioId], references: [id])
+  instancias             GastoRecurrenteInstancia[]
   // Categoría del hogar (E4): todas sus cuotas cuentan en ella.
-  categoriaId String?                    @map("categoria_id")
-  categoria   CategoriaHogar?            @relation(fields: [categoriaId], references: [id])
+  categoriaId            String?                    @map("categoria_id")
+  categoria              CategoriaHogar?            @relation(fields: [categoriaId], references: [id])
   // Pago automático (débito o tarjeta): desde `pagoAutomaticoDesde`, cada
   // cuota se da por pagada en su fecha por el responsable, con su método
   // (privado del responsable, opcional). Solo cuentas de monto fijo.
-  pagoAutomatico         Boolean             @default(false) @map("pago_automatico")
-  pagoAutomaticoDesde    DateTime?           @map("pago_automatico_desde")
-  metodoPagoAutomaticoId String?             @map("metodo_pago_automatico_id")
-  metodoPagoAutomatico   MetodoPagoPersonal? @relation("metodoCuentaAutomatica", fields: [metodoPagoAutomaticoId], references: [id], onDelete: SetNull)
+  pagoAutomatico         Boolean                    @default(false) @map("pago_automatico")
+  pagoAutomaticoDesde    DateTime?                  @map("pago_automatico_desde")
+  metodoPagoAutomaticoId String?                    @map("metodo_pago_automatico_id")
+  metodoPagoAutomatico   MetodoPagoPersonal?        @relation("metodoCuentaAutomatica", fields: [metodoPagoAutomaticoId], references: [id], onDelete: SetNull)
 
   @@index([hogarId])
   @@map("conceptos_recurrentes_pareja")
@@ -866,6 +875,11 @@ model CompraCuotasPersonal {
   // crean (no tocan el Disponible ni el consumo); las demás se numeran desde
   // la siguiente y salen del mismo plan de la compra original.
   cuotasPagadasAntes Int              @default(0) @map("cuotas_pagadas_antes")
+  // Compra en dólares (solo con tarjeta de crédito): total en centavos de
+  // US$ y la tasa; montoTotal es su equivalente en pesos. Las cuotas se
+  // calculan en dólares y cada una se pasa a pesos con esa tasa.
+  montoUsd           Int?             @map("monto_usd")
+  trm                Float?
   creadoEn           DateTime         @default(now()) @map("creado_en")
 
   usuario    Usuario             @relation(fields: [usuarioId], references: [id])
@@ -950,19 +964,22 @@ enum OrigenAjusteExtracto {
 
 // Un extracto por tarjeta y fecha de corte. Ciclo: (corte anterior, corte].
 model ExtractoTarjeta {
-  id            String         @id @default(uuid())
-  usuarioId     String         @map("usuario_id")
-  metodoPagoId  String         @map("metodo_pago_id")
-  fechaCorte    DateTime       @map("fecha_corte")
-  fechaPago     DateTime?      @map("fecha_pago")
+  id               String         @id @default(uuid())
+  usuarioId        String         @map("usuario_id")
+  metodoPagoId     String         @map("metodo_pago_id")
+  fechaCorte       DateTime       @map("fecha_corte")
+  fechaPago        DateTime?      @map("fecha_pago")
   // Lo que el banco cobra en el extracto (el usuario lo copia del PDF).
-  totalBanco    Int?           @map("total_banco")
-  estado        EstadoExtracto @default(pendiente)
+  totalBanco       Int?           @map("total_banco")
+  estado           EstadoExtracto @default(pendiente)
   // Lo que la app esperaba al marcarlo revisado (no se reescribe después).
-  totalEsperado Int?           @map("total_esperado")
-  notas         String?
-  revisadoEn    DateTime?      @map("revisado_en")
-  creadoEn      DateTime       @default(now()) @map("creado_en")
+  totalEsperado    Int?           @map("total_esperado")
+  // Parte en dólares del extracto (centavos de US$).
+  totalBancoUsd    Int?           @map("total_banco_usd")
+  totalEsperadoUsd Int?           @map("total_esperado_usd")
+  notas            String?
+  revisadoEn       DateTime?      @map("revisado_en")
+  creadoEn         DateTime       @default(now()) @map("creado_en")
 
   usuario    Usuario            @relation(fields: [usuarioId], references: [id])
   metodoPago MetodoPagoPersonal @relation(fields: [metodoPagoId], references: [id])

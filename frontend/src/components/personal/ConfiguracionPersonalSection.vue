@@ -41,7 +41,7 @@ import {
   eliminarLimite,
 } from '../../api/limitesPersonales.js';
 import { extractErrorMessage } from '../../api/client.js';
-import { formatCurrency, formatDate, hoyISO, describirMetodo } from '../../utils/format.js';
+import { formatCurrency, formatDate, hoyISO, describirMetodo, formatUsd } from '../../utils/format.js';
 import FormField from '../FormField.vue';
 import MetodoPagoForm from './MetodoPagoForm.vue';
 import AlertError from '../AlertError.vue';
@@ -121,7 +121,8 @@ async function onCrearMetodo({ saldoInicial, ...datos }) {
   error.value = '';
   creandoMetodo.value = true;
   try {
-    const metodo = await crearMetodoPago({ ...datos, ...(saldoInicial.monto > 0 ? { saldoInicial } : {}) });
+    const conSaldo = saldoInicial.monto > 0 || saldoInicial.montoUsd > 0;
+    const metodo = await crearMetodoPago({ ...datos, ...(conSaldo ? { saldoInicial } : {}) });
     metodos.value = [...metodos.value, metodo];
     formMetodoKey.value += 1; // limpia el formulario
   } catch (e) {
@@ -187,7 +188,9 @@ async function onGuardarEditarMetodo(metodo, { saldoInicial, ...datos }) {
     const antes = metodo.saldoInicial;
     const cambiaSaldo =
       (antes?.monto ?? 0) !== saldoInicial.monto ||
-      (saldoInicial.monto > 0 && antes?.fecha?.slice(0, 10) !== saldoInicial.fecha);
+      (antes?.montoUsd ?? null) !== (saldoInicial.montoUsd ?? null) ||
+      (saldoInicial.montoUsd && antes?.trm !== saldoInicial.trm) ||
+      ((saldoInicial.monto > 0 || saldoInicial.montoUsd > 0) && antes?.fecha?.slice(0, 10) !== saldoInicial.fecha);
     if (cambiaSaldo) await guardarSaldoInicial(metodo.id, saldoInicial);
     // La deuda de una tarjeta cambia con su deuda inicial: se recarga la lista.
     metodos.value = await listarMetodosPago();
@@ -843,11 +846,15 @@ const categoriasParaAhorro = computed(() => categorias.value.filter((c) => c.apl
                   <span class="block truncate text-sm font-medium text-ink-primary">{{ m.nombre }}</span>
                   <span class="block truncate text-[13px] text-ink-tertiary">{{ describirMetodo(m) }}</span>
                   <span v-if="m.tipo === 'tarjeta_credito'" class="block text-[13px] text-ink-secondary">
-                    Deuda: <span class="font-semibold" :class="m.deuda > 0 ? 'text-warning' : ''">{{ formatCurrency(m.deuda ?? 0) }}</span>
+                    Deuda: <span class="font-semibold" :class="m.deuda > 0 ? 'text-warning' : ''">{{ formatCurrency(m.deudaPesos ?? m.deuda ?? 0) }}</span>
+                    <template v-if="m.deudaUsd"> + <span class="font-semibold text-warning">{{ formatUsd(m.deudaUsd) }}</span></template>
                   </span>
                   <span v-if="m.saldoInicial" class="block text-[13px] text-ink-tertiary">
                     {{ m.tipo === 'tarjeta_credito' ? 'Deuda inicial' : 'Saldo inicial' }}:
-                    {{ formatCurrency(m.saldoInicial.monto) }} · {{ formatDate(m.saldoInicial.fecha) }}
+                    <template v-if="m.saldoInicial.monto">{{ formatCurrency(m.saldoInicial.monto) }}</template>
+                    <template v-if="m.saldoInicial.monto && m.saldoInicial.montoUsd"> + </template>
+                    <template v-if="m.saldoInicial.montoUsd">{{ formatUsd(m.saldoInicial.montoUsd) }}</template>
+                    · {{ formatDate(m.saldoInicial.fecha) }}
                   </span>
                 </span>
               </div>

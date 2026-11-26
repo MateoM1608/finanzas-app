@@ -11,7 +11,7 @@ import {
 } from '../../api/extractosTarjeta.js';
 import { extractErrorMessage } from '../../api/client.js';
 import { confirmar } from '../../composables/useConfirm.js';
-import { formatCurrency, formatDate } from '../../utils/format.js';
+import { formatCurrency, formatDate, formatUsd, aCentavos } from '../../utils/format.js';
 import AppIcon from '../AppIcon.vue';
 import AppModal from '../AppModal.vue';
 import AlertError from '../AlertError.vue';
@@ -57,7 +57,7 @@ watch(() => props.metodo.id, cargarLista, { immediate: true });
 function estadoCiclo(c) {
   if (c.enCurso) return { label: 'En curso', clase: 'badge-neutral' };
   if (c.estado === 'revisado') {
-    return c.diferencia === 0 ? { label: 'Revisado', clase: 'badge-positive' } : { label: 'Revisado con diferencia', clase: 'badge-warning' };
+    return c.diferencia === 0 && !c.diferenciaUsd ? { label: 'Revisado', clase: 'badge-positive' } : { label: 'Revisado con diferencia', clase: 'badge-warning' };
   }
   if (c.totalBanco != null) return { label: 'En revisión', clase: 'badge-accent' };
   return { label: 'Sin revisar', clase: 'badge-neutral' };
@@ -67,11 +67,16 @@ function estadoCiclo(c) {
 const detalle = ref(null);
 const errorDetalle = ref('');
 const ocupado = ref(false);
-const form = reactive({ totalBanco: '', notas: '' });
+const form = reactive({ totalBanco: '', totalBancoUsd: '', notas: '' });
+// La parte en dólares se muestra si la app tiene cargos en US$ o ya se escribió.
+const conDolares = computed(
+  () => Boolean(detalle.value?.totales.esperadoUsd) || detalle.value?.totales.totalBancoUsd != null,
+);
 
 function aplicar(d) {
   detalle.value = d;
   form.totalBanco = d.extracto?.totalBanco ?? '';
+  form.totalBancoUsd = d.extracto?.totalBancoUsd != null ? String(d.extracto.totalBancoUsd / 100) : '';
   form.notas = d.extracto?.notas ?? '';
 }
 
@@ -118,13 +123,16 @@ function guardarTotal() {
   return ejecutar(() =>
     guardarExtracto(props.metodo.id, fechaCorte.value, {
       totalBanco: form.totalBanco === '' ? null : Number(form.totalBanco),
+      ...(conDolares.value && { totalBancoUsd: form.totalBancoUsd === '' ? null : (aCentavos(form.totalBancoUsd) ?? 0) }),
       notas: form.notas,
     }),
   );
 }
 
 async function marcarRevisado(valor) {
-  if (valor && String(form.totalBanco) !== String(detalle.value.extracto?.totalBanco ?? '')) {
+  const usdGuardado = detalle.value.extracto?.totalBancoUsd;
+  const cambiaUsd = conDolares.value && String(form.totalBancoUsd) !== (usdGuardado != null ? String(usdGuardado / 100) : '');
+  if (valor && (cambiaUsd || String(form.totalBanco) !== String(detalle.value.extracto?.totalBanco ?? ''))) {
     if (!(await guardarTotal())) return;
   }
   await ejecutar(() => revisarExtracto(props.metodo.id, fechaCorte.value, valor));
@@ -239,11 +247,15 @@ const ETIQUETA_LINEA = { cuota: 'Cuota', ajuste: 'Ajuste del extracto' };
                 <template v-if="c.diferencia != null && c.diferencia !== 0">
                   · <span class="text-warning">diferencia {{ formatCurrency(c.diferencia) }}</span>
                 </template>
+                <template v-if="c.diferenciaUsd">
+                  · <span class="text-warning">diferencia {{ formatUsd(c.diferenciaUsd) }}</span>
+                </template>
               </p>
             </div>
             <span class="flex shrink-0 items-center gap-2">
               <span class="text-right">
                 <span class="block text-sm font-semibold text-ink-primary">{{ formatCurrency(c.esperado - c.noCobrado) }}</span>
+                <span v-if="c.esperadoUsd" class="block text-xs font-semibold text-ink-secondary">+ {{ formatUsd(c.esperadoUsd - c.noCobradoUsd) }}</span>
                 <span v-if="c.totalBanco != null" class="block text-xs text-ink-tertiary">banco {{ formatCurrency(c.totalBanco) }}</span>
               </span>
               <AppIcon name="chevronRight" class="h-4 w-4 text-ink-tertiary" />
@@ -313,6 +325,49 @@ const ETIQUETA_LINEA = { cuota: 'Cuota', ajuste: 'Ajuste del extracto' };
           </div>
         </div>
 
+        <!-- Parte en dólares: el banco la cobra aparte -->
+        <div v-if="conDolares" class="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div class="rounded-xl border border-border p-3">
+            <p class="stat-label">En dólares, la app esperaba</p>
+            <p class="mt-1 text-xl font-semibold text-ink-primary">{{ formatUsd(detalle.totales.esperadoUsd - detalle.totales.noCobradoUsd) }}</p>
+            <p v-if="detalle.totales.noCobradoUsd" class="text-xs text-ink-tertiary">sin {{ formatUsd(detalle.totales.noCobradoUsd) }} que el banco no cobró</p>
+          </div>
+          <div class="rounded-xl border border-border p-3">
+            <label class="stat-label" for="extracto-total-usd">El banco cobra en dólares</label>
+            <div class="mt-1 flex gap-2">
+              <input
+                id="extracto-total-usd"
+                v-model="form.totalBancoUsd"
+                type="number"
+                min="0"
+                step="0.01"
+                inputmode="decimal"
+                class="field !py-1.5"
+                placeholder="Total en US$"
+                :disabled="revisado"
+              />
+              <button v-if="!revisado" type="button" class="btn-secondary btn-sm shrink-0" :disabled="ocupado" @click="guardarTotal">
+                Guardar
+              </button>
+            </div>
+          </div>
+          <div
+            class="rounded-xl border p-3"
+            :class="detalle.totales.diferenciaUsd === 0 ? 'border-positive/40 bg-positive/5' : detalle.totales.diferenciaUsd == null ? 'border-border' : 'border-warning/40 bg-warning/5'"
+          >
+            <p class="stat-label">Diferencia en dólares</p>
+            <p
+              class="mt-1 text-xl font-semibold"
+              :class="detalle.totales.diferenciaUsd === 0 ? 'text-positive' : detalle.totales.diferenciaUsd == null ? 'text-ink-tertiary' : 'text-warning'"
+            >
+              <template v-if="detalle.totales.diferenciaUsd == null">—</template>
+              <template v-else-if="detalle.totales.diferenciaUsd === 0">Cuadra</template>
+              <template v-else>{{ formatUsd(detalle.totales.diferenciaUsd) }}</template>
+            </p>
+            <p class="text-xs text-ink-tertiary">Un cargo en dólares se corrige desde el gasto (sus US$ o su tasa).</p>
+          </div>
+        </div>
+
         <!-- Cargos que la app esperaba -->
         <div>
           <p class="section-title !text-sm">Cargos que la app tiene en este extracto</p>
@@ -365,7 +420,9 @@ const ETIQUETA_LINEA = { cuota: 'Cuota', ajuste: 'Ajuste del extracto' };
                   </template>
                 </div>
               </div>
-              <span class="shrink-0 whitespace-nowrap text-sm font-semibold text-ink-primary">{{ formatCurrency(l.monto) }}</span>
+              <span class="shrink-0 whitespace-nowrap text-sm font-semibold text-ink-primary">
+                {{ l.montoUsd != null ? formatUsd(l.montoUsd) : formatCurrency(l.monto) }}
+              </span>
             </li>
           </ul>
           <p v-if="detalle.lineas.some((l) => l.delHogar)" class="mt-2 text-xs text-ink-tertiary">

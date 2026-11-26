@@ -95,7 +95,7 @@ export async function obtenerInforme(usuarioActual, metodoId, periodo) {
     }),
     prisma.gastoPersonal.findMany({
       where: { usuarioId, origen: 'pago_tarjeta', tarjetaPagadaId: metodoId },
-      select: { id: true, fecha: true, monto: true, metodoPago: { select: { nombre: true } } },
+      select: { id: true, fecha: true, monto: true, montoUsd: true, metodoPago: { select: { nombre: true } } },
       orderBy: { fecha: 'desc' },
     }),
   ]);

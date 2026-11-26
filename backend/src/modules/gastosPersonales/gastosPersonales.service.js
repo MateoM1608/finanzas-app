@@ -3,6 +3,7 @@ import { prisma } from '../../config/prisma.js';
 import { HttpError } from '../../middleware/errorHandler.js';
 import { asegurarGastosFijos, asegurarPagosAutomaticosHogar } from '../../utils/instanciasFijasPersonales.js';
 import { evaluarPeriodoSiCorresponde } from '../../utils/evaluacionAhorro.js';
+import { requireTarjetaParaDolares } from '../../utils/dolares.js';
 
 const INCLUDE_GASTO = {
   metodoPago: true,
@@ -46,6 +47,23 @@ function requireNoEsDelHogar(gasto) {
   }
 }
 
+/**
+ * Dólares de un gasto: solo con una tarjeta de crédito y con su tasa. Sin
+ * dólares, la tasa se limpia. `actual` es el gasto antes de editarlo.
+ */
+async function validarDolares(usuarioId, data, actual = null) {
+  const montoUsd = data.montoUsd !== undefined ? data.montoUsd : actual?.montoUsd ?? null;
+  const metodoPagoId = data.metodoPagoId !== undefined ? data.metodoPagoId : actual?.metodoPagoId ?? null;
+  if (!montoUsd) {
+    if (data.montoUsd === null) data.trm = null;
+    else delete data.trm;
+    return;
+  }
+  const trm = data.trm !== undefined ? data.trm : actual?.trm ?? null;
+  if (!trm) throw new HttpError(400, 'Escribe la tasa de cambio de la compra en dólares');
+  await requireTarjetaParaDolares(usuarioId, metodoPagoId);
+}
+
 export async function listarGastosPersonales(usuarioId) {
   await asegurarGastosFijos(usuarioId);
   await asegurarPagosAutomaticosHogar(usuarioId);
@@ -58,6 +76,7 @@ export async function listarGastosPersonales(usuarioId) {
 
 export async function crearGastoPersonal(usuarioId, data) {
   await validarReferenciasPropias(usuarioId, data);
+  await validarDolares(usuarioId, data);
   const gasto = await prisma.gastoPersonal.create({
     data: { ...data, usuarioId },
     include: INCLUDE_GASTO,
@@ -73,6 +92,10 @@ export async function actualizarGastoPersonal(usuarioId, gastoId, data) {
     throw new HttpError(404, 'Gasto no encontrado');
   }
   requireNoEsDelHogar(gasto);
+  if (gasto.origen === 'pago_tarjeta' && (data.montoUsd !== undefined || data.trm !== undefined)) {
+    throw new HttpError(409, 'Un pago de tarjeta no cambia sus dólares: bórralo y regístralo de nuevo');
+  }
+  await validarDolares(usuarioId, data, gasto);
 
   const actualizado = await prisma.gastoPersonal.update({
     where: { id: gastoId },
@@ -135,6 +158,7 @@ export async function cambiarMetodoGastoPersonal(usuarioId, gastoId, metodoPagoI
     throw new HttpError(409, 'Este es el saldo inicial de una cuenta: cámbialo en Personal → Configuración → Métodos de pago');
   }
   const metodo = await requireMetodoPropio(usuarioId, metodoPagoId);
+  if (gasto.montoUsd && gasto.origen !== 'pago_tarjeta') await requireTarjetaParaDolares(usuarioId, metodo);
   return prisma.$transaction(async (tx) => {
     if (gasto.pagoCuotaHogarId) {
       await tx.gastoRecurrenteInstancia.update({ where: { id: gasto.pagoCuotaHogarId }, data: { metodoPagoId: metodo } });

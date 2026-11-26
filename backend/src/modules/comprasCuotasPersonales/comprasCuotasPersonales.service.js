@@ -3,6 +3,7 @@ import { HttpError } from '../../middleware/errorHandler.js';
 import { calcularCuotas, fechasDeCuotas, sugerirFechaPrimeraCuota, interesDeCompra } from '../../utils/cuotas.js';
 import { evaluarPeriodoSiCorresponde } from '../../utils/evaluacionAhorro.js';
 import { hoyUTC } from '../../utils/fechas.js';
+import { aPesos, requireTarjetaParaDolares } from '../../utils/dolares.js';
 
 /**
  * Compras a cuotas del panel personal: crean de una vez todas sus cuotas
@@ -23,7 +24,7 @@ async function requireDelUsuario(modelo, usuarioId, id, mensaje) {
 const INCLUDE_COMPRA = {
   metodoPago: true,
   categoria: true,
-  cuotas: { select: { id: true, numeroCuota: true, monto: true, fecha: true, estado: true }, orderBy: { numeroCuota: 'asc' } },
+  cuotas: { select: { id: true, numeroCuota: true, monto: true, montoUsd: true, fecha: true, estado: true }, orderBy: { numeroCuota: 'asc' } },
 };
 
 export function listarCompras(usuarioActual) {
@@ -43,12 +44,21 @@ export async function sugerirPrimeraCuota(usuarioActual, { fechaCompra, metodoPa
  * Crea las cuotas (GastoPersonal) de una compra con los datos dados. Si la
  * compra ya venía en curso, solo las que faltan: salen del plan completo de
  * la compra y se numeran desde la siguiente a las ya pagadas; la primera
- * fecha es la de la próxima cuota.
+ * fecha es la de la próxima cuota. En dólares, el plan se calcula en
+ * centavos de US$ y cada cuota se pasa a pesos con la tasa de la compra.
  */
 async function generarCuotas(tx, compraId, usuarioId, datos) {
   const hoy = hoyUTC();
   const antes = datos.cuotasPagadasAntes ?? 0;
-  const cuotas = calcularCuotas(datos.montoTotal, datos.numeroCuotas, datos.tasaMensual, datos.sistemaInteres).slice(antes);
+  const enUsd = Boolean(datos.montoUsd);
+  const cuotas = calcularCuotas(enUsd ? datos.montoUsd : datos.montoTotal, datos.numeroCuotas, datos.tasaMensual, datos.sistemaInteres)
+    .slice(antes)
+    .map((c) => {
+      if (!enUsd) return c;
+      const monto = aPesos(c.monto, datos.trm);
+      const capital = aPesos(c.capital, datos.trm);
+      return { monto, capital, interes: monto - capital, montoUsd: c.monto, capitalUsd: c.capital, trm: datos.trm };
+    });
   const fechas = fechasDeCuotas(datos.fechaPrimeraCuota, datos.numeroCuotas - antes);
   await tx.gastoPersonal.createMany({
     data: fechas.map((fecha, i) => ({
@@ -58,6 +68,7 @@ async function generarCuotas(tx, compraId, usuarioId, datos) {
       monto: cuotas[i].monto,
       capital: cuotas[i].capital,
       interes: cuotas[i].interes,
+      ...(enUsd && { montoUsd: cuotas[i].montoUsd, capitalUsd: cuotas[i].capitalUsd, trm: cuotas[i].trm }),
       fecha,
       descripcion: datos.descripcion,
       estado: datos.modoCobro === 'automatico' && fecha <= hoy ? 'pagado' : 'pendiente',
@@ -68,6 +79,18 @@ async function generarCuotas(tx, compraId, usuarioId, datos) {
     })),
   });
   return fechas[0];
+}
+
+/** Dólares de una compra: con tarjeta de crédito y tasa; el total en pesos sale de ellos. */
+async function validarDolares(usuarioId, datos) {
+  if (!datos.montoUsd) {
+    datos.montoUsd = null;
+    datos.trm = null;
+    return;
+  }
+  if (!datos.trm) throw new HttpError(400, 'Escribe la tasa de cambio de la compra en dólares');
+  await requireTarjetaParaDolares(usuarioId, datos.metodoPagoId);
+  datos.montoTotal = aPesos(datos.montoUsd, datos.trm);
 }
 
 /** Una cuota obligatoria ya pagada puede completar los obligatorios de un período. */
@@ -96,7 +119,10 @@ export async function crearCompra(usuarioActual, data) {
     categoriaId: data.categoriaId ?? null,
     esObligatorio: data.esObligatorio ?? true,
     cuotasPagadasAntes: data.cuotasPagadasAntes ?? 0,
+    montoUsd: data.montoUsd ?? null,
+    trm: data.trm ?? null,
   };
+  await validarDolares(usuarioId, datos);
   const compra = await prisma.$transaction(async (tx) => {
     const nueva = await tx.compraCuotasPersonal.create({ data: { usuarioId, ...datos } });
     const primera = await generarCuotas(tx, nueva.id, usuarioId, datos);
@@ -107,7 +133,17 @@ export async function crearCompra(usuarioActual, data) {
   return compra;
 }
 
-const CAMPOS_ESTRUCTURALES = ['montoTotal', 'numeroCuotas', 'fechaPrimeraCuota', 'modoCobro', 'tasaMensual', 'sistemaInteres', 'cuotasPagadasAntes'];
+const CAMPOS_ESTRUCTURALES = [
+  'montoTotal',
+  'numeroCuotas',
+  'fechaPrimeraCuota',
+  'modoCobro',
+  'tasaMensual',
+  'sistemaInteres',
+  'cuotasPagadasAntes',
+  'montoUsd',
+  'trm',
+];
 
 /**
  * Edita una compra. Descripción, categoría, método y obligatorio se pueden
@@ -141,7 +177,10 @@ export async function actualizarCompra(usuarioActual, compraId, data) {
     categoriaId: data.categoriaId === undefined ? actual.categoriaId : data.categoriaId,
     esObligatorio: data.esObligatorio ?? actual.esObligatorio,
     cuotasPagadasAntes: data.cuotasPagadasAntes ?? actual.cuotasPagadasAntes,
+    montoUsd: data.montoUsd === undefined ? actual.montoUsd : data.montoUsd,
+    trm: data.trm === undefined ? actual.trm : data.trm,
   };
+  await validarDolares(usuarioId, datos);
   if (datos.cuotasPagadasAntes >= datos.numeroCuotas) {
     throw new HttpError(400, 'Las cuotas ya pagadas deben ser menos que el total de cuotas');
   }

@@ -14,7 +14,7 @@ import {
 } from '../api/comprasCuotas.js';
 import { confirmar } from '../composables/useConfirm.js';
 import { extractErrorMessage } from '../api/client.js';
-import { formatCurrency, formatDate, hoyISO, modoCobroSugerido, formatTasa } from '../utils/format.js';
+import { formatCurrency, formatDate, hoyISO, modoCobroSugerido, formatTasa, formatUsd, aCentavos } from '../utils/format.js';
 import AppLayout from '../components/AppLayout.vue';
 import FormField from '../components/FormField.vue';
 import AlertError from '../components/AlertError.vue';
@@ -31,6 +31,7 @@ import AhorrosPersonalesSection from '../components/personal/AhorrosPersonalesSe
 import LimitesPersonalesSection from '../components/personal/LimitesPersonalesSection.vue';
 import ProximosMesesSection from '../components/personal/ProximosMesesSection.vue';
 import CompraCuotasForm from '../components/CompraCuotasForm.vue';
+import CamposDolares from '../components/personal/CamposDolares.vue';
 
 const mostrarConfig = ref(false);
 const configTab = ref('ciclo');
@@ -138,6 +139,11 @@ const gEstado = ref('pagado');
 const guardandoGasto = ref(false);
 const eliminandoGastoId = ref(null);
 const cambiandoEstadoGastoId = ref(null);
+// Compra en dólares (solo con tarjeta de crédito): el monto en pesos sale de
+// los US$ y la tasa, y se puede corregir a mano después.
+const gEnDolares = ref(false);
+const gUsd = ref('');
+const gTrm = ref('');
 
 // --- Compra a cuotas (opción del formulario de gasto) ---
 const gACuotas = ref(false);
@@ -187,6 +193,22 @@ async function actualizarSugerenciaCuota() {
 watch([gACuotas, gMetodoPagoId, gFecha], actualizarSugerenciaCuota);
 
 const metodoSeleccionado = computed(() => metodos.value.find((m) => m.id === gMetodoPagoId.value));
+const conTarjeta = computed(() => metodoSeleccionado.value?.tipo === 'tarjeta_credito');
+watch(conTarjeta, (si) => {
+  if (!si) gEnDolares.value = false;
+});
+watch([gEnDolares, gUsd, gTrm], () => {
+  if (!gEnDolares.value) return;
+  const usd = Number(String(gUsd.value).replace(',', '.'));
+  const trm = Number(String(gTrm.value).replace(',', '.'));
+  if (usd > 0 && trm > 0) gMonto.value = String(Math.round(usd * trm));
+});
+const dolaresGasto = () =>
+  gEnDolares.value ? { montoUsd: aCentavos(gUsd.value), trm: Number(String(gTrm.value).replace(',', '.')) } : {};
+function limpiarDolares() {
+  gEnDolares.value = false;
+  gUsd.value = '';
+}
 
 const valorCuota = computed(() => {
   const n = Number(gNumeroCuotas.value);
@@ -235,6 +257,7 @@ async function onAgregarCompra() {
     metodoPagoId: gMetodoPagoId.value || undefined,
     categoriaId: gCategoriaId.value || undefined,
     esObligatorio: gEsObligatorio.value,
+    ...dolaresGasto(),
   });
   gTasa.value = '';
   gEnCurso.value = false;
@@ -251,6 +274,7 @@ async function onAgregarGasto() {
       gMonto.value = '';
       gDescripcion.value = '';
       gACuotas.value = false;
+      limpiarDolares();
       recargarResumenes();
       return;
     }
@@ -262,8 +286,10 @@ async function onAgregarGasto() {
       metodoPagoId: gMetodoPagoId.value || undefined,
       esObligatorio: gEsObligatorio.value,
       estado: gEstado.value,
+      ...dolaresGasto(),
     });
     gastos.value = [nuevo, ...gastos.value];
+    limpiarDolares();
     gMonto.value = '';
     gDescripcion.value = '';
     gCategoriaId.value = '';
@@ -929,7 +955,10 @@ function saldoCompra(compra) {
               </div>
 
               <div class="flex shrink-0 flex-col items-end gap-1 sm:flex-row sm:items-center sm:gap-2">
-                <span class="text-sm font-semibold text-ink-primary sm:mr-1">−{{ formatCurrency(gasto.monto) }}</span>
+                <span class="text-right sm:mr-1">
+                  <span class="block text-sm font-semibold text-ink-primary">−{{ formatCurrency(gasto.monto) }}</span>
+                  <span v-if="gasto.montoUsd" class="block text-xs text-ink-tertiary">{{ formatUsd(gasto.montoUsd) }}</span>
+                </span>
                 <div v-if="metodoEditando === `gasto-${gasto.id}`" class="flex items-center gap-1">
                   <label :for="`metodo-gasto-${gasto.id}`" class="sr-only">Método de pago</label>
                   <select
@@ -1095,7 +1124,9 @@ function saldoCompra(compra) {
                     </span>
                   </p>
                   <p class="mt-0.5 text-[13px] text-ink-tertiary">
-                    {{ formatCurrency(compra.montoTotal) }} en {{ compra.numeroCuotas }} cuotas ·
+                    <template v-if="compra.montoUsd">{{ formatUsd(compra.montoUsd) }} (≈ {{ formatCurrency(compra.montoTotal) }})</template>
+                    <template v-else>{{ formatCurrency(compra.montoTotal) }}</template>
+                    en {{ compra.numeroCuotas }} cuotas ·
                     <template v-if="compra.cuotasPagadasAntes">registrada en curso, desde la cuota {{ compra.cuotasPagadasAntes + 1 }} ({{ formatDate(compra.fechaPrimeraCuota) }})</template>
                     <template v-else>desde {{ formatDate(compra.fechaPrimeraCuota) }}</template>
                     <template v-if="compra.metodoPago"> · {{ compra.metodoPago.nombre }}</template>
@@ -1182,7 +1213,14 @@ function saldoCompra(compra) {
       </div>
 
       <form v-if="tipoRegistro === 'gasto'" class="grid grid-cols-1 sm:grid-cols-2 gap-4" @submit.prevent="guardarRegistro">
-        <FormField v-model="gMonto" type="number" label="Monto (COP)" required placeholder="30000" />
+        <FormField
+          v-model="gMonto"
+          type="number"
+          :label="gEnDolares ? 'Valor en pesos (COP)' : 'Monto (COP)'"
+          required
+          placeholder="30000"
+          :hint="gEnDolares ? 'Sale de los dólares y la tasa; corrígelo si tu banco lo pasó distinto.' : ''"
+        />
         <FormField v-model="gFecha" type="date" label="Fecha" required />
         <div class="sm:col-span-2">
           <FormField v-model="gDescripcion" label="Descripción (opcional)" placeholder="Ej. Mercado, Netflix…" />
@@ -1201,6 +1239,20 @@ function saldoCompra(compra) {
             <option v-for="m in metodos" :key="m.id" :value="m.id">{{ m.nombre }}</option>
           </select>
         </div>
+        <template v-if="conTarjeta">
+          <label class="sm:col-span-2 inline-flex items-center gap-2.5 text-sm text-ink-secondary cursor-pointer">
+            <input v-model="gEnDolares" type="checkbox" class="checkbox" />
+            Compra en dólares (va a la deuda en US$ de la tarjeta)
+          </label>
+          <CamposDolares
+            v-if="gEnDolares"
+            v-model:usd="gUsd"
+            v-model:trm="gTrm"
+            class="sm:col-span-2"
+            :fecha="gFecha"
+            :etiqueta-usd="gACuotas ? 'Valor total en dólares (US$)' : 'Valor en dólares (US$)'"
+          />
+        </template>
         <div>
           <label class="label" for="g-estado">Estado</label>
           <select id="g-estado" v-model="gEstado" class="field">
@@ -1292,6 +1344,7 @@ function saldoCompra(compra) {
             class="btn-primary"
             :disabled="
               guardandoGasto ||
+              (gEnDolares && (!aCentavos(gUsd) || !(Number(gTrm) > 0))) ||
               (gACuotas &&
                 (!gDescripcion ||
                   Number(gNumeroCuotas) < 2 ||

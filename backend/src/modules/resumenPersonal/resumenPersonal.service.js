@@ -6,6 +6,7 @@ import { valorInversionesDe } from '../inversiones/inversiones.service.js';
 import { misAportesEnMetas } from '../metasHogar/metasHogar.service.js';
 import { deudaPrestamosDe } from '../prestamos/prestamos.service.js';
 import { totalAhorrosDe } from '../ahorrosPersonales/ahorrosPersonales.service.js';
+import { calcularDeudaTarjetas } from '../metodosPagoPersonales/metodosPagoPersonales.service.js';
 
 const MESES_VENTANA = 6;
 
@@ -55,8 +56,7 @@ export async function obtenerResumenPersonal(usuarioActual, indiceCiclo = 0) {
   const [
     ingresosCaja,
     gastosCajaSinTarjeta,
-    cargosTarjetaAgg,
-    pagosTarjetaAgg,
+    deudaPorTarjeta,
     gastosPendientes,
     ingresosPendientes,
     consumo,
@@ -74,14 +74,9 @@ export async function obtenerResumenPersonal(usuarioActual, indiceCiclo = 0) {
       },
       _sum: { monto: true },
     }),
-    prisma.gastoPersonal.aggregate({
-      where: { usuarioId, estado: 'pagado', ...hasta, metodoPago: { tipo: 'tarjeta_credito' } },
-      _sum: { monto: true },
-    }),
-    prisma.gastoPersonal.aggregate({
-      where: { usuarioId, estado: 'pagado', ...hasta, origen: 'pago_tarjeta' },
-      _sum: { monto: true },
-    }),
+    // Deuda de tarjetas: en el actual, los dólares a la TRM de hoy; en un
+    // ciclo pasado, a lo que costaron en pesos (sin consultar la tasa).
+    calcularDeudaTarjetas(usuarioId, esActual ? {} : { hasta: finCiclo, trm: null }),
     // Las cuotas futuras (de compras a cuotas o de pagos del hogar) no se
     // listan acá hasta que entren al ciclo actual: viven en "Mis próximos meses".
     prisma.gastoPersonal.findMany({
@@ -103,7 +98,7 @@ export async function obtenerResumenPersonal(usuarioActual, indiceCiclo = 0) {
   // (ese pago es un gasto de origen pago_tarjeta, que sí cuenta).
   // En un ciclo pasado: solo lo que había pasado hasta su último día.
   const disponible = suma(ingresosCaja) - suma(gastosCajaSinTarjeta);
-  const deudaTarjetas = suma(cargosTarjetaAgg) - suma(pagosTarjetaAgg);
+  const deudaTarjetas = [...deudaPorTarjeta.values()].reduce((acc, d) => acc + d, 0);
 
   // Neto del ciclo (consumo): ingresos reales menos lo que gastó, con su
   // parte del hogar y sin reintegros de cuadres.

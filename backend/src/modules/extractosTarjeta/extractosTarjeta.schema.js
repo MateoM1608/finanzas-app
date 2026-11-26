@@ -1,10 +1,13 @@
 import { fechaApp, MONTO_MAX } from '../../utils/validacion.js';
 import { z } from 'zod';
+import { USD_MAX_CENTAVOS } from '../../utils/dolares.js';
 
 const monto = z.number().int().positive().max(MONTO_MAX);
 
 export const guardarExtractoSchema = z.object({
   totalBanco: z.number().int().min(0).max(MONTO_MAX).nullable().optional(),
+  // Parte en dólares del extracto del banco, en centavos de US$.
+  totalBancoUsd: z.number().int().min(0).max(USD_MAX_CENTAVOS).nullable().optional(),
   notas: z.string().trim().max(500).nullable().optional(),
 });
 

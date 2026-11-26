@@ -84,6 +84,9 @@ async function tablaMovimientos(usuario, rango) {
       obligatorio: m.esObligatorio ? 'Sí' : '',
       monto: m.monto,
       valor: m.signo * m.monto,
+      // Compra (o pago de tarjeta) en dólares: los US$ y la tasa.
+      usd: m.montoUsd ? m.montoUsd / 100 : null,
+      trm: m.montoUsd ? m.trm : null,
     }));
   return {
     columnas: [
@@ -97,6 +100,8 @@ async function tablaMovimientos(usuario, rango) {
       { key: 'obligatorio', header: 'Obligatorio' },
       { key: 'monto', header: 'Monto', tipo: 'pesos' },
       { key: 'valor', header: 'Valor (+ entra / − sale)', tipo: 'pesos' },
+      { key: 'usd', header: 'Valor en US$', tipo: 'usd' },
+      { key: 'trm', header: 'Tasa (TRM)', tipo: 'tasa' },
     ],
     filas,
   };
@@ -345,7 +350,9 @@ export function armarTabla(usuario, clave, rango) {
 
 /** CSV para Excel en español: separador ";", BOM UTF-8 (tildes) y fin de línea CRLF. */
 export function aCsv(tabla) {
-  const celda = (v) => {
+  const celda = (v, tipo) => {
+    // Dólares y tasas con coma decimal, como los lee Excel en español.
+    if (typeof v === 'number' && (tipo === 'usd' || tipo === 'tasa')) return v.toFixed(2).replace('.', ',');
     let texto = v == null ? '' : String(v);
     // Un texto que empieza con = + - @ Excel lo ejecuta como fórmula (lo pudo
     // escribir el otro miembro en un gasto del hogar): se neutraliza con '.
@@ -354,10 +361,16 @@ export function aCsv(tabla) {
   };
   const lineas = [
     tabla.columnas.map((c) => celda(c.header)).join(';'),
-    ...tabla.filas.map((f) => tabla.columnas.map((c) => celda(f[c.key])).join(';')),
+    ...tabla.filas.map((f) => tabla.columnas.map((c) => celda(f[c.key], c.tipo)).join(';')),
   ];
   return `﻿${lineas.join('\r\n')}\r\n`;
 }
+
+const FORMATO_XLSX = {
+  pesos: '"$"#,##0;[Red]-"$"#,##0',
+  usd: '"US$"#,##0.00',
+  tasa: '#,##0.00',
+};
 
 /** Libro XLSX con una hoja por tabla, encabezado fijo y montos con formato de pesos. */
 export async function aXlsx(tablas) {
@@ -370,7 +383,7 @@ export async function aXlsx(tablas) {
       header: c.header,
       key: c.key,
       width: Math.max(12, c.header.length + 2),
-      style: c.tipo === 'pesos' ? { numFmt: '"$"#,##0;[Red]-"$"#,##0' } : {},
+      style: FORMATO_XLSX[c.tipo] ? { numFmt: FORMATO_XLSX[c.tipo] } : {},
     }));
     hoja.getRow(1).font = { bold: true };
     hoja.addRows(tabla.filas);

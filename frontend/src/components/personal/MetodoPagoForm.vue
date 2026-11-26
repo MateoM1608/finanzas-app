@@ -1,7 +1,8 @@
 <script setup>
 import { reactive, computed } from 'vue';
 import FormField from '../FormField.vue';
-import { TIPOS_METODO, hoyISO } from '../../utils/format.js';
+import CamposDolares from './CamposDolares.vue';
+import { TIPOS_METODO, hoyISO, aCentavos } from '../../utils/format.js';
 
 /**
  * Formulario de un método de pago personal. Para tarjeta de crédito y
@@ -11,7 +12,8 @@ import { TIPOS_METODO, hoyISO } from '../../utils/format.js';
  *
  * Punto de partida: lo que hay hoy en la cuenta (sube el Disponible sin ser
  * ingreso) o lo que se debe hoy en la tarjeta (sube su deuda sin ser gasto).
- * Se emite como `saldoInicial` y la vista lo guarda aparte.
+ * Se emite como `saldoInicial` y la vista lo guarda aparte. Una tarjeta
+ * puede traer además una deuda en dólares (`montoUsd` en centavos + `trm`).
  */
 const props = defineProps({
   inicial: { type: Object, default: null },
@@ -32,6 +34,9 @@ const form = reactive({
   sistemaInteres: props.inicial?.sistemaInteres ?? 'capital_fijo',
   saldoMonto: props.inicial?.saldoInicial?.monto ?? '',
   saldoFecha: props.inicial?.saldoInicial?.fecha?.slice(0, 10) ?? hoyISO(),
+  debeDolares: Boolean(props.inicial?.saldoInicial?.montoUsd),
+  saldoUsd: props.inicial?.saldoInicial?.montoUsd ? String(props.inicial.saldoInicial.montoUsd / 100) : '',
+  saldoTrm: props.inicial?.saldoInicial?.trm ? String(props.inicial.saldoInicial.trm) : '',
 });
 
 const esTarjeta = computed(() => form.tipo === 'tarjeta_credito');
@@ -45,8 +50,12 @@ function numeroONull(v) {
   return v === '' || v == null ? null : Number(v);
 }
 
+const usdInicial = computed(() => (esTarjeta.value && form.debeDolares ? aCentavos(form.saldoUsd) : null));
+const trmInicial = computed(() => Number(String(form.saldoTrm).replace(',', '.')) || null);
+const dolaresValidos = computed(() => !(esTarjeta.value && form.debeDolares) || (usdInicial.value && trmInicial.value > 0));
+
 function onSubmit() {
-  if (!ultimos4Valido.value) return;
+  if (!ultimos4Valido.value || !dolaresValidos.value) return;
   emit('guardar', {
     nombre: form.nombre,
     tipo: form.tipo,
@@ -57,8 +66,13 @@ function onSubmit() {
     tasaMensual: esCredito.value ? Number(form.tasaMensual) || 0 : 0,
     sistemaInteres: form.sistemaInteres,
     saldoInicial: llevaSaldoInicial.value
-      ? { monto: Number(form.saldoMonto) || 0, fecha: form.saldoFecha || hoyISO() }
-      : { monto: 0, fecha: hoyISO() },
+      ? {
+          monto: Number(form.saldoMonto) || 0,
+          fecha: form.saldoFecha || hoyISO(),
+          montoUsd: usdInicial.value,
+          trm: usdInicial.value ? trmInicial.value : null,
+        }
+      : { monto: 0, fecha: hoyISO(), montoUsd: null, trm: null },
   });
 }
 </script>
@@ -83,7 +97,13 @@ function onSubmit() {
     />
     <FormField v-if="esTarjeta" v-model="form.diaCorte" type="number" label="Día de corte" placeholder="25" />
     <FormField v-if="esCredito" v-model="form.diaPago" type="number" label="Día de pago" placeholder="10" />
-    <FormField v-if="esCredito" v-model="form.cupo" type="number" label="Cupo (opcional, COP)" />
+    <FormField
+      v-if="esCredito"
+      v-model="form.cupo"
+      type="number"
+      label="Cupo (opcional, COP)"
+      :hint="esTarjeta ? 'Uno solo para lo que compres en pesos y en dólares.' : ''"
+    />
     <FormField
       v-if="esCredito"
       v-model="form.tasaMensual"
@@ -112,13 +132,28 @@ function onSubmit() {
         "
       />
       <FormField
-        v-if="Number(form.saldoMonto) > 0"
+        v-if="Number(form.saldoMonto) > 0 || (esTarjeta && form.debeDolares)"
         v-model="form.saldoFecha"
         type="date"
         :label="esTarjeta ? 'Fecha de esa deuda' : 'Fecha de ese saldo'"
         required
         hint="Normalmente hoy, el día que empiezas a usar la app."
       />
+      <template v-if="esTarjeta">
+        <label class="sm:col-span-2 inline-flex items-center gap-2.5 text-sm text-ink-secondary cursor-pointer">
+          <input v-model="form.debeDolares" type="checkbox" class="checkbox" />
+          También debes en dólares hoy
+        </label>
+        <CamposDolares
+          v-if="form.debeDolares"
+          v-model:usd="form.saldoUsd"
+          v-model:trm="form.saldoTrm"
+          class="sm:col-span-2"
+          :fecha="form.saldoFecha"
+          etiqueta-usd="Lo que debes hoy en dólares (US$)"
+          hint-usd="El saldo en dólares de tu extracto, sin cuotas que todavía no te cobran."
+        />
+      </template>
     </template>
 
     <p v-if="!ultimos4Valido" class="sm:col-span-2 text-[13px] font-medium text-negative">
@@ -131,7 +166,7 @@ function onSubmit() {
 
     <div class="flex justify-end gap-2 sm:col-span-2">
       <button v-if="inicial" type="button" class="btn-ghost btn-sm" @click="emit('cancelar')">Cancelar</button>
-      <button type="submit" class="btn-primary" :class="{ 'btn-sm': inicial }" :disabled="guardando || !ultimos4Valido">
+      <button type="submit" class="btn-primary" :class="{ 'btn-sm': inicial }" :disabled="guardando || !ultimos4Valido || !dolaresValidos">
         {{ guardando ? 'Guardando…' : textoGuardar }}
       </button>
     </div>

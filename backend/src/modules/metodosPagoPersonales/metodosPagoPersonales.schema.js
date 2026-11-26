@@ -1,5 +1,6 @@
 import { fechaApp, MONTO_MAX } from '../../utils/validacion.js';
 import { z } from 'zod';
+import { centavosUsd, tasaCambio } from '../../utils/dolares.js';
 
 const dia = z.number().int().min(1).max(31).nullable().optional();
 
@@ -21,17 +22,29 @@ export const guardarMetodoPagoSchema = z.object({
   tasaMensual: z.number().min(0).max(10).optional(),
   sistemaInteres: z.enum(['capital_fijo', 'cuota_fija']).optional(),
   // Solo al crear: lo que hay hoy en la cuenta (o lo que se debe en la tarjeta).
-  saldoInicial: z.object({ monto: z.number().int().min(0).max(MONTO_MAX), fecha: fechaApp }).optional(),
+  // En una tarjeta, también lo que se debe en dólares (centavos) con su tasa.
+  saldoInicial: z
+    .object({
+      monto: z.number().int().min(0).max(MONTO_MAX),
+      fecha: fechaApp,
+      montoUsd: centavosUsd.nullable().optional(),
+      trm: tasaCambio.nullable().optional(),
+    })
+    .optional(),
 });
 
 // Punto de partida de una cuenta: monto 0 lo quita.
 export const saldoInicialSchema = z.object({
   monto: z.number().int().min(0).max(MONTO_MAX),
   fecha: fechaApp,
+  montoUsd: centavosUsd.nullable().optional(),
+  trm: tasaCambio.nullable().optional(),
 });
 
+// Pago de la parte en dólares: montoUsd = US$ que cubre (centavos); monto = pesos que costó.
 export const pagoTarjetaSchema = z.object({
   monto: z.number().int().positive().max(MONTO_MAX),
   fecha: fechaApp,
   metodoPagoId: z.string().uuid().nullable().optional(),
+  montoUsd: centavosUsd.nullable().optional(),
 });

@@ -1,7 +1,8 @@
 <script setup>
-import { reactive, computed } from 'vue';
+import { reactive, computed, watch } from 'vue';
 import FormField from './FormField.vue';
-import { formatCurrency } from '../utils/format.js';
+import CamposDolares from './personal/CamposDolares.vue';
+import { formatCurrency, aCentavos } from '../utils/format.js';
 
 /**
  * Formulario de edición de una compra a cuotas, personal o del hogar.
@@ -36,7 +37,24 @@ const form = reactive({
   tasaMensual: c.tasaMensual || '',
   sistemaInteres: c.sistemaInteres ?? 'capital_fijo',
   cuotasPagadasAntes: c.cuotasPagadasAntes ?? 0,
+  // Compra personal en dólares (con tarjeta de crédito).
+  enDolares: Boolean(c.montoUsd),
+  usd: c.montoUsd ? String(c.montoUsd / 100) : '',
+  trm: c.trm ? String(c.trm) : '',
 });
+
+const conTarjeta = computed(
+  () => props.tipo === 'personal' && props.metodos.find((m) => m.id === form.metodoPagoId)?.tipo === 'tarjeta_credito',
+);
+watch(conTarjeta, (si) => {
+  if (!si) form.enDolares = false;
+});
+const usdCentavos = computed(() => (form.enDolares ? aCentavos(form.usd) : null));
+const trmNum = computed(() => Number(String(form.trm).replace(',', '.')) || null);
+watch([usdCentavos, trmNum], ([u, t]) => {
+  if (u && t) form.montoTotal = Math.round((u * t) / 100);
+});
+const dolaresValidos = computed(() => !form.enDolares || (usdCentavos.value && trmNum.value > 0));
 
 // Las activas, más la que ya tenía (aunque se haya desactivado).
 const categoriasVisibles = computed(() => props.categorias.filter((x) => x.activo !== false || x.id === c.categoriaId));
@@ -54,7 +72,9 @@ const cambiaCuotas = computed(
     (form.conInteres ? Number(form.tasaMensual) || 0 : 0) !== (c.tasaMensual ?? 0) ||
     (form.conInteres && form.sistemaInteres !== c.sistemaInteres) ||
     (props.tipo === 'hogar' && form.pagoUsuarioId !== c.pagoUsuarioId) ||
-    Number(form.cuotasPagadasAntes) !== (c.cuotasPagadasAntes ?? 0),
+    Number(form.cuotasPagadasAntes) !== (c.cuotasPagadasAntes ?? 0) ||
+    (usdCentavos.value ?? null) !== (c.montoUsd ?? null) ||
+    (form.enDolares && trmNum.value !== c.trm),
 );
 
 function onSubmit() {
@@ -73,6 +93,8 @@ function onSubmit() {
       metodoPagoId: form.metodoPagoId || null,
       categoriaId: form.categoriaId || null,
       esObligatorio: form.esObligatorio,
+      montoUsd: usdCentavos.value,
+      trm: form.enDolares ? trmNum.value : null,
     });
   } else {
     Object.assign(payload, {
@@ -92,7 +114,14 @@ function onSubmit() {
     <div class="sm:col-span-2">
       <FormField v-model="form.nombre" :label="tipo === 'personal' ? 'Descripción' : 'Ítem'" required />
     </div>
-    <FormField v-model="form.montoTotal" type="number" label="Valor total (COP)" required />
+    <FormField
+      v-model="form.montoTotal"
+      type="number"
+      label="Valor total (COP)"
+      required
+      :disabled="form.enDolares"
+      :hint="form.enDolares ? 'Sale de los dólares y la tasa.' : ''"
+    />
     <FormField v-model="form.numeroCuotas" type="number" label="Número de cuotas" required />
     <FormField v-if="tipo === 'hogar'" v-model="form.fechaCompra" type="date" label="Fecha de la compra" required />
     <FormField
@@ -150,6 +179,19 @@ function onSubmit() {
         <option v-for="m in metodos" :key="m.id" :value="m.id">{{ m.nombre }}</option>
       </select>
     </div>
+    <template v-if="conTarjeta">
+      <label class="sm:col-span-2 inline-flex items-center gap-2.5 text-sm text-ink-secondary cursor-pointer">
+        <input v-model="form.enDolares" type="checkbox" class="checkbox" />
+        Compra en dólares
+      </label>
+      <CamposDolares
+        v-if="form.enDolares"
+        v-model:usd="form.usd"
+        v-model:trm="form.trm"
+        class="sm:col-span-2"
+        etiqueta-usd="Valor total en dólares (US$)"
+      />
+    </template>
     <template v-if="tipo === 'personal'">
       <div>
         <label class="label" :for="`compra-${compra.id}-categoria`">Categoría</label>
@@ -177,7 +219,7 @@ function onSubmit() {
 
     <div class="flex justify-end gap-2 sm:col-span-2">
       <button type="button" class="btn-ghost" @click="emit('cancelar')">Cancelar</button>
-      <button type="submit" class="btn-primary" :disabled="guardando">
+      <button type="submit" class="btn-primary" :disabled="guardando || !dolaresValidos">
         {{ guardando ? 'Guardando…' : 'Guardar cambios' }}
       </button>
     </div>

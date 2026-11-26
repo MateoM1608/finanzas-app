@@ -24,3 +24,11 @@ export function registrarPagoTarjeta(id, payload) {
 export function eliminarMetodoPago(id) {
   return api.delete(`/api/metodos-pago-personales/${id}`);
 }
+
+/**
+ * TRM oficial de una fecha (YYYY-MM-DD) o de hoy: { valor, vigencia, fuente }
+ * (fuente 'oficial' o 'ultima_usada'), o null si no hay ninguna.
+ */
+export function obtenerTrm(fecha) {
+  return api.get('/api/metodos-pago-personales/trm', { params: fecha ? { fecha } : {} }).then((r) => r.data.trm);
+}

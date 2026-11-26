@@ -1,5 +1,6 @@
 import { fechaApp, MONTO_MAX } from '../../utils/validacion.js';
 import { z } from 'zod';
+import { centavosUsd, tasaCambio } from '../../utils/dolares.js';
 
 export const crearCompraPersonalSchema = z.object({
   descripcion: z.string().trim().min(1).max(255),
@@ -14,6 +15,10 @@ export const crearCompraPersonalSchema = z.object({
   esObligatorio: z.boolean().optional(),
   // Compra que ya venía en curso: cuántas cuotas se pagaron antes de registrarla.
   cuotasPagadasAntes: z.number().int().min(0).max(71).optional(),
+  // Compra en dólares (tarjeta de crédito): total en centavos de US$ y la
+  // tasa; montoTotal se calcula con ellos.
+  montoUsd: centavosUsd.nullable().optional(),
+  trm: tasaCambio.nullable().optional(),
 }).refine((d) => (d.cuotasPagadasAntes ?? 0) < d.numeroCuotas, {
   message: 'Las cuotas ya pagadas deben ser menos que el total de cuotas',
   path: ['cuotasPagadasAntes'],
@@ -36,4 +41,6 @@ export const actualizarCompraPersonalSchema = z.object({
   categoriaId: z.string().uuid().nullable().optional(),
   esObligatorio: z.boolean().optional(),
   cuotasPagadasAntes: z.number().int().min(0).max(71).optional(),
+  montoUsd: centavosUsd.nullable().optional(),
+  trm: tasaCambio.nullable().optional(),
 });
