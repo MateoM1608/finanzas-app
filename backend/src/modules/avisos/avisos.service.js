@@ -1,7 +1,7 @@
 import { prisma } from '../../config/prisma.js';
 import { HttpError } from '../../middleware/errorHandler.js';
 import { hoyUTC } from '../../utils/fechas.js';
-import { asegurarCuotasHogar } from '../../utils/cuentasFijas.js';
+import { asegurarCuotasHogar, seVaAPagarSola } from '../../utils/cuentasFijas.js';
 import { notificar, TIPOS_VENCIMIENTO } from '../../utils/notificaciones.js';
 import { calcularDeudaTarjetas } from '../metodosPagoPersonales/metodosPagoPersonales.service.js';
 
@@ -117,7 +117,11 @@ export async function calcularAvisos(usuarioActual) {
     const [cuentas, cuotas, miembros] = await Promise.all([
       prisma.gastoRecurrenteInstancia.findMany({
         where: { estado: 'por_pagar', fecha: { lte: limite }, concepto: { hogarId, activo: true } },
-        include: { concepto: { select: { nombre: true, montoDefault: true, responsableUsuarioId: true } } },
+        include: {
+          concepto: {
+            select: { nombre: true, montoDefault: true, responsableUsuarioId: true, tipoMonto: true, pagoAutomatico: true, pagoAutomaticoDesde: true },
+          },
+        },
         orderBy: { fecha: 'asc' },
       }),
       prisma.gastoVariablePareja.findMany({
@@ -129,6 +133,8 @@ export async function calcularAvisos(usuarioActual) {
     ]);
     const nombre = new Map(miembros.map((m) => [m.id, m.nombre]));
     for (const c of cuentas) {
+      // Las cuentas que se pagan solas no se avisan: se pagan en su fecha.
+      if (seVaAPagarSola(c.concepto, c)) continue;
       const responsable = c.concepto.responsableUsuarioId;
       hogar.push(
         aviso(

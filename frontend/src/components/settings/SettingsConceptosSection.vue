@@ -154,6 +154,7 @@ onMounted(cargar);
               <span :class="concepto.tipoMonto === 'fijo' ? 'badge-accent' : 'badge-neutral'">
                 {{ concepto.tipoMonto === 'fijo' ? formatCurrency(concepto.montoDefault) : 'Monto variable' }}
               </span>
+              <span v-if="concepto.pagoAutomatico" class="badge-positive">Se paga sola</span>
               <span v-if="!concepto.activo" class="badge-warning">Inactiva</span>
             </p>
             <p class="mt-0.5 text-[13px] text-ink-secondary">

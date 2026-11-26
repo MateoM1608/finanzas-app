@@ -1,6 +1,7 @@
 import { prisma } from '../config/prisma.js';
 import { calcularFechasPendientes } from './instanciasFijas.js';
 import { hoyUTC } from './fechas.js';
+import { asegurarCuotasHogar } from './cuentasFijas.js';
 
 /**
  * Genera (si no existen ya) las ocurrencias de cada gasto fijo activo entre
@@ -109,5 +110,16 @@ export async function asegurarIngresosFijos(usuarioId) {
  */
 export async function asegurarInstanciasFijasPersonales(usuarioId) {
   await asegurarGastosFijos(usuarioId);
+  await asegurarPagosAutomaticosHogar(usuarioId);
   await asegurarIngresosFijos(usuarioId);
+}
+
+/**
+ * Las cuentas fijas del hogar que se pagan solas dejan su movimiento en la
+ * caja del responsable: se generan también al mirar el panel personal, no
+ * solo al entrar al hogar.
+ */
+export async function asegurarPagosAutomaticosHogar(usuarioId) {
+  const usuario = await prisma.usuario.findUnique({ where: { id: usuarioId }, select: { hogarId: true } });
+  if (usuario?.hogarId) await asegurarCuotasHogar(usuario.hogarId);
 }

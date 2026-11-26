@@ -1,5 +1,8 @@
 import { prisma } from '../config/prisma.js';
 import { hoyUTC } from './fechas.js';
+import { obtenerSplitVigente, calcularReparto } from './reparto.js';
+import { sincronizarPagoCuota } from './movimientosHogar.js';
+import { registrarActividad } from './actividadHogar.js';
 
 /**
  * Calendario de las cuentas fijas del hogar (ConceptoRecurrentePareja). Cada
@@ -117,5 +120,82 @@ export async function asegurarCuotasHogar(hogarId, hoy = hoyUTC()) {
   );
   if (filas.length) {
     await prisma.gastoRecurrenteInstancia.createMany({ data: filas, skipDuplicates: true });
+  }
+
+  await pagarCuotasAutomaticas(conceptos, hoy);
+}
+
+/** La cuenta paga sola esta cuota (en su fecha): automática, de monto fijo, con responsable y desde que se activó. */
+export function seVaAPagarSola(concepto, cuota) {
+  return Boolean(
+    concepto.pagoAutomatico &&
+      concepto.tipoMonto === 'fijo' &&
+      concepto.responsableUsuarioId &&
+      concepto.pagoAutomaticoDesde &&
+      !cuota.sinPagoAutomatico &&
+      new Date(cuota.fecha) >= inicioDeDia(concepto.pagoAutomaticoDesde),
+  );
+}
+
+/**
+ * Las cuentas automáticas (débito o tarjeta) se dan por pagadas solas en la
+ * fecha de cada cuota: el responsable la paga, con su método si lo dejó
+ * configurado, y se reparte con el split vigente en esa fecha — igual que
+ * "Lo pagué". Cada cuota se toma con un update condicional (estado
+ * por_pagar), así dos consultas al tiempo no la pagan dos veces.
+ */
+async function pagarCuotasAutomaticas(conceptos, hoy) {
+  const automaticos = conceptos.filter((c) => c.pagoAutomatico && c.tipoMonto === 'fijo' && c.responsableUsuarioId && c.pagoAutomaticoDesde);
+  if (!automaticos.length) return;
+  const porId = new Map(automaticos.map((c) => [c.id, c]));
+  const vencidas = await prisma.gastoRecurrenteInstancia.findMany({
+    where: { conceptoId: { in: automaticos.map((c) => c.id) }, estado: 'por_pagar', sinPagoAutomatico: false, fecha: { lte: inicioDeDia(hoy) } },
+    orderBy: { fecha: 'asc' },
+  });
+
+  for (const cuota of vencidas) {
+    const concepto = porId.get(cuota.conceptoId);
+    if (!seVaAPagarSola(concepto, cuota)) continue;
+    const monto = concepto.montoDefault;
+    if (monto == null) continue;
+    const split = await obtenerSplitVigente(concepto.hogarId, 'general', prisma, cuota.fecha);
+    if (!split.length) continue;
+
+    const pagada = await prisma.$transaction(async (tx) => {
+      const tomada = await tx.gastoRecurrenteInstancia.updateMany({
+        where: { id: cuota.id, estado: 'por_pagar', sinPagoAutomatico: false },
+        data: {
+          monto,
+          pagoUsuarioId: concepto.responsableUsuarioId,
+          fechaPago: cuota.fecha,
+          metodoPagoId: concepto.metodoPagoAutomaticoId ?? null,
+          pagoRegistradoPorId: concepto.responsableUsuarioId,
+          pagoAutomatico: true,
+          estado: 'pagado',
+        },
+      });
+      if (!tomada.count) return false;
+      await tx.gastoRecurrenteInstanciaReparto.deleteMany({ where: { instanciaId: cuota.id } });
+      await tx.gastoRecurrenteInstanciaReparto.createMany({
+        data: calcularReparto(monto, split).map((r) => ({ instanciaId: cuota.id, ...r })),
+      });
+      await sincronizarPagoCuota(tx, cuota.id);
+      return true;
+    });
+
+    if (pagada) {
+      const responsable = await prisma.usuario.findUnique({
+        where: { id: concepto.responsableUsuarioId },
+        select: { id: true, nombre: true, hogarId: true },
+      });
+      if (responsable?.hogarId === concepto.hogarId) {
+        await registrarActividad(responsable, {
+          tipo: 'cuenta_fija',
+          descripcion: `pagó ${concepto.nombre} (pago automático)`,
+          monto,
+          avisar: 'nadie',
+        });
+      }
+    }
   }
 }

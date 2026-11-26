@@ -1,5 +1,6 @@
 <script setup>
 import { ref, reactive, computed, onMounted, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import {
   listarGastosVariables,
   crearGastoVariable,
@@ -403,6 +404,19 @@ async function onGuardarReparto(gasto) {
 }
 
 onMounted(cargar);
+
+// Botón "+" de la barra del celular: /hogar?registrar=variable abre el formulario.
+const rutaHogar = useRoute();
+const routerHogar = useRouter();
+watch(
+  () => rutaHogar.query.registrar,
+  (tipo) => {
+    if (tipo !== 'variable') return;
+    if (puedeEditar.value) mostrarForm.value = true;
+    routerHogar.replace({ query: { ...rutaHogar.query, registrar: undefined } });
+  },
+  { immediate: true },
+);
 </script>
 
 <template>

@@ -1,7 +1,7 @@
 import { registrarActividad, registrarPago } from '../../utils/actividadHogar.js';
 import { prisma } from '../../config/prisma.js';
 import { HttpError } from '../../middleware/errorHandler.js';
-import { asegurarCuotasHogar } from '../../utils/cuentasFijas.js';
+import { asegurarCuotasHogar, seVaAPagarSola } from '../../utils/cuentasFijas.js';
 import { obtenerSplitVigente, calcularReparto } from '../../utils/reparto.js';
 import { hoyUTC } from '../../utils/fechas.js';
 import { sincronizarPagoCuota, sincronizarPagoGasto } from '../../utils/movimientosHogar.js';
@@ -20,6 +20,9 @@ const INCLUDE_CUOTA = {
       nombre: true,
       tipoMonto: true,
       frecuencia: true,
+      pagoAutomatico: true,
+      pagoAutomaticoDesde: true,
+      responsableUsuarioId: true,
       responsable: { select: { id: true, nombre: true } },
     },
   },
@@ -78,7 +81,10 @@ export async function obtenerCuentasHogar(usuarioActual) {
   const conProxima = new Set();
 
   for (const cuotaCompleta of cuotas) {
-    const cuota = ocultarMetodoAjeno(cuotaCompleta, usuarioActual);
+    const cuota = {
+      ...ocultarMetodoAjeno(cuotaCompleta, usuarioActual),
+      seVaAPagarSola: cuotaCompleta.estado === 'por_pagar' && seVaAPagarSola(cuotaCompleta.concepto, cuotaCompleta),
+    };
     if (cuota.estado !== 'por_pagar') {
       pagadasSinCuadrar.push(cuota);
     } else if (cuota.fecha <= hoy) {
@@ -132,6 +138,7 @@ export async function pagarCuota(usuarioActual, cuotaId, data) {
         metodoPagoId,
         estado: 'pagado',
         pagoRegistradoPorId: usuarioActual.id,
+        pagoAutomatico: false,
       },
     });
     // El 100 % sale de la plata de quien pagó: queda en sus movimientos.
@@ -156,12 +163,19 @@ export async function deshacerPagoCuota(usuarioActual, cuotaId) {
     throw new HttpError(409, 'Esta cuota no está marcada como pagada');
   }
 
+  // Si la cuenta es automática y la cuota ya llegó a su fecha, deshacer la
+  // deja por pagar a mano (ej. el cobro falló): no se vuelve a pagar sola.
+  const yaVencio = cuota.fecha <= hoyUTC();
+  const sinPagoAutomatico = cuota.sinPagoAutomatico || (yaVencio && seVaAPagarSola(cuota.concepto, cuota));
+
   return prisma.$transaction(async (tx) => {
     await tx.gastoRecurrenteInstanciaReparto.deleteMany({ where: { instanciaId: cuotaId } });
     await tx.gastoRecurrenteInstancia.update({
       where: { id: cuotaId },
       data: {
         estado: 'por_pagar',
+        pagoAutomatico: false,
+        sinPagoAutomatico,
         pagoUsuarioId: null,
         fechaPago: null,
         metodoPagoId: null,

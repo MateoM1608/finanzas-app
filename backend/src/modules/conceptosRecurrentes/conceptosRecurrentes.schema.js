@@ -25,6 +25,8 @@ export const crearConceptoSchema = z
     montoDefault: z.number().int().positive().max(MONTO_MAX).optional(),
     responsableUsuarioId: z.string().uuid().nullable().optional(),
     categoriaId: z.string().uuid().nullable().optional(),
+    pagoAutomatico: z.boolean().optional(),
+    metodoPagoAutomaticoId: z.string().uuid().nullable().optional(),
     ...camposCalendario,
   })
   .refine((data) => data.tipoMonto === 'variable' || data.montoDefault !== undefined, {
@@ -43,6 +45,8 @@ export const actualizarConceptoSchema = z.object({
   montoDefault: z.number().int().positive().max(MONTO_MAX).nullable().optional(),
   responsableUsuarioId: z.string().uuid().nullable().optional(),
   categoriaId: z.string().uuid().nullable().optional(),
+  pagoAutomatico: z.boolean().optional(),
+  metodoPagoAutomaticoId: z.string().uuid().nullable().optional(),
   frecuencia: camposCalendario.frecuencia.optional(),
   diaMes: diaMes.optional(),
   diaMes2: diaMes.optional(),

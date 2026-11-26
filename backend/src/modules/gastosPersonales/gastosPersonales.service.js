@@ -1,7 +1,7 @@
 import { validarReferenciasPropias } from '../../utils/pertenencia.js';
 import { prisma } from '../../config/prisma.js';
 import { HttpError } from '../../middleware/errorHandler.js';
-import { asegurarGastosFijos } from '../../utils/instanciasFijasPersonales.js';
+import { asegurarGastosFijos, asegurarPagosAutomaticosHogar } from '../../utils/instanciasFijasPersonales.js';
 import { evaluarPeriodoSiCorresponde } from '../../utils/evaluacionAhorro.js';
 
 const INCLUDE_GASTO = {
@@ -48,6 +48,7 @@ function requireNoEsDelHogar(gasto) {
 
 export async function listarGastosPersonales(usuarioId) {
   await asegurarGastosFijos(usuarioId);
+  await asegurarPagosAutomaticosHogar(usuarioId);
   return prisma.gastoPersonal.findMany({
     where: { usuarioId },
     include: INCLUDE_GASTO,

@@ -29,9 +29,20 @@ const NAV_MOVIL = NAV.filter((i) => i.name !== 'cuadres');
 const NAV_MOVIL_IZQ = NAV_MOVIL.slice(0, 2);
 const NAV_MOVIL_DER = NAV_MOVIL.slice(2);
 
-function registrar() {
-  router.push({ name: 'panel-personal', query: { registrar: 'gasto' } });
+// "+": un menú corto con lo que se registra más seguido. El gasto del hogar
+// solo aparece con permiso para editar gastos del hogar.
+const menuRegistrar = ref(false);
+const puedeGastoHogar = computed(() =>
+  Boolean(auth.usuario?.hogarId && (auth.usuario?.esAdmin || auth.usuario?.puedeEditarGastos)),
+);
+function registrar(tipo) {
+  menuRegistrar.value = false;
+  if (tipo === 'variable') router.push({ name: 'panel-hogar', query: { registrar: 'variable' } });
+  else router.push({ name: 'panel-personal', query: { registrar: tipo } });
 }
+watch(() => route.fullPath, () => {
+  menuRegistrar.value = false;
+});
 
 const iniciales = computed(() =>
   (auth.usuario?.nombre || '?')
@@ -156,11 +167,38 @@ async function onLogout() {
     </main>
 
     <!-- Navegación inferior (móvil y tablet) -->
+    <div
+      v-if="menuRegistrar"
+      class="lg:hidden fixed inset-0 z-20 bg-ink-primary/20"
+      aria-hidden="true"
+      @click="menuRegistrar = false"
+    />
     <nav
       class="lg:hidden fixed inset-x-0 bottom-0 z-30 border-t border-border bg-surface/90 backdrop-blur-md"
       style="padding-bottom: env(safe-area-inset-bottom)"
       aria-label="Principal"
+      @keydown.esc="menuRegistrar = false"
     >
+      <div
+        v-if="menuRegistrar"
+        id="menu-registrar"
+        class="absolute bottom-full left-1/2 mb-3 w-64 -translate-x-1/2 overflow-hidden rounded-2xl border border-border bg-surface shadow-pop"
+        role="menu"
+        aria-label="Registrar"
+      >
+        <button type="button" role="menuitem" class="flex w-full items-center gap-3 px-4 py-3.5 text-left text-sm font-medium text-ink-primary hover:bg-surface-sunken focus-visible:bg-surface-sunken focus-visible:outline-none [&+&]:border-t [&+&]:border-border" @click="registrar('gasto')">
+          <AppIcon name="arrowUpRight" class="h-[18px] w-[18px] text-negative" />
+          <span>Gasto personal</span>
+        </button>
+        <button type="button" role="menuitem" class="flex w-full items-center gap-3 px-4 py-3.5 text-left text-sm font-medium text-ink-primary hover:bg-surface-sunken focus-visible:bg-surface-sunken focus-visible:outline-none [&+&]:border-t [&+&]:border-border" @click="registrar('ingreso')">
+          <AppIcon name="arrowDownLeft" class="h-[18px] w-[18px] text-positive" />
+          <span>Ingreso personal</span>
+        </button>
+        <button v-if="puedeGastoHogar" type="button" role="menuitem" class="flex w-full items-center gap-3 px-4 py-3.5 text-left text-sm font-medium text-ink-primary hover:bg-surface-sunken focus-visible:bg-surface-sunken focus-visible:outline-none [&+&]:border-t [&+&]:border-border" @click="registrar('variable')">
+          <AppIcon name="home" class="h-[18px] w-[18px] text-accent" />
+          <span>Gasto del hogar</span>
+        </button>
+      </div>
       <div class="grid grid-cols-5">
         <router-link
           v-for="item in NAV_MOVIL_IZQ"
@@ -173,12 +211,15 @@ async function onLogout() {
           <AppIcon :name="item.icon" class="h-[22px] w-[22px]" />
           {{ item.short || item.label }}
         </router-link>
-        <div class="flex items-center justify-center">
+        <div class="relative flex items-center justify-center">
           <button
             type="button"
-            class="grid h-12 w-12 -mt-5 place-items-center rounded-2xl bg-accent text-highlight dark:text-accent-on shadow-pop ring-4 ring-canvas"
-            aria-label="Registrar movimiento"
-            @click="registrar"
+            class="grid h-12 w-12 -mt-5 place-items-center rounded-2xl bg-accent text-highlight dark:text-accent-on shadow-pop ring-4 ring-canvas transition-transform"
+            :class="{ 'rotate-45': menuRegistrar }"
+            :aria-label="menuRegistrar ? 'Cerrar menú de registro' : 'Registrar movimiento'"
+            :aria-expanded="menuRegistrar"
+            aria-controls="menu-registrar"
+            @click="menuRegistrar = !menuRegistrar"
           >
             <AppIcon name="plus" class="h-6 w-6" :stroke-width="2.4" />
           </button>

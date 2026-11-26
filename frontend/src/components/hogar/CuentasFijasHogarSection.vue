@@ -176,6 +176,8 @@ const textoVacio = {
               <span class="truncate">{{ cuota.concepto.nombre }}</span>
               <span v-if="cuota.atrasada" class="badge-negative">Atrasada</span>
               <span v-if="cuota.estado === 'en_cuadre'" class="badge-accent">En cuadre</span>
+              <span v-if="cuota.seVaAPagarSola" class="badge-neutral">Se paga sola</span>
+              <span v-if="cuota.pagoAutomatico" class="badge-positive">Pago automático</span>
             </p>
             <p class="truncate text-[13px] text-ink-tertiary">
               {{ formatDate(cuota.fecha) }}
@@ -192,7 +194,12 @@ const textoVacio = {
             {{ cuota.monto != null ? formatCurrency(cuota.monto) : '—' }}
           </span>
           <template v-if="puedeEditar">
-            <button v-if="cuota.estado === 'por_pagar'" type="button" class="btn-secondary btn-sm" @click="abrirPago(cuota)">
+            <button
+              v-if="cuota.estado === 'por_pagar'"
+              type="button"
+              :class="cuota.seVaAPagarSola ? 'btn-ghost btn-sm' : 'btn-secondary btn-sm'"
+              @click="abrirPago(cuota)"
+            >
               <AppIcon name="check" class="h-3.5 w-3.5" />
               Lo pagué
             </button>

@@ -251,6 +251,7 @@ model MetodoPagoPersonal {
   comprasPersonales    CompraCuotasPersonal[]
   comprasHogar         CompraCuotasHogar[]
   pagosCuentasHogar    GastoRecurrenteInstancia[]
+  cuentasAutomaticas   ConceptoRecurrentePareja[] @relation("metodoCuentaAutomatica")
   pagosGastosHogar     GastoVariablePareja[]
   pagosRecibidos       GastoPersonal[]            @relation("pagoTarjeta")
   extractos            ExtractoTarjeta[]
@@ -468,6 +469,13 @@ model ConceptoRecurrentePareja {
   // Categoría del hogar (E4): todas sus cuotas cuentan en ella.
   categoriaId String?                    @map("categoria_id")
   categoria   CategoriaHogar?            @relation(fields: [categoriaId], references: [id])
+  // Pago automático (débito o tarjeta): desde `pagoAutomaticoDesde`, cada
+  // cuota se da por pagada en su fecha por el responsable, con su método
+  // (privado del responsable, opcional). Solo cuentas de monto fijo.
+  pagoAutomatico         Boolean             @default(false) @map("pago_automatico")
+  pagoAutomaticoDesde    DateTime?           @map("pago_automatico_desde")
+  metodoPagoAutomaticoId String?             @map("metodo_pago_automatico_id")
+  metodoPagoAutomatico   MetodoPagoPersonal? @relation("metodoCuentaAutomatica", fields: [metodoPagoAutomaticoId], references: [id], onDelete: SetNull)
 
   @@index([hogarId])
   @@map("conceptos_recurrentes_pareja")
@@ -520,6 +528,9 @@ model GastoRecurrenteInstancia {
   pagoRegistradoPorId String?          @map("pago_registrado_por_id")
   metodoPagoId        String?          @map("metodo_pago_id")
   estado              EstadoGastoHogar @default(por_pagar)
+  // La pagó sola la cuenta automática / se deshizo ese pago (ya no se paga sola).
+  pagoAutomatico      Boolean          @default(false) @map("pago_automatico")
+  sinPagoAutomatico   Boolean          @default(false) @map("sin_pago_automatico")
   creadoEn            DateTime         @default(now()) @map("creado_en")
 
   concepto       ConceptoRecurrentePareja          @relation(fields: [conceptoId], references: [id])

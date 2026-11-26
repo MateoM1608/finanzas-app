@@ -42,7 +42,41 @@ async function requireConceptoDelHogar(hogarId, conceptoId) {
 const INCLUDE_CONCEPTO = {
   responsable: { select: { id: true, nombre: true } },
   categoria: { select: { id: true, nombre: true } },
+  metodoPagoAutomatico: { select: { id: true, nombre: true, tipo: true } },
 };
+
+/**
+ * Pago automático: solo en cuentas de monto fijo y con responsable (es quien
+ * paga). El método es privado del responsable: solo él lo elige y lo ve. Si
+ * cambia el responsable o se apaga el automático, el método se borra.
+ */
+async function resolverPagoAutomatico(usuarioActual, { pagoAutomatico, tipoMonto, responsableUsuarioId, metodoPagoAutomaticoId, metodoActualId }) {
+  if (!pagoAutomatico) return { pagoAutomatico: false, metodoPagoAutomaticoId: null };
+  if (tipoMonto !== 'fijo') {
+    throw new HttpError(400, 'Solo una cuenta de monto fijo se puede pagar sola: una variable necesita que alguien diga cuánto fue');
+  }
+  if (!responsableUsuarioId) {
+    throw new HttpError(400, 'Elige un responsable: es quien paga la cuenta cuando se paga sola');
+  }
+  if (metodoPagoAutomaticoId === undefined) {
+    return { pagoAutomatico: true, metodoPagoAutomaticoId: metodoActualId ?? null };
+  }
+  if (metodoPagoAutomaticoId === null) return { pagoAutomatico: true, metodoPagoAutomaticoId: null };
+  if (responsableUsuarioId !== usuarioActual.id) {
+    throw new HttpError(400, 'Solo el responsable puede elegir con qué cuenta o tarjeta se paga');
+  }
+  const metodo = await prisma.metodoPagoPersonal.findUnique({ where: { id: metodoPagoAutomaticoId } });
+  if (!metodo || metodo.usuarioId !== usuarioActual.id) {
+    throw new HttpError(400, 'Método de pago no encontrado');
+  }
+  return { pagoAutomatico: true, metodoPagoAutomaticoId };
+}
+
+/** El método del pago automático solo lo ve el responsable. */
+function ocultarMetodoAutomatico(concepto, usuarioActual) {
+  if (!concepto || concepto.responsableUsuarioId === usuarioActual.id) return concepto;
+  return { ...concepto, metodoPagoAutomatico: null, metodoPagoAutomaticoId: null };
+}
 
 function normalizarCalendario(data) {
   return {
@@ -52,13 +86,14 @@ function normalizarCalendario(data) {
   };
 }
 
-export function listarConceptos(usuarioActual) {
+export async function listarConceptos(usuarioActual) {
   const hogarId = requireHogarId(usuarioActual);
-  return prisma.conceptoRecurrentePareja.findMany({
+  const conceptos = await prisma.conceptoRecurrentePareja.findMany({
     where: { hogarId },
     include: INCLUDE_CONCEPTO,
     orderBy: { creadoEn: 'asc' },
   });
+  return conceptos.map((c) => ocultarMetodoAutomatico(c, usuarioActual));
 }
 
 export async function crearConcepto(usuarioActual, data) {
@@ -66,8 +101,14 @@ export async function crearConcepto(usuarioActual, data) {
   requirePermisoEdicion(usuarioActual);
   await validarResponsableDelHogar(hogarId, data.responsableUsuarioId);
   const categoriaId = await validarCategoriaHogar(hogarId, data.categoriaId);
+  const automatico = await resolverPagoAutomatico(usuarioActual, {
+    pagoAutomatico: data.pagoAutomatico,
+    tipoMonto: data.tipoMonto,
+    responsableUsuarioId: data.responsableUsuarioId ?? null,
+    metodoPagoAutomaticoId: data.metodoPagoAutomaticoId ?? null,
+  });
 
-  return prisma.conceptoRecurrentePareja.create({
+  const creado = await prisma.conceptoRecurrentePareja.create({
     data: {
       hogarId,
       nombre: data.nombre,
@@ -77,9 +118,13 @@ export async function crearConcepto(usuarioActual, data) {
       categoriaId,
       fechaInicio: data.fechaInicio,
       ...normalizarCalendario(data),
+      ...automatico,
+      // Una cuenta nueva automática se viene pagando sola desde su inicio.
+      pagoAutomaticoDesde: automatico.pagoAutomatico ? data.fechaInicio : null,
     },
     include: INCLUDE_CONCEPTO,
   });
+  return ocultarMetodoAutomatico(creado, usuarioActual);
 }
 
 export async function actualizarConcepto(usuarioActual, conceptoId, data) {
@@ -116,7 +161,24 @@ export async function actualizarConcepto(usuarioActual, conceptoId, data) {
     new Date(fechaInicioFinal).getTime() !== concepto.fechaInicio.getTime();
   const montoPorCuota = tipoMontoFinal === 'variable' ? null : montoDefaultFinal;
 
-  return prisma.$transaction(async (tx) => {
+  const responsableFinal = data.responsableUsuarioId === undefined ? concepto.responsableUsuarioId : data.responsableUsuarioId;
+  const cambiaResponsable = responsableFinal !== concepto.responsableUsuarioId;
+  const automatico = await resolverPagoAutomatico(usuarioActual, {
+    pagoAutomatico: data.pagoAutomatico ?? concepto.pagoAutomatico,
+    tipoMonto: tipoMontoFinal,
+    responsableUsuarioId: responsableFinal,
+    metodoPagoAutomaticoId: data.metodoPagoAutomaticoId,
+    // El método es del responsable: si cambia de responsable, se borra.
+    metodoActualId: cambiaResponsable ? null : concepto.metodoPagoAutomaticoId,
+  });
+  // Activarlo en una cuenta que ya existe paga sola desde hoy: lo que ya
+  // venció sin pagar sigue pendiente, porque no se sabe si se pagó.
+  let pagoAutomaticoDesde = null;
+  if (automatico.pagoAutomatico) {
+    pagoAutomaticoDesde = concepto.pagoAutomatico ? concepto.pagoAutomaticoDesde : hoyUTC();
+  }
+
+  const resultado = await prisma.$transaction(async (tx) => {
     const actualizado = await tx.conceptoRecurrentePareja.update({
       where: { id: conceptoId },
       data: {
@@ -129,6 +191,8 @@ export async function actualizarConcepto(usuarioActual, conceptoId, data) {
           data.responsableUsuarioId === undefined ? undefined : data.responsableUsuarioId,
         fechaInicio: fechaInicioFinal,
         ...calendario,
+        ...automatico,
+        pagoAutomaticoDesde,
       },
       include: INCLUDE_CONCEPTO,
     });
@@ -155,6 +219,7 @@ export async function actualizarConcepto(usuarioActual, conceptoId, data) {
 
     return actualizado;
   });
+  return ocultarMetodoAutomatico(resultado, usuarioActual);
 }
 
 export async function eliminarConcepto(usuarioActual, conceptoId) {
