@@ -93,6 +93,11 @@ export function cerrarOtrasSesiones(usuarioActual) {
   return prisma.usuario.update({ where: { id: usuarioActual.id }, data: { sesionVersion: { increment: 1 } } });
 }
 
+/** Perfil: por ahora solo el nombre que ven los demás miembros del hogar. */
+export function actualizarPerfil(usuarioActual, { nombre }) {
+  return prisma.usuario.update({ where: { id: usuarioActual.id }, data: { nombre } });
+}
+
 export function serializeUsuario(usuario) {
   return {
     id: usuario.id,

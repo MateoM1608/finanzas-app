@@ -6,7 +6,7 @@ import { formatCurrency } from '../../utils/format.js';
 /**
  * Topes de gasto mensual del hogar (E4): una tarjeta por tope con lo pagado
  * este mes contra el tope, lo que falta por pagar y cómo cerró el mes pasado.
- * Si no hay topes, no se muestra nada (se crean en Configuración).
+ * Si no hay topes, no se muestra nada (se crean en Configuración del hogar).
  */
 const resumen = ref(null);
 
@@ -35,7 +35,7 @@ const ancho = (t) => Math.min(100, Math.max(0, t.porcentaje)) + '%';
   <section v-if="resumen?.topes.length" class="card card-pad" aria-labelledby="topes-hogar-titulo">
     <div class="mb-3 flex flex-wrap items-baseline justify-between gap-2">
       <h2 id="topes-hogar-titulo" class="section-title">Topes de {{ nombreMes(resumen.mes) }}</h2>
-      <router-link :to="{ name: 'settings', query: { tab: 'categorias' } }" class="text-[13px] text-accent hover:underline">Configurar</router-link>
+      <router-link :to="{ name: 'configuracion-hogar', query: { tab: 'categorias' } }" class="text-[13px] text-accent hover:underline">Configurar</router-link>
     </div>
     <div class="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
       <div

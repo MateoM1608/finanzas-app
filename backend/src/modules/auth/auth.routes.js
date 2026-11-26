@@ -4,6 +4,7 @@ import {
   login,
   logout,
   me,
+  putPerfil,
   postCambiarPassword,
   postCerrarOtrasSesiones,
   getCodigosRecuperacion,
@@ -18,6 +19,7 @@ authRouter.post('/register', register);
 authRouter.post('/login', login);
 authRouter.post('/logout', logout);
 authRouter.get('/me', requireAuth, me);
+authRouter.put('/perfil', requireAuth, putPerfil);
 authRouter.post('/cambiar-password', requireAuth, postCambiarPassword);
 authRouter.post('/cerrar-otras-sesiones', requireAuth, postCerrarOtrasSesiones);
 authRouter.get('/codigos-recuperacion', requireAuth, getCodigosRecuperacion);

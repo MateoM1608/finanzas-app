@@ -133,7 +133,7 @@ useAncla(
 
 const textoVacio = {
   por_pagar: 'Nada por pagar hoy: todas las cuentas que ya llegaron a su fecha están pagadas.',
-  proximas: 'No hay cuentas próximas. Configúralas en Configuración → Cuentas fijas.',
+  proximas: 'No hay cuentas próximas. Configúralas en Configuración del hogar → Cuentas fijas.',
   pagadas: 'No hay cuentas pagadas pendientes de cuadrar.',
 };
 </script>
@@ -145,7 +145,7 @@ const textoVacio = {
         <h3 id="cuentas-fijas-titulo" class="section-title">Cuentas fijas</h3>
         <p class="section-hint">Cuentan para el saldo solo cuando alguien las marca como pagadas.</p>
       </div>
-      <router-link :to="{ name: 'settings' }" class="btn-ghost btn-sm shrink-0">
+      <router-link :to="{ name: 'configuracion-hogar', query: { tab: 'conceptos' } }" class="btn-ghost btn-sm shrink-0">
         <AppIcon name="settings" class="h-3.5 w-3.5" />
         Configurar
       </router-link>

@@ -121,7 +121,7 @@ export async function pagarCuota(usuarioActual, cuotaId, data) {
   // Se reparte con el split vigente en la FECHA de la cuota, no el de hoy.
   const split = await obtenerSplitVigente(hogarId, 'general', prisma, cuota.fecha);
   if (!split.length) {
-    throw new HttpError(409, 'Configura primero el porcentaje de reparto del hogar en Configuración');
+    throw new HttpError(409, 'Configura primero el porcentaje de reparto del hogar en Hogar → Configuración → Reparto');
   }
 
   const pagada = await prisma.$transaction(async (tx) => {

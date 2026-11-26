@@ -1,5 +1,5 @@
 import { asyncHandler } from '../../middleware/asyncHandler.js';
-import { registerSchema, loginSchema, cambiarPasswordSchema, generarCodigosSchema, recuperarSchema } from './auth.schema.js';
+import { registerSchema, loginSchema, cambiarPasswordSchema, generarCodigosSchema, recuperarSchema, perfilSchema } from './auth.schema.js';
 import { estadoCodigos, generarCodigos, recuperarConCodigo } from './recuperacion.service.js';
 import {
   registerUsuario,
@@ -7,6 +7,7 @@ import {
   serializeUsuario,
   cambiarPassword,
   cerrarOtrasSesiones,
+  actualizarPerfil,
 } from './auth.service.js';
 import { signSessionToken, SESSION_COOKIE_NAME, SESSION_COOKIE_MAX_AGE_MS } from '../../utils/jwt.js';
 import { ipDe } from '../../utils/limiteIntentos.js';
@@ -44,6 +45,11 @@ export const logout = asyncHandler(async (req, res) => {
 
 export const me = asyncHandler(async (req, res) => {
   res.json({ usuario: serializeUsuario(req.usuario) });
+});
+
+export const putPerfil = asyncHandler(async (req, res) => {
+  const usuario = await actualizarPerfil(req.usuario, perfilSchema.parse(req.body));
+  res.json({ usuario: serializeUsuario(usuario) });
 });
 
 // Las dos sacan a las demás sesiones y le dan a esta un token nuevo.

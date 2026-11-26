@@ -28,6 +28,7 @@ Dentro de una transacción interactiva toda lectura debe usar `tx`, no el client
 - `POST /login` — `{ usuario, password }`
 - `POST /logout`
 - `GET /me` — requiere sesión activa
+- `PUT /perfil` — `{ nombre }` (sesión activa, 1–100 caracteres) → `{ usuario }`. El usuario (login) no se cambia.
 - `POST /cambiar-password` — `{ actual, nueva }` (sesión activa). Contraseña actual errada → 400 (no 401, que en la app significa "sesión terminada"); usa los mismos límites del login. Cierra las demás sesiones y le da a esta un token nuevo.
 - `POST /cerrar-otras-sesiones` — (sesión activa) cierra la sesión en todos los demás dispositivos; esta sigue.
 - **Códigos de recuperación** (`modules/auth/recuperacion.service.js`, tabla `CodigoRecuperacion`): `GET /codigos-recuperacion` (sesión) → `{ total, disponibles, creadosEn }`; `POST /codigos-recuperacion` `{ password }` (sesión; contraseña errada → 400, con el límite del login) → `{ codigos }`: 8 nuevos XXXX-XXXX (alfabeto sin 0/O/1/I), guardados con bcrypt (costo 10) y mostrados solo esta vez; borra los anteriores. `POST /recuperar` `{ usuario, codigo, nueva }` (sin sesión; el código se acepta en minúsculas, con o sin guion o espacios) → gasta el código con un `updateMany` condicional, cambia la contraseña, sube `sesionVersion` (cierra todas las sesiones), deja la cookie de esta y una notificación `seguridad`. Error genérico 400 (no delata si el usuario existe); 5 códigos errados para un usuario desde una conexión → 15 min, 10 errados por conexión en una hora → 1 h (429).

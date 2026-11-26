@@ -113,7 +113,7 @@ async function porcentajesHogar(tx, prestamo) {
     return conReparto.repartos.map((r) => ({ usuarioId: r.usuarioId, porcentaje: (r.monto / conReparto.valorTotal) * 100 }));
   }
   const split = await obtenerSplitVigente(prestamo.hogarId, 'general', tx, prestamo.fechaDesembolso ?? prestamo.creadoEn);
-  if (!split.length) throw new HttpError(409, 'Configura primero el porcentaje de reparto del hogar en Configuración');
+  if (!split.length) throw new HttpError(409, 'Configura primero el porcentaje de reparto del hogar en Hogar → Configuración → Reparto');
   return split;
 }
 

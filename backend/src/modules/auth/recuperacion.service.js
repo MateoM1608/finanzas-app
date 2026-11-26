@@ -132,7 +132,7 @@ export async function recuperarConCodigo({ usuario, codigo, nueva }, ip = 'desco
       quedan > 0
         ? `Se cerraron tus demás sesiones. Te quedan ${quedan} ${quedan === 1 ? 'código' : 'códigos'}. Si no fuiste tú, cambia la contraseña y genera códigos nuevos.`
         : 'Se cerraron tus demás sesiones. Ya no te quedan códigos: genera unos nuevos en Tu cuenta.',
-    enlace: '/settings?tab=cuenta',
+    enlace: '/cuenta?tab=seguridad',
     clave: `recuperacion:${acierto.id}`,
   }).catch(() => null);
   return actualizado;

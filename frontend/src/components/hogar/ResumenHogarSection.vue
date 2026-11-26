@@ -159,7 +159,7 @@ const totalVentana = computed(() => serie.value.reduce((acc, m) => acc + m.total
         <div class="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h3 class="section-title">Gasto por categoría</h3>
-            <p class="section-hint">Lo pagado en el mes. Las categorías se configuran en Configuración.</p>
+            <p class="section-hint">Lo pagado en el mes. Las categorías se configuran en Configuración del hogar.</p>
           </div>
           <select v-model="mesCategorias" class="field !w-auto !py-1.5" aria-label="Mes del gasto por categoría">
             <option v-for="(m, i) in mesesParaCategorias" :key="m" :value="i === 0 ? '' : m">

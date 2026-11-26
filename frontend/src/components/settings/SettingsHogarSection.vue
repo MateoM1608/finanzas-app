@@ -1,5 +1,9 @@
 <script setup>
 import { ref, onMounted } from 'vue';
+import { useRouter } from 'vue-router';
+import { useAuthStore } from '../../stores/auth.js';
+import { salirDelHogar } from '../../api/hogares.js';
+import { confirmar } from '../../composables/useConfirm.js';
 import { obtenerHogarActual, actualizarHogar } from '../../api/hogares.js';
 import { extractErrorMessage } from '../../api/client.js';
 import FormField from '../FormField.vue';
@@ -43,6 +47,30 @@ async function onGuardar() {
 }
 
 onMounted(cargar);
+
+const auth = useAuthStore();
+const router = useRouter();
+const saliendo = ref(false);
+const errorSalir = ref('');
+
+async function salir() {
+  const ok = await confirmar(
+    '¿Salir del hogar? Dejarás de ver todo lo del hogar: gastos, cuadres, metas, préstamos e inversiones. Tu panel personal sigue igual. Para volver necesitarás un código de invitación nuevo.',
+    { textoAceptar: 'Salir del hogar', peligroso: true },
+  );
+  if (!ok) return;
+  errorSalir.value = '';
+  saliendo.value = true;
+  try {
+    await salirDelHogar();
+    await auth.fetchMe();
+    router.push({ name: 'onboarding' });
+  } catch (e) {
+    errorSalir.value = extractErrorMessage(e);
+  } finally {
+    saliendo.value = false;
+  }
+}
 </script>
 
 <template>
@@ -88,6 +116,16 @@ onMounted(cargar);
           </button>
         </div>
       </form>
+    </section>
+    <section class="card card-pad">
+      <h3 class="section-title">Salir del hogar</h3>
+      <p class="section-hint mb-4">
+        Se puede cuando no tienes nada del hogar sin cuadrar (gastos, cuotas o compras que pagaste o que te tocan) y no hay
+        un cuadre en curso.
+        <template v-if="auth.usuario?.esAdmin"> Como eres el administrador, primero pásale la administración a otro miembro en la pestaña Miembros.</template>
+      </p>
+      <AlertError :message="errorSalir" class="mb-3" />
+      <button type="button" class="btn-secondary !text-negative" :disabled="saliendo" @click="salir">Salir del hogar</button>
     </section>
   </div>
 </template>

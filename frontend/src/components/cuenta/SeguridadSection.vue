@@ -1,20 +1,15 @@
 <script setup>
 import { ref, computed } from 'vue';
-import { useRouter } from 'vue-router';
-import { useAuthStore } from '../../stores/auth.js';
 import { api, extractErrorMessage } from '../../api/client.js';
-import { salirDelHogar } from '../../api/hogares.js';
 import { confirmar } from '../../composables/useConfirm.js';
 import AlertError from '../AlertError.vue';
 import FormField from '../FormField.vue';
 import CodigosRecuperacion from './CodigosRecuperacion.vue';
 
 /**
- * Tu cuenta (seguridad, 2026-12-06): cambiar la contraseña, cerrar la sesión
- * en los demás dispositivos y salir del hogar.
+ * Cuenta → Seguridad: cambiar la contraseña, los códigos de recuperación y
+ * cerrar la sesión en los demás dispositivos.
  */
-const auth = useAuthStore();
-const router = useRouter();
 
 const actual = ref('');
 const nueva = ref('');
@@ -63,27 +58,6 @@ async function cerrarOtras() {
   }
 }
 
-const saliendo = ref(false);
-const errorSalir = ref('');
-
-async function salir() {
-  const ok = await confirmar(
-    '¿Salir del hogar? Dejarás de ver todo lo del hogar: gastos, cuadres, metas, préstamos e inversiones. Tu panel personal sigue igual. Para volver necesitarás un código de invitación nuevo.',
-    { textoAceptar: 'Salir del hogar', peligroso: true },
-  );
-  if (!ok) return;
-  errorSalir.value = '';
-  saliendo.value = true;
-  try {
-    await salirDelHogar();
-    await auth.fetchMe();
-    router.push({ name: 'onboarding' });
-  } catch (e) {
-    errorSalir.value = extractErrorMessage(e);
-  } finally {
-    saliendo.value = false;
-  }
-}
 </script>
 
 <template>
@@ -120,15 +94,5 @@ async function salir() {
       </button>
     </section>
 
-    <section class="card card-pad">
-      <h3 class="section-title">Salir del hogar</h3>
-      <p class="section-hint mb-4">
-        Se puede cuando no tienes nada del hogar sin cuadrar (gastos, cuotas o compras que pagaste o que te tocan) y no hay
-        un cuadre en curso.
-        <template v-if="auth.usuario?.esAdmin"> Como eres el administrador, primero pásale la administración a otro miembro en Miembros.</template>
-      </p>
-      <AlertError :message="errorSalir" class="mb-3" />
-      <button type="button" class="btn-secondary !text-negative" :disabled="saliendo" @click="salir">Salir del hogar</button>
-    </section>
   </div>
 </template>

@@ -63,7 +63,7 @@ async function resolverRepartos(hogarId, valorTotal, repartosInput, fecha) {
   if (!split.length) {
     throw new HttpError(
       409,
-      'Configura primero un split de porcentaje (general o de gastos variables) en Configuración, o especifica el reparto manualmente',
+      'Configura primero un split de porcentaje (general o de gastos variables) en Hogar → Configuración → Reparto, o especifica el reparto manualmente',
     );
   }
   return calcularReparto(valorTotal, split);

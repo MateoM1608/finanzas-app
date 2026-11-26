@@ -17,11 +17,11 @@ const route = useRoute();
 const router = useRouter();
 
 const NAV = [
-  { name: 'panel-personal', label: 'Personal', icon: 'wallet' },
-  { name: 'panel-hogar', label: 'Hogar', icon: 'home' },
+  { name: 'panel-personal', label: 'Personal', icon: 'wallet', incluye: ['tarjetas'] },
+  { name: 'panel-hogar', label: 'Hogar', icon: 'home', incluye: ['configuracion-hogar'] },
   { name: 'cuadres', label: 'Cuadres', icon: 'scale' },
   { name: 'patrimonio', label: 'Patrimonio', icon: 'trendingUp' },
-  { name: 'settings', label: 'Configuración', short: 'Ajustes', icon: 'settings' },
+  { name: 'cuenta', label: 'Cuenta', icon: 'user' },
 ];
 // En el celular, Cuadres se abre desde Hogar y su lugar lo toma "+ Registrar"
 // (la acción más frecuente), en el centro de la barra.
@@ -70,7 +70,7 @@ watch(
 const textoCampana = computed(() => (noLeidas.value ? `Notificaciones: ${noLeidas.value} sin leer` : 'Notificaciones'));
 
 function activo(item) {
-  return route.name === item.name;
+  return route.name === item.name || Boolean(item.incluye?.includes(route.name));
 }
 
 async function onLogout() {
@@ -114,14 +114,20 @@ async function onLogout() {
 
       <div class="p-3 space-y-1 border-t border-border">
         <ThemeToggle variant="full" />
-        <div class="flex items-center gap-3 rounded-xl px-3 py-2">
-          <span
-            class="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-surface-sunken text-[12px] font-semibold text-ink-secondary"
-            aria-hidden="true"
+        <div class="flex items-center gap-1 rounded-xl">
+          <router-link
+            :to="{ name: 'cuenta' }"
+            class="flex min-w-0 flex-1 items-center gap-3 rounded-xl px-3 py-2 hover:bg-surface-hover transition-colors"
+            title="Tu cuenta"
           >
-            {{ iniciales }}
-          </span>
-          <span class="min-w-0 flex-1 truncate text-[13px] font-medium">{{ auth.usuario?.nombre }}</span>
+            <span
+              class="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-surface-sunken text-[12px] font-semibold text-ink-secondary"
+              aria-hidden="true"
+            >
+              {{ iniciales }}
+            </span>
+            <span class="min-w-0 flex-1 truncate text-[13px] font-medium">{{ auth.usuario?.nombre }}</span>
+          </router-link>
           <button type="button" class="btn-icon !p-1.5" aria-label="Cerrar sesión" title="Cerrar sesión" @click="onLogout">
             <AppIcon name="logout" class="h-4 w-4" />
           </button>

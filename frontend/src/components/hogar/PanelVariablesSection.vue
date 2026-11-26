@@ -575,7 +575,7 @@ watch(
 
         <div class="sm:col-span-2 pt-1">
           <p v-if="!personalizarReparto" class="text-[13px] text-ink-tertiary mb-3">
-            El reparto se calcula automáticamente según el reparto configurado en Configuración.
+            El reparto se calcula automáticamente según el reparto de Configuración del hogar.
           </p>
           <button
             type="submit"

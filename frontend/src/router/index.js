@@ -43,10 +43,30 @@ const routes = [
     meta: { requiresAuth: true, requiresHogar: true },
   },
   {
+    // Configuración del hogar: vive dentro de Hogar (?tab=miembros, conceptos…).
+    path: '/hogar/configuracion',
+    name: 'configuracion-hogar',
+    component: () => import('../views/ConfiguracionHogarView.vue'),
+    meta: { requiresAuth: true, requiresHogar: true },
+  },
+  {
+    // Cuenta: perfil, seguridad y exportar (?tab=seguridad, exportar).
+    path: '/cuenta',
+    name: 'cuenta',
+    component: () => import('../views/CuentaView.vue'),
+    meta: { requiresAuth: true, requiresHogar: true },
+  },
+  {
+    // Antes todo estaba en /settings: los enlaces viejos (notificaciones,
+    // marcadores) llevan a donde quedó cada pestaña.
     path: '/settings',
     name: 'settings',
-    component: () => import('../views/SettingsView.vue'),
-    meta: { requiresAuth: true, requiresHogar: true },
+    redirect: (to) => {
+      const tab = to.query.tab;
+      if (tab === 'cuenta') return { name: 'cuenta', query: { tab: 'seguridad' } };
+      if (tab === 'exportar') return { name: 'cuenta', query: { tab: 'exportar' } };
+      return { name: 'configuracion-hogar', query: tab ? { tab } : {} };
+    },
   },
   {
     path: '/hogar',

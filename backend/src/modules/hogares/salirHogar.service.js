@@ -91,7 +91,7 @@ async function retirar(usuarioActual, miembro, { porAdmin }) {
     await registrarActividad(usuarioActual, {
       tipo: 'miembro',
       descripcion: porAdmin ? `quitó a ${nombre} del hogar` : 'salió del hogar',
-      enlace: '/settings',
+      enlace: '/hogar/configuracion?tab=miembros',
     });
   }
 

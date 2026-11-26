@@ -75,7 +75,7 @@ async function onSubmit() {
           </form>
 
           <p class="mt-6 text-center text-[13px] leading-relaxed text-ink-tertiary">
-            ¿No tienes códigos? Los códigos se crean en Configuración → Tu cuenta, con la sesión iniciada. Si no los
+            ¿No tienes códigos? Los códigos se crean en Cuenta → Seguridad, con la sesión iniciada. Si no los
             guardaste, pide que restablezcan tu contraseña directamente en la base.
           </p>
           <p class="mt-4 text-center text-sm">

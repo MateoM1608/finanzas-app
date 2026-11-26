@@ -34,6 +34,10 @@ function onCambio() {
         <AppIcon name="scale" class="h-4 w-4" />
         Cuadres
       </router-link>
+      <router-link :to="{ name: 'configuracion-hogar' }" class="btn-secondary" aria-label="Configuración del hogar">
+        <AppIcon name="sliders" class="h-4 w-4" />
+        <span class="hidden sm:inline">Configuración</span>
+      </router-link>
     </template>
 
     <div class="space-y-6">

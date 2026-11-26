@@ -77,7 +77,7 @@ async function resolverPorcentajes(hogarId, data) {
     split = await obtenerSplitVigenteGastosVariables(hogarId, prisma);
   }
   if (!split.length) {
-    throw new HttpError(409, 'Configura primero el porcentaje de reparto del hogar en Configuración');
+    throw new HttpError(409, 'Configura primero el porcentaje de reparto del hogar en Hogar → Configuración → Reparto');
   }
   return split;
 }
