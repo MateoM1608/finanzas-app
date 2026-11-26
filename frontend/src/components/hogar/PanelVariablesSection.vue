@@ -340,18 +340,6 @@ async function onCrear() {
   }
 }
 
-async function onCambiarPagador(gasto, usuarioId) {
-  error.value = '';
-  try {
-    const actualizado = await actualizarGastoVariable(gasto.id, { pagoUsuarioId: usuarioId });
-    const idx = gastos.value.findIndex((g) => g.id === gasto.id);
-    gastos.value[idx] = actualizado;
-    emit('cambio');
-  } catch (e) {
-    error.value = extractErrorMessage(e);
-  }
-}
-
 async function onEliminar(gasto) {
   if (!(await confirmar(`¿Eliminar "${gasto.item}" de ${formatCurrency(gasto.valorTotal)}? Cambia el saldo del hogar y no se puede deshacer.`))) return;
   error.value = '';
@@ -364,6 +352,62 @@ async function onEliminar(gasto) {
     error.value = extractErrorMessage(e);
   } finally {
     eliminandoId.value = null;
+  }
+}
+
+// --- Editar un gasto variable (ítem, valor, fecha, quién pagó, método, categoría) ---
+const editandoGasto = ref(null);
+const formEdicion = reactive({ item: '', valorTotal: '', fecha: '', pagoUsuarioId: '', metodoPagoId: '', categoriaId: '' });
+const guardandoEdicion = ref(false);
+const errorEdicion = ref('');
+// El método es privado de quien pagó: solo se pregunta si pagaste tú.
+const edicionPagueYo = computed(() => formEdicion.pagoUsuarioId === auth.usuario?.id);
+const cambiaReparto = computed(
+  () =>
+    editandoGasto.value &&
+    (Number(formEdicion.valorTotal) !== editandoGasto.value.valorTotal ||
+      formEdicion.fecha !== editandoGasto.value.fecha.slice(0, 10)),
+);
+
+function abrirEdicion(gasto) {
+  errorEdicion.value = '';
+  editandoRepartoId.value = null;
+  Object.assign(formEdicion, {
+    item: gasto.item,
+    valorTotal: gasto.valorTotal,
+    fecha: gasto.fecha.slice(0, 10),
+    pagoUsuarioId: gasto.pagoUsuarioId,
+    metodoPagoId: gasto.metodoPagoId ?? '',
+    categoriaId: gasto.categoriaId ?? '',
+  });
+  editandoGasto.value = gasto;
+}
+
+async function onGuardarEdicion() {
+  const g = editandoGasto.value;
+  errorEdicion.value = '';
+  guardandoEdicion.value = true;
+  try {
+    const payload = {};
+    if (formEdicion.item.trim() !== g.item) payload.item = formEdicion.item.trim();
+    if (Number(formEdicion.valorTotal) !== g.valorTotal) payload.valorTotal = Number(formEdicion.valorTotal);
+    if (formEdicion.fecha !== g.fecha.slice(0, 10)) payload.fecha = formEdicion.fecha;
+    if (formEdicion.pagoUsuarioId !== g.pagoUsuarioId) payload.pagoUsuarioId = formEdicion.pagoUsuarioId;
+    if (edicionPagueYo.value && (formEdicion.metodoPagoId || null) !== (g.metodoPagoId ?? null)) {
+      payload.metodoPagoId = formEdicion.metodoPagoId || null;
+    }
+    if ((formEdicion.categoriaId || null) !== (g.categoriaId ?? null)) payload.categoriaId = formEdicion.categoriaId || null;
+    if (Object.keys(payload).length) {
+      const actualizado = await actualizarGastoVariable(g.id, payload);
+      const idx = gastos.value.findIndex((x) => x.id === g.id);
+      gastos.value[idx] = actualizado;
+      emit('cambio');
+    }
+    editandoGasto.value = null;
+  } catch (e) {
+    errorEdicion.value = extractErrorMessage(e);
+  } finally {
+    guardandoEdicion.value = false;
   }
 }
 
@@ -662,18 +706,13 @@ watch(
             Reparto: {{ formatReparto(gasto.repartos) }}
           </p>
           <div v-if="esEditable(gasto)" class="flex items-center gap-1.5 ml-auto">
-            <label :for="`pagador-${gasto.id}`" class="sr-only">Quién pagó {{ gasto.item }}</label>
-            <select
-              :id="`pagador-${gasto.id}`"
-              class="field !w-auto !py-1.5 !pl-2.5 !pr-8 !text-[13px] !rounded-lg"
-              :value="gasto.pagoUsuarioId"
-              @change="onCambiarPagador(gasto, $event.target.value)"
-            >
-              <option v-for="m in miembros" :key="m.id" :value="m.id">{{ m.nombre }}</option>
-            </select>
-            <button class="btn-ghost btn-sm" @click="onIniciarEditarReparto(gasto)">
+            <button class="btn-ghost btn-sm" :aria-label="`Editar ${gasto.item}`" @click="abrirEdicion(gasto)">
               <AppIcon name="edit" class="h-3.5 w-3.5" />
-              Editar reparto
+              Editar
+            </button>
+            <button class="btn-ghost btn-sm" @click="onIniciarEditarReparto(gasto)">
+              <AppIcon name="users" class="h-3.5 w-3.5" />
+              Reparto
             </button>
             <button
               class="btn-icon !p-1.5 hover:!text-negative hover:!bg-negative/10"
@@ -768,6 +807,44 @@ watch(
         </li>
       </ul>
     </div>
+    <AppModal v-if="editandoGasto" :title="`Editar ${editandoGasto.item}`" @close="editandoGasto = null">
+      <form class="grid grid-cols-1 gap-4 sm:grid-cols-2" @submit.prevent="onGuardarEdicion">
+        <AlertError :message="errorEdicion" class="sm:col-span-2" />
+        <FormField v-model="formEdicion.item" label="Ítem" required class="sm:col-span-2" />
+        <FormField v-model="formEdicion.valorTotal" type="number" label="Valor total (COP)" required />
+        <FormField v-model="formEdicion.fecha" type="date" label="Fecha del gasto" required />
+        <div>
+          <label class="label" for="editar-variable-pagador">Quién pagó</label>
+          <select id="editar-variable-pagador" v-model="formEdicion.pagoUsuarioId" class="field" required>
+            <option v-for="m in miembros" :key="m.id" :value="m.id">{{ m.nombre }}</option>
+          </select>
+        </div>
+        <div v-if="edicionPagueYo">
+          <label class="label" for="editar-variable-metodo">Con qué lo pagaste (solo lo ves tú)</label>
+          <select id="editar-variable-metodo" v-model="formEdicion.metodoPagoId" class="field">
+            <option value="">Sin definir</option>
+            <option v-for="m in misMetodos" :key="m.id" :value="m.id">{{ m.nombre }}</option>
+          </select>
+        </div>
+        <div v-if="categorias.length">
+          <label class="label" for="editar-variable-categoria">Categoría</label>
+          <select id="editar-variable-categoria" v-model="formEdicion.categoriaId" class="field">
+            <option value="">Sin categoría</option>
+            <option v-for="c in categoriasPara(editandoGasto)" :key="c.id" :value="c.id">{{ c.nombre }}</option>
+          </select>
+        </div>
+        <p v-if="cambiaReparto" class="sm:col-span-2 text-[13px] font-medium text-warning">
+          Al cambiar el valor o la fecha, el reparto se recalcula con el del hogar; si era otro, ajústalo después en Reparto.
+        </p>
+        <div class="flex justify-end gap-2 sm:col-span-2">
+          <button type="button" class="btn-ghost" @click="editandoGasto = null">Cancelar</button>
+          <button type="submit" class="btn-primary" :disabled="guardandoEdicion || !formEdicion.item.trim() || !(Number(formEdicion.valorTotal) > 0)">
+            {{ guardandoEdicion ? 'Guardando…' : 'Guardar cambios' }}
+          </button>
+        </div>
+      </form>
+    </AppModal>
+
     <AppModal v-if="editandoCompra" :title="`Editar ${editandoCompra.item}`" size="lg" @close="editandoCompra = null">
       <AlertError :message="errorCompra" class="mb-4" />
       <CompraCuotasForm
