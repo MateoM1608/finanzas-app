@@ -11,6 +11,7 @@ import AppIcon from '../AppIcon.vue';
 import AppModal from '../AppModal.vue';
 import { confirmar } from '../../composables/useConfirm.js';
 import FormField from '../FormField.vue';
+import { useAncla } from '../../composables/useAncla.js';
 
 /**
  * Cuentas fijas del hogar en Panel del hogar: lo que toca pagar (desde su
@@ -112,6 +113,24 @@ async function onDeshacer(cuota) {
   }
 }
 
+// "Ir" desde "Para pagar" o una notificación: /hogar#cuenta-<id> abre la
+// pestaña donde está la cuota y la resalta.
+useAncla(
+  (hash) => {
+    const m = /^#cuenta-(.+)$/.exec(hash);
+    if (!m) return null;
+    const pestana = [
+      ['por_pagar', datos.value.porPagar],
+      ['proximas', datos.value.proximas],
+      ['pagadas', datos.value.pagadasSinCuadrar],
+    ].find(([, l]) => l.some((q) => q.id === m[1]));
+    if (!pestana) return 'cuentas-fijas-titulo';
+    vista.value = pestana[0];
+    return `cuenta-${m[1]}`;
+  },
+  () => Boolean(datos.value),
+);
+
 const textoVacio = {
   por_pagar: 'Nada por pagar hoy: todas las cuentas que ya llegaron a su fecha están pagadas.',
   proximas: 'No hay cuentas próximas. Configúralas en Configuración → Cuentas fijas.',
@@ -157,7 +176,7 @@ const textoVacio = {
     </div>
 
     <ul v-else class="list">
-      <li v-for="cuota in lista" :key="cuota.id" class="list-row">
+      <li v-for="cuota in lista" :id="`cuenta-${cuota.id}`" :key="cuota.id" class="list-row">
         <div class="flex min-w-0 items-center gap-3">
           <span
             class="grid h-8 w-8 shrink-0 place-items-center rounded-lg"

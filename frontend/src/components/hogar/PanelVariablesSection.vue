@@ -28,6 +28,7 @@ import FormField from '../FormField.vue';
 import AlertError from '../AlertError.vue';
 import AppModal from '../AppModal.vue';
 import AppIcon from '../AppIcon.vue';
+import { useAncla } from '../../composables/useAncla.js';
 
 const emit = defineEmits(['cambio']);
 
@@ -405,6 +406,22 @@ async function onGuardarReparto(gasto) {
 
 onMounted(cargar);
 
+// "Ir" desde "Para pagar" o una notificación: /hogar#gasto-hogar-<id>. Una
+// cuota futura no está en la lista: se resalta su compra.
+useAncla(
+  (hash) => {
+    const m = /^#gasto-hogar-(.+)$/.exec(hash);
+    if (!m) return null;
+    const gasto = gastos.value.find((g) => g.id === m[1]);
+    if (!gasto) return null;
+    const i = gastosALaFecha.value.findIndex((g) => g.id === gasto.id);
+    if (i === -1) return gasto.compraId ? `compra-hogar-${gasto.compraId}` : null;
+    if (i >= LIMITE_LISTA) verTodo.value = true;
+    return `gasto-hogar-${gasto.id}`;
+  },
+  () => !loading.value,
+);
+
 // Botón "+" de la barra del celular: /hogar?registrar=variable abre el formulario.
 const rutaHogar = useRoute();
 const routerHogar = useRouter();
@@ -578,7 +595,7 @@ watch(
     </div>
 
     <ul v-else class="list">
-      <li v-for="gasto in visibles" :key="gasto.id" class="py-3.5">
+      <li v-for="gasto in visibles" :id="`gasto-hogar-${gasto.id}`" :key="gasto.id" class="py-3.5">
         <div class="flex items-start justify-between gap-4">
           <div class="min-w-0" :class="{ 'opacity-60': !esEditable(gasto) }">
             <p class="flex flex-wrap items-center gap-2 text-sm font-medium text-ink-primary">
@@ -714,7 +731,7 @@ watch(
     <div v-if="comprasActivas.length" class="mt-5 border-t border-border pt-4">
       <p class="mb-1 text-[13px] font-medium text-ink-secondary">Compras a cuotas</p>
       <ul class="list">
-        <li v-for="compra in comprasActivas" :key="compra.id" class="list-row !py-3 group">
+        <li v-for="compra in comprasActivas" :id="`compra-hogar-${compra.id}`" :key="compra.id" class="list-row !py-3 group">
           <div class="min-w-0">
             <p class="flex flex-wrap items-center gap-1.5 text-sm font-medium text-ink-primary">
               <span class="truncate">{{ compra.item }}</span>

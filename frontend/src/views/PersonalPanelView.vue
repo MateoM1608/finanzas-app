@@ -1,6 +1,6 @@
 <script setup>
 import { useRoute, useRouter } from 'vue-router';
-import { ref, computed, onMounted, watch } from 'vue';
+import { ref, computed, onMounted, watch, nextTick } from 'vue';
 import { listarGastos, crearGasto, actualizarGasto, eliminarGasto, cambiarMetodoGasto } from '../api/gastosPersonales.js';
 import { listarIngresos, crearIngreso, actualizarIngreso, eliminarIngreso, cambiarMetodoIngreso } from '../api/ingresosPersonales.js';
 import { listarCategorias } from '../api/categoriasPersonales.js';
@@ -24,6 +24,7 @@ import { useAuthStore } from '../stores/auth.js';
 import AvisosPagar from '../components/AvisosPagar.vue';
 import EditarMovimientoModal from '../components/personal/EditarMovimientoModal.vue';
 import AppIcon from '../components/AppIcon.vue';
+import { useAncla } from '../composables/useAncla.js';
 import ConfiguracionPersonalSection from '../components/personal/ConfiguracionPersonalSection.vue';
 import ResumenPersonalSection from '../components/personal/ResumenPersonalSection.vue';
 import AhorrosPersonalesSection from '../components/personal/AhorrosPersonalesSection.vue';
@@ -574,6 +575,32 @@ function listaDeTab() {
 const listaVisible = computed(() => (verTodo.value ? listaDeTab() : listaDeTab().slice(0, LIMITE_LISTA)));
 const totalLista = computed(() => listaDeTab().length);
 
+// "Ir" desde "Para pagar" o una notificación: /personal#gasto-<id> muestra el
+// movimiento (quita filtros si lo ocultan) y lo resalta. Una cuota futura no
+// está en la lista: se resalta su compra en la pestaña A cuotas.
+useAncla(
+  async (hash) => {
+    const m = /^#gasto-(.+)$/.exec(hash);
+    if (!m) return null;
+    const gasto = gastos.value.find((g) => g.id === m[1]);
+    if (!gasto) return null;
+    if (!gastosALaFecha.value.some((g) => g.id === gasto.id)) {
+      if (!gasto.compraId) return null;
+      tabMovimientos.value = 'compras';
+      await nextTick();
+      verTodo.value = true;
+      return `compra-${gasto.compraId}`;
+    }
+    const enLista = () => filasMovimientos.value.findIndex((f) => f.tipo === 'gasto' && f.mov.id === gasto.id);
+    if (tabMovimientos.value === 'ingresos' || tabMovimientos.value === 'compras') tabMovimientos.value = 'todos';
+    if (enLista() === -1) limpiarFiltros();
+    await nextTick();
+    if (enLista() >= LIMITE_LISTA) verTodo.value = true;
+    return `gasto-${gasto.id}`;
+  },
+  () => !loading.value,
+);
+
 // Movimientos de caja que se manejan desde Hogar/Cuadres/Métodos de pago.
 const ORIGEN_MOVIMIENTO = {
   pago_hogar: { badge: 'Pago del hogar', icono: 'home' },
@@ -876,7 +903,7 @@ function saldoCompra(compra) {
           <ul v-else-if="tabMovimientos !== 'compras'" class="list">
             <template v-for="fila in listaVisible" :key="`${fila.tipo}-${fila.mov.id}`">
             <template v-if="fila.tipo === 'gasto'">
-            <li v-for="gasto in [fila.mov]" :key="gasto.id" class="list-row group">
+            <li v-for="gasto in [fila.mov]" :id="`gasto-${gasto.id}`" :key="gasto.id" class="list-row group">
               <div class="flex min-w-0 items-center gap-3">
                 <span class="hidden sm:grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-surface-sunken text-ink-secondary">
                   <AppIcon :name="ORIGEN_MOVIMIENTO[gasto.origen]?.icono ?? (gasto.origenConfigId ? 'repeat' : 'receipt')" class="h-4 w-4" />
@@ -1054,7 +1081,7 @@ function saldoCompra(compra) {
 
           <!-- Compras a cuotas -->
           <ul v-else-if="tabMovimientos === 'compras'" class="list">
-            <li v-for="compra in listaVisible" :key="compra.id" class="list-row group">
+            <li v-for="compra in listaVisible" :id="`compra-${compra.id}`" :key="compra.id" class="list-row group">
               <div class="flex min-w-0 items-center gap-3">
                 <span class="hidden sm:grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-surface-sunken text-ink-secondary">
                   <AppIcon name="calendar" class="h-4 w-4" />

@@ -3,6 +3,10 @@ import { ref, computed, onMounted } from 'vue';
 import { obtenerAvisos } from '../api/avisos.js';
 import { formatCurrency, formatDate } from '../utils/format.js';
 import AppIcon from './AppIcon.vue';
+import { useRouter } from 'vue-router';
+import { irAAncla } from '../composables/useAncla.js';
+
+const router = useRouter();
 
 /**
  * "Para pagar": lo atrasado, lo de hoy y lo de los próximos días. En Personal
@@ -73,7 +77,7 @@ function etiqueta(a) {
         </div>
         <span class="flex shrink-0 items-center gap-2">
           <span v-if="a.monto != null" class="text-sm font-semibold text-ink-primary">{{ formatCurrency(a.monto) }}</span>
-          <router-link :to="a.enlace" class="btn-secondary btn-sm">Ir</router-link>
+          <a :href="a.enlace" class="btn-secondary btn-sm" :aria-label="`Ir a ${a.titulo}`" @click.prevent="irAAncla(router, a.enlace)">Ir</a>
         </span>
       </li>
     </ul>

@@ -119,6 +119,14 @@
     outline-offset: 2px;
   }
 
+  /* Fila a la que lleva un aviso ("Ir"): se resalta un momento. */
+  .fila-resaltada {
+    background-color: rgb(var(--c-highlight) / 0.22);
+    box-shadow: 0 0 0 2px rgb(var(--c-highlight) / 0.6);
+    border-radius: 0.75rem;
+    transition: background-color 0.4s ease, box-shadow 0.4s ease;
+  }
+
   select.field {
     background-color: rgb(var(--c-surface-raised));
     color: rgb(var(--c-ink-primary));
