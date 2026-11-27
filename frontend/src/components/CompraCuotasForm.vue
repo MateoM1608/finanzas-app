@@ -86,7 +86,7 @@ const categoriasVisibles = computed(() => props.categorias.filter((x) => x.activ
 
 const pagaYo = computed(() => props.tipo === 'personal' || form.pagoUsuarioId === props.usuarioActualId);
 const valorCuota = computed(() =>
-  Number(form.numeroCuotas) >= 2 ? Math.floor(Number(form.montoTotal) / Number(form.numeroCuotas)) : null,
+  Number(form.numeroCuotas) >= 1 ? Math.floor(Number(form.montoTotal) / Number(form.numeroCuotas)) : null,
 );
 const cambiaCuotas = computed(
   () =>

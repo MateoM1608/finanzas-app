@@ -155,7 +155,7 @@ const metodoCompraHogar = computed(() => (pagaYo.value ? misMetodos.value.find((
 
 const valorCuota = computed(() => {
   const n = Number(numeroCuotas.value);
-  return n >= 2 && Number(valorTotal.value) > 0 ? Math.floor(Number(valorTotal.value) / n) : null;
+  return n >= 1 && Number(valorTotal.value) > 0 ? Math.floor(Number(valorTotal.value) / n) : null;
 });
 
 const comprasActivas = computed(() => compras.value.filter((c) => c.cuotas.some((q) => q.estado !== 'cuadrado')));
@@ -544,6 +544,7 @@ watch(
             v-model="numeroCuotas"
             type="number"
             :label="enCurso ? 'Total de cuotas de la compra' : 'Número de cuotas'"
+            hint="1 si la pagas completa con el extracto de la tarjeta."
             required
           />
           <FormField
@@ -811,9 +812,9 @@ watch(
             <AppIcon name="edit" class="h-4 w-4" />
           </button>
           <button
-            v-if="!cuotasCuadradas(compra)"
+            v-if="!compra.cuotas.some((q) => q.estado === 'cuadrado')"
             type="button"
-            class="btn-icon !p-1.5 hover:!text-negative sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100"
+            class="btn-icon !p-1.5 hover:!text-negative"
             :disabled="eliminandoCompraId === compra.id"
             :aria-label="`Eliminar ${compra.item}`"
             title="Eliminar compra"

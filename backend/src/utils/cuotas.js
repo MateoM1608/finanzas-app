@@ -112,6 +112,10 @@ export function calcularCuotas(total, numeroCuotas, tasaMensual = 0, sistema = '
  * sin tasa en el método: sin interés.
  */
 export function interesDeCompra(data, metodo) {
+  // A una cuota la tarjeta no cobra interés: se paga entera con el extracto.
+  if (data.numeroCuotas === 1 && (data.tasaMensual === undefined || data.tasaMensual === null)) {
+    return { tasaMensual: 0, sistemaInteres: data.sistemaInteres ?? metodo?.sistemaInteres ?? 'capital_fijo' };
+  }
   if (data.tasaMensual !== undefined && data.tasaMensual !== null) {
     return { tasaMensual: data.tasaMensual, sistemaInteres: data.sistemaInteres ?? metodo?.sistemaInteres ?? 'capital_fijo' };
   }

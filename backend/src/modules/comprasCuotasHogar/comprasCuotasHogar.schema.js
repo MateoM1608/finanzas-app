@@ -4,7 +4,7 @@ import { z } from 'zod';
 export const crearCompraHogarSchema = z.object({
   item: z.string().trim().min(1).max(150),
   montoTotal: z.number().int().positive().max(MONTO_MAX),
-  numeroCuotas: z.number().int().min(2).max(72),
+  numeroCuotas: z.number().int().min(1).max(72),
   fechaCompra: fechaApp,
   fechaPrimeraCuota: fechaApp,
   modoCobro: z.enum(['automatico', 'manual']),
@@ -27,7 +27,7 @@ export const crearCompraHogarSchema = z.object({
 export const actualizarCompraHogarSchema = z.object({
   item: z.string().trim().min(1).max(150).optional(),
   montoTotal: z.number().int().positive().max(MONTO_MAX).optional(),
-  numeroCuotas: z.number().int().min(2).max(72).optional(),
+  numeroCuotas: z.number().int().min(1).max(72).optional(),
   fechaCompra: fechaApp.optional(),
   fechaPrimeraCuota: fechaApp.optional(),
   modoCobro: z.enum(['automatico', 'manual']).optional(),

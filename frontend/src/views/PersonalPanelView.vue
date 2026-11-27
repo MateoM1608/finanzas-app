@@ -213,7 +213,7 @@ function limpiarDolares() {
 const valorCuota = computed(() => {
   const n = Number(gNumeroCuotas.value);
   const total = Number(gMonto.value);
-  return n >= 2 && total > 0 ? Math.floor(total / n) : null;
+  return n >= 1 && total > 0 ? Math.floor(total / n) : null;
 });
 
 async function cargarCompras() {
@@ -1150,7 +1150,7 @@ function saldoCompra(compra) {
                 <button
                   v-if="compra.modoCobro !== 'manual' || !cuotasPagadas(compra)"
                   type="button"
-                  class="btn-icon !p-1.5 hover:!text-negative sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100"
+                  class="btn-icon !p-1.5 hover:!text-negative"
                   :disabled="eliminandoCompraId === compra.id"
                   :aria-label="`Eliminar ${compra.descripcion}`"
                   title="Eliminar compra"
@@ -1280,6 +1280,7 @@ function saldoCompra(compra) {
             v-model="gNumeroCuotas"
             type="number"
             :label="gEnCurso ? 'Total de cuotas de la compra' : 'Número de cuotas'"
+            hint="1 si la pagas completa con el extracto de la tarjeta."
             required
           />
           <FormField
@@ -1347,7 +1348,7 @@ function saldoCompra(compra) {
               (gEnDolares && (!aCentavos(gUsd) || !(Number(gTrm) > 0))) ||
               (gACuotas &&
                 (!gDescripcion ||
-                  Number(gNumeroCuotas) < 2 ||
+                  Number(gNumeroCuotas) < 1 ||
                   (gEnCurso && !(Number(gCuotasPagadas) >= 1 && Number(gCuotasPagadas) < Number(gNumeroCuotas)))))
             "
           >
