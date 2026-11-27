@@ -107,6 +107,12 @@ const editandoCompra = ref(null);
 const guardandoCompra = ref(false);
 const errorCompra = ref('');
 
+// Desde la fila de una cuota: abre la edición de su compra.
+function editarCompraDe(gasto) {
+  const compra = compras.value.find((c) => c.id === gasto.compraId);
+  if (compra) abrirEdicionCompra(compra);
+}
+
 function abrirEdicionCompra(compra) {
   errorCompra.value = '';
   editandoCompra.value = compra;
@@ -678,10 +684,21 @@ watch(
 
         <div v-if="gasto.compraId" class="mt-2 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
           <p class="min-w-0 text-[13px] text-ink-tertiary">Reparto: {{ formatReparto(gasto.repartos) }}</p>
+          <div class="ml-auto flex items-center gap-1.5">
+          <button
+            v-if="puedeEditar && gasto.estado !== 'cuadrado' && compras.some((c) => c.id === gasto.compraId)"
+            type="button"
+            class="btn-ghost btn-sm"
+            :aria-label="`Editar la compra ${gasto.item}`"
+            @click="editarCompraDe(gasto)"
+          >
+            <AppIcon name="edit" class="h-3.5 w-3.5" />
+            Editar compra
+          </button>
           <button
             v-if="puedeEditar && gasto.estado === 'por_pagar'"
             type="button"
-            class="btn-secondary btn-sm ml-auto"
+            class="btn-secondary btn-sm"
             :disabled="pagandoId === gasto.id"
             @click="onPagarCuota(gasto)"
           >
@@ -691,12 +708,13 @@ watch(
           <button
             v-else-if="puedeEditar && gasto.estado === 'pagado' && gasto.compra?.modoCobro === 'manual'"
             type="button"
-            class="btn-ghost btn-sm ml-auto"
+            class="btn-ghost btn-sm"
             :disabled="pagandoId === gasto.id"
             @click="onDeshacerPagoCuota(gasto)"
           >
             Deshacer
           </button>
+          </div>
         </div>
         <div
           v-else-if="!esEditable(gasto) || editandoRepartoId !== gasto.id"

@@ -179,6 +179,21 @@ async function porcentajesActuales(compraId) {
   return primera.repartos.map((r) => ({ usuarioId: r.usuarioId, porcentaje: (r.monto / primera.valorTotal) * 100 }));
 }
 
+/**
+ * Saca las cuotas de una compra del cuadre en curso (borrador): una cuota
+ * automática ya vencida entra sola al borrador (en_cuadre) sin que nadie la
+ * haya cuadrado, y eso no debe impedir editar o borrar la compra. Las cuotas
+ * nuevas vuelven a entrar al refrescar el borrador.
+ */
+async function sacarDelCuadreEnCurso(tx, compraId) {
+  const cuotas = await tx.gastoVariablePareja.findMany({ where: { compraId }, select: { id: true } });
+  if (!cuotas.length) return;
+  await tx.cuadreItem.deleteMany({
+    where: { tipoOrigen: 'variable', origenId: { in: cuotas.map((c) => c.id) }, cuadre: { estado: 'abierto' } },
+  });
+  await tx.gastoVariablePareja.updateMany({ where: { compraId, estado: 'en_cuadre' }, data: { estado: 'pagado' } });
+}
+
 const CAMPOS_ESTRUCTURALES = ['montoTotal', 'numeroCuotas', 'fechaPrimeraCuota', 'modoCobro', 'pagoUsuarioId', 'tasaMensual', 'sistemaInteres', 'cuotasPagadasAntes'];
 
 /**
@@ -254,15 +269,16 @@ export async function actualizarCompra(usuarioActual, compraId, data) {
       where: {
         compraId,
         OR: [
-          { estado: { in: ['en_cuadre', 'cuadrado'] } },
-          ...(actual.modoCobro === 'manual' ? [{ estado: 'pagado' }] : []),
+          { estado: 'cuadrado' },
+          // Una cuota manual en el cuadre en curso también se marcó pagada a mano.
+          ...(actual.modoCobro === 'manual' ? [{ estado: { in: ['pagado', 'en_cuadre'] } }] : []),
         ],
       },
     });
     if (bloqueadas) {
       throw new HttpError(
         409,
-        'Esta compra ya tiene cuotas cuadradas o marcadas como pagadas: solo puedes cambiar el nombre o el método de pago',
+        'Esta compra ya tiene cuotas cuadradas o pagadas a mano: solo puedes cambiar el nombre o el método de pago',
       );
     }
     porcentajes = data.repartos?.length
@@ -272,6 +288,7 @@ export async function actualizarCompra(usuarioActual, compraId, data) {
 
   const compra = await prisma.$transaction(async (tx) => {
     if (cambiaEstructura) {
+      await sacarDelCuadreEnCurso(tx, compraId);
       await tx.gastoVariableParejaReparto.deleteMany({ where: { gasto: { compraId } } });
       await tx.gastoVariablePareja.deleteMany({ where: { compraId } });
       datos.fechaPrimeraCuota = await generarCuotas(tx, compraId, hogarId, datos, porcentajes);
@@ -298,15 +315,16 @@ export async function eliminarCompra(usuarioActual, compraId) {
     throw new HttpError(404, 'Compra no encontrada');
   }
   const enCuadre = await prisma.gastoVariablePareja.count({
-    where: { compraId, estado: { in: ['en_cuadre', 'cuadrado'] } },
+    where: { compraId, estado: 'cuadrado' },
   });
   if (enCuadre) {
-    throw new HttpError(409, 'Esta compra ya tiene cuotas en un cuadre — no se puede eliminar');
+    throw new HttpError(409, 'Esta compra ya tiene cuotas cuadradas — no se puede eliminar');
   }
-  await prisma.$transaction([
-    prisma.gastoVariableParejaReparto.deleteMany({ where: { gasto: { compraId } } }),
-    prisma.gastoVariablePareja.deleteMany({ where: { compraId } }),
-    prisma.compraCuotasHogar.delete({ where: { id: compraId } }),
-  ]);
+  await prisma.$transaction(async (tx) => {
+    await sacarDelCuadreEnCurso(tx, compraId);
+    await tx.gastoVariableParejaReparto.deleteMany({ where: { gasto: { compraId } } });
+    await tx.gastoVariablePareja.deleteMany({ where: { compraId } });
+    await tx.compraCuotasHogar.delete({ where: { id: compraId } });
+  });
   await registrarActividad(usuarioActual, { tipo: 'compra_cuotas', descripcion: `eliminó la compra a cuotas ${compra.item}`, monto: compra.montoTotal });
 }
