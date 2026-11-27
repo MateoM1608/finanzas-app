@@ -67,6 +67,8 @@ export async function eliminarAhorro(usuarioActual, id) {
  * Aporte o retiro manual. El aporte sale de la caja (GastoPersonal
  * aporte_ahorro: baja el Disponible, no es consumo); el retiro vuelve a ella
  * (IngresoPersonal retiro_ahorro: no es ingreso real) y no puede superar lo ahorrado.
+ * Con `enCaja: false` no se crea movimiento de caja ni se guarda cuenta: la
+ * plata llegó de otra fuente o se fue a otro lado, el Disponible no cambia.
  */
 export async function registrarAporte(usuarioActual, ahorroId, data) {
   const ahorro = await requireAhorroDelUsuario(usuarioActual.id, ahorroId);
@@ -84,10 +86,11 @@ export async function registrarAporte(usuarioActual, ahorroId, data) {
         tipo,
         monto: data.monto,
         fecha: data.fecha ?? hoyUTC(),
-        metodoPagoId: data.metodoPagoId ?? null,
+        metodoPagoId: data.enCaja === false ? null : data.metodoPagoId ?? null,
         origen: 'manual',
       },
     });
+    if (data.enCaja === false) return transaccion;
     await crearCajaAhorro(tx, transaccion, usuarioActual.id, ahorro.nombre);
     return transaccion;
   });
@@ -141,7 +144,7 @@ export async function obtenerResumenAhorros(usuarioActual, indiceCiclo = 0) {
     where: { usuarioId, ...(esActual ? {} : { creadoEn: { lt: finDelDia } }) },
     include: {
       categoria: true,
-      transacciones: true,
+      transacciones: { include: { gasto: { select: { id: true } }, ingreso: { select: { id: true } } } },
       pronosticos: {
         include: { periodo: true },
         orderBy: { periodo: { periodoInicio: 'desc' } },
@@ -190,7 +193,9 @@ export async function obtenerResumenAhorros(usuarioActual, indiceCiclo = 0) {
       totalAhorrado,
       progresoPct: ahorro.montoMetaTotal ? (totalAhorrado / ahorro.montoMetaTotal) * 100 : null,
       periodos,
-      transacciones: [...ahorro.transacciones].sort((x, y) => new Date(y.fecha) - new Date(x.fecha)),
+      transacciones: [...ahorro.transacciones]
+        .sort((x, y) => new Date(y.fecha) - new Date(x.fecha))
+        .map(({ gasto, ingreso, ...t }) => ({ ...t, enCaja: Boolean(gasto || ingreso) })),
       cicloConsultado: {
         montoAhorradoReal: aportadoCiclo,
         montoSugerido: pronostico?.montoSugerido ?? null,

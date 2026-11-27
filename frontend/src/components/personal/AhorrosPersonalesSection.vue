@@ -29,6 +29,7 @@ const resumen = ref(null);
 const aportandoId = ref(null);
 const tipoMovimiento = ref('aporte');
 const cuentaAporte = ref('');
+const enCajaAporte = ref(true);
 const metodos = ref([]);
 listarMetodosPago()
   .then((m) => (metodos.value = m.filter((x) => x.tipo !== 'tarjeta_credito')))
@@ -67,6 +68,7 @@ function onMostrarAporte(meta, tipo = 'aporte') {
   aportandoId.value = meta.id;
   tipoMovimiento.value = tipo;
   cuentaAporte.value = '';
+  enCajaAporte.value = true;
   montoAporte[meta.id] = '';
 }
 
@@ -89,7 +91,8 @@ async function onRegistrarAporte(meta) {
     await registrarAporte(meta.id, {
       tipo: tipoMovimiento.value,
       monto: Number(montoAporte[meta.id]),
-      metodoPagoId: cuentaAporte.value || null,
+      metodoPagoId: enCajaAporte.value ? cuentaAporte.value || null : null,
+      enCaja: enCajaAporte.value,
     });
     aportandoId.value = null;
     await cargar();
@@ -205,10 +208,14 @@ async function onRegistrarAporte(meta) {
               :placeholder="tipoMovimiento === 'retiro' ? 'Retiras (COP)' : 'Aportas (COP)'"
               :aria-label="tipoMovimiento === 'retiro' ? 'Monto del retiro' : 'Monto del aporte'"
             />
-            <select v-model="cuentaAporte" class="field min-w-0 flex-1 sm:max-w-[12rem]" :aria-label="tipoMovimiento === 'retiro' ? 'Cuenta a la que llega' : 'Cuenta de la que sale'">
+            <select v-if="enCajaAporte" v-model="cuentaAporte" class="field min-w-0 flex-1 sm:max-w-[12rem]" :aria-label="tipoMovimiento === 'retiro' ? 'Cuenta a la que llega' : 'Cuenta de la que sale'">
               <option value="">{{ tipoMovimiento === 'retiro' ? 'Llega a: sin definir' : 'Sale de: sin definir' }}</option>
               <option v-for="m in metodos" :key="m.id" :value="m.id">{{ m.nombre }}</option>
             </select>
+            <label class="inline-flex w-full cursor-pointer items-center gap-2.5 text-sm text-ink-secondary">
+              <input v-model="enCajaAporte" type="checkbox" class="h-4 w-4 rounded accent-accent" />
+              {{ tipoMovimiento === 'retiro' ? 'Llega a una de mis cuentas (sube mi Disponible)' : 'Sale de una de mis cuentas (baja mi Disponible)' }}
+            </label>
             <div class="flex items-center gap-2">
               <button
                 class="btn-primary btn-sm"
@@ -220,7 +227,8 @@ async function onRegistrarAporte(meta) {
               <button class="btn-ghost btn-sm" @click="aportandoId = null">Cancelar</button>
             </div>
             <p class="w-full text-xs text-ink-tertiary">
-              {{ tipoMovimiento === 'retiro' ? 'Sube tu Disponible pero no cuenta como ingreso.' : 'Baja tu Disponible pero no cuenta como gasto.' }}
+              <template v-if="enCajaAporte">{{ tipoMovimiento === 'retiro' ? 'Sube tu Disponible pero no cuenta como ingreso.' : 'Baja tu Disponible pero no cuenta como gasto.' }}</template>
+              <template v-else>{{ tipoMovimiento === 'retiro' ? 'La plata se va a otro lado: tu Disponible no cambia.' : 'La plata llega de otra fuente o ya estaba ahorrada: tu Disponible no cambia.' }}</template>
             </p>
           </div>
           <button
@@ -234,7 +242,7 @@ async function onRegistrarAporte(meta) {
           <ul v-if="verMovimientosId === meta.id" class="list mt-1">
             <li v-for="t in meta.transacciones" :key="t.id" class="list-row !py-1.5 text-[13px]">
               <span class="text-ink-secondary">
-                {{ formatDate(t.fecha) }} · {{ t.tipo === 'retiro' ? 'retiro' : t.origen === 'automatico' ? 'débito automático' : 'aporte' }}
+                {{ formatDate(t.fecha) }} · {{ t.tipo === 'retiro' ? 'retiro' : t.origen === 'automatico' ? 'débito automático' : 'aporte' }}<template v-if="t.origen === 'manual' && t.enCaja === false"> · no tocó el Disponible</template>
               </span>
               <span class="flex items-center gap-1.5">
                 <span class="font-semibold" :class="t.tipo === 'retiro' ? 'text-warning' : 'text-ink-primary'">{{ t.tipo === 'retiro' ? '−' : '' }}{{ formatCurrency(t.monto) }}</span>

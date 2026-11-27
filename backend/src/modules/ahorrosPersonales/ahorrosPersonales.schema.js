@@ -27,4 +27,6 @@ export const crearTransaccionSchema = z.object({
   monto: z.number().int().positive().max(MONTO_MAX),
   fecha: fechaApp.optional(),
   metodoPagoId: z.string().uuid().nullable().optional(),
+  // false: la plata no sale de ni llega a una cuenta (otra fuente, o ya estaba ahorrada).
+  enCaja: z.boolean().optional(),
 });
