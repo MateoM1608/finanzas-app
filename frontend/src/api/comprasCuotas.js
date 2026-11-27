@@ -42,3 +42,12 @@ export function actualizarCompraHogar(id, payload) {
 export function eliminarCompraHogar(id) {
   return api.delete(`/api/compras-cuotas-hogar/${id}`);
 }
+
+// Editar una compra a cuotas que vuelve a ser un gasto de un solo pago (crea el gasto y borra la compra).
+export function convertirCompraHogarAGasto(id, payload) {
+  return api.post(`/api/compras-cuotas-hogar/${id}/convertir-a-gasto`, payload).then((r) => r.data.gasto);
+}
+
+export function convertirCompraPersonalAGasto(id, payload) {
+  return api.post(`/api/compras-cuotas-personales/${id}/convertir-a-gasto`, payload).then((r) => r.data.gasto);
+}

@@ -106,7 +106,8 @@ export async function actualizarGastoPersonal(usuarioId, gastoId, data) {
   return actualizado;
 }
 
-export async function eliminarGastoPersonal(usuarioId, gastoId) {
+/** Un gasto suelto que se puede borrar (o convertir en compra a cuotas): si no, 404/409. */
+export async function requireGastoEliminable(usuarioId, gastoId) {
   const gasto = await prisma.gastoPersonal.findUnique({ where: { id: gastoId } });
   if (!gasto || gasto.usuarioId !== usuarioId) {
     throw new HttpError(404, 'Gasto no encontrado');
@@ -128,7 +129,11 @@ export async function eliminarGastoPersonal(usuarioId, gastoId) {
   if (deExtracto) {
     throw new HttpError(409, 'Este cargo viene de la revisión de un extracto — quítalo desde Tarjetas → Extractos');
   }
+  return gasto;
+}
 
+export async function eliminarGastoPersonal(usuarioId, gastoId) {
+  await requireGastoEliminable(usuarioId, gastoId);
   await prisma.gastoPersonal.delete({ where: { id: gastoId } });
 }
 

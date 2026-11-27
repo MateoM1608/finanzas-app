@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { postGastoHogarACompra } from '../conversiones/conversiones.controller.js';
 import { requireAuth } from '../../middleware/auth.js';
 import {
   postPagarCuota,
@@ -18,3 +19,5 @@ gastosVariablesRouter.patch('/:id', patchGastoVariable);
 gastosVariablesRouter.delete('/:id', deleteGastoVariable);
 gastosVariablesRouter.post('/:id/pagar', postPagarCuota);
 gastosVariablesRouter.post('/:id/deshacer-pago', postDeshacerPagoCuota);
+// Editar cambiando el tipo (gasto suelto ↔ compra a cuotas): crea lo nuevo y borra lo viejo.
+gastosVariablesRouter.post('/:id/convertir-a-compra', postGastoHogarACompra);

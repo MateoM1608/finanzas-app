@@ -1,5 +1,5 @@
 <script setup>
-import { ref, reactive, computed, onMounted, watch } from 'vue';
+import { ref, computed, onMounted, watch, nextTick } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
   listarGastosVariables,
@@ -8,6 +8,7 @@ import {
   eliminarGastoVariable,
   pagarCuotaVariable,
   deshacerPagoCuotaVariable,
+  convertirGastoHogarACompra,
 } from '../../api/gastosVariables.js';
 import {
   listarComprasHogar,
@@ -15,8 +16,8 @@ import {
   actualizarCompraHogar,
   eliminarCompraHogar,
   sugerirPrimeraCuota,
+  convertirCompraHogarAGasto,
 } from '../../api/comprasCuotas.js';
-import CompraCuotasForm from '../CompraCuotasForm.vue';
 import RepartoMiembros from './RepartoMiembros.vue';
 import { listarMetodosPago } from '../../api/metodosPagoPersonales.js';
 import { useAuthStore } from '../../stores/auth.js';
@@ -50,10 +51,6 @@ const personalizarReparto = ref(false);
 // { montos: [{ usuarioId, monto }], valido, cambiado } — de RepartoMiembros (en % o en pesos).
 const repartoManual = ref({ montos: [], valido: false });
 
-const editandoRepartoId = ref(null);
-const repartoEdicion = ref({ montos: [], valido: false });
-const guardandoRepartoId = ref(null);
-
 const auth = useAuthStore();
 // Crear, editar y borrar gastos del hogar pide permiso; sin él, solo se ve.
 const puedeEditar = computed(() => Boolean(auth.usuario?.esAdmin || auth.usuario?.puedeEditarGastos));
@@ -86,9 +83,12 @@ const metodoPagoId = ref('');
 // Categorías del hogar (E4): opcional al registrar, se cambia en cualquier momento.
 const categorias = ref([]);
 const categoriaId = ref('');
-const categoriasActivas = computed(() => categorias.value.filter((c) => c.activo));
 const categoriasPara = (gasto) => categorias.value.filter((c) => c.activo || c.id === gasto.categoriaId);
+// En el formulario: las activas más la que ya tenía lo que se edita.
+const categoriasForm = computed(() => categorias.value.filter((c) => c.activo || c.id === categoriaId.value));
 const cambiandoCategoriaId = ref(null);
+const eliminandoCompraId = ref(null);
+const pagandoId = ref(null);
 
 async function onCambiarCategoria(gasto, valor) {
   error.value = '';
@@ -104,43 +104,12 @@ async function onCambiarCategoria(gasto, valor) {
     cambiandoCategoriaId.value = null;
   }
 }
-const eliminandoCompraId = ref(null);
-const editandoCompra = ref(null);
-const guardandoCompra = ref(false);
-const errorCompra = ref('');
-
-// Desde la fila de una cuota: abre la edición de su compra.
-function editarCompraDe(gasto) {
-  const compra = compras.value.find((c) => c.id === gasto.compraId);
-  if (compra) abrirEdicionCompra(compra);
-}
-
-function abrirEdicionCompra(compra) {
-  errorCompra.value = '';
-  editandoCompra.value = compra;
-}
-
-async function onGuardarCompra(payload) {
-  errorCompra.value = '';
-  guardandoCompra.value = true;
-  try {
-    await actualizarCompraHogar(editandoCompra.value.id, payload);
-    editandoCompra.value = null;
-    await Promise.all([cargarCompras(), recargarGastos()]);
-    emit('cambio');
-  } catch (e) {
-    errorCompra.value = extractErrorMessage(e);
-  } finally {
-    guardandoCompra.value = false;
-  }
-}
-const pagandoId = ref(null);
 
 // Solo quien paga puede asociar uno de SUS métodos de pago (privados).
 const pagaYo = computed(() => pagoUsuarioId.value && pagoUsuarioId.value === auth.usuario?.id);
 
 async function actualizarSugerencia() {
-  if (!aCuotas.value || !fecha.value) return;
+  if (llenando || !aCuotas.value || !fecha.value) return;
   const metodo = pagaYo.value ? misMetodos.value.find((m) => m.id === metodoPagoId.value) : null;
   modoCobro.value = modoCobroSugerido(metodo);
   hInteres.value = metodo?.tasaMensual > 0 && Number(numeroCuotas.value) !== 1 ? 'tarjeta' : 'sin';
@@ -157,6 +126,7 @@ const metodoCompraHogar = computed(() => (pagaYo.value ? misMetodos.value.find((
 // A 1 cuota la tarjeta no cobra interés: se paga entera con el extracto.
 const unaCuota = computed(() => Number(numeroCuotas.value) === 1);
 watch(unaCuota, (una) => {
+  if (llenando) return;
   if (una && hInteres.value === 'tarjeta') hInteres.value = 'sin';
   else if (!una && hInteres.value === 'sin' && metodoCompraHogar.value?.tasaMensual > 0) hInteres.value = 'tarjeta';
 });
@@ -281,55 +251,203 @@ async function cargar() {
   }
 }
 
-async function onCrear() {
+// --- Agregar y editar: el mismo formulario ---
+// editando = { tipo: 'gasto' | 'compra', registro } o null (agregando).
+const editando = ref(null);
+// Mientras se llena el formulario para editar, las sugerencias (primera
+// cuota, modo, interés) no pisan lo que ya tiene.
+let llenando = false;
+const formKey = ref(0);
+// Reparto con que se abre la edición: { montos: { usuarioId: monto }, total }.
+const repartoInicial = ref(null);
+// Compra con cuotas cuadradas o pagadas a mano: solo se guardan nombre, categoría y cuenta.
+const compraBloqueada = computed(() => {
+  const c = editando.value?.tipo === 'compra' ? editando.value.registro : null;
+  return Boolean(
+    c?.cuotas.some((q) => q.estado === 'cuadrado' || (c.modoCobro === 'manual' && ['pagado', 'en_cuadre'].includes(q.estado))),
+  );
+});
+
+function limpiarFormulario() {
+  item.value = '';
+  valorTotal.value = '';
+  pagoUsuarioId.value = '';
+  fecha.value = hoyISO();
+  categoriaId.value = '';
+  metodoPagoId.value = '';
+  aCuotas.value = false;
+  numeroCuotas.value = '3';
+  primeraCuota.value = '';
+  modoCobro.value = 'automatico';
+  enCurso.value = false;
+  cuotasPagadasAntes.value = '';
+  hInteres.value = 'sin';
+  hTasa.value = '';
+  hSistema.value = 'capital_fijo';
+  personalizarReparto.value = false;
+  repartoInicial.value = null;
+}
+
+async function llenar(fn) {
+  llenando = true;
+  fn();
+  formKey.value += 1;
+  await nextTick();
+  llenando = false;
+}
+
+async function abrirNuevo() {
+  error.value = '';
+  editando.value = null;
+  await llenar(limpiarFormulario);
+  mostrarForm.value = true;
+}
+
+async function abrirEdicion(gasto) {
+  error.value = '';
+  editando.value = { tipo: 'gasto', registro: gasto };
+  await llenar(() => {
+    limpiarFormulario();
+    item.value = gasto.item;
+    valorTotal.value = String(gasto.valorTotal);
+    pagoUsuarioId.value = gasto.pagoUsuarioId;
+    fecha.value = gasto.fecha.slice(0, 10);
+    categoriaId.value = gasto.categoriaId ?? '';
+    metodoPagoId.value = gasto.metodoPagoId ?? '';
+    personalizarReparto.value = true;
+    repartoInicial.value = {
+      montos: Object.fromEntries(gasto.repartos.map((x) => [x.usuarioId, x.monto])),
+      total: gasto.valorTotal,
+    };
+  });
+  mostrarForm.value = true;
+}
+
+async function abrirEdicionCompra(compra) {
+  error.value = '';
+  editando.value = { tipo: 'compra', registro: compra };
+  const metodo = misMetodos.value.find((m) => m.id === compra.metodoPagoId);
+  const primera = compra.cuotas?.[0];
+  await llenar(() => {
+    limpiarFormulario();
+    item.value = compra.item;
+    valorTotal.value = String(compra.montoTotal);
+    pagoUsuarioId.value = compra.pagoUsuarioId;
+    fecha.value = (compra.fechaCompra ?? compra.fechaPrimeraCuota).slice(0, 10);
+    categoriaId.value = compra.categoriaId ?? '';
+    metodoPagoId.value = compra.metodoPagoId ?? '';
+    aCuotas.value = true;
+    numeroCuotas.value = String(compra.numeroCuotas);
+    primeraCuota.value = compra.fechaPrimeraCuota.slice(0, 10);
+    modoCobro.value = compra.modoCobro;
+    enCurso.value = (compra.cuotasPagadasAntes ?? 0) > 0;
+    cuotasPagadasAntes.value = compra.cuotasPagadasAntes ? String(compra.cuotasPagadasAntes) : '';
+    const tasa = compra.tasaMensual ?? 0;
+    hInteres.value = !tasa ? 'sin' : metodo?.tasaMensual === tasa ? 'tarjeta' : 'otra';
+    hTasa.value = hInteres.value === 'otra' ? String(tasa) : '';
+    hSistema.value = compra.sistemaInteres ?? 'capital_fijo';
+    personalizarReparto.value = Boolean(primera?.repartos?.length);
+    repartoInicial.value = primera?.repartos?.length
+      ? { montos: Object.fromEntries(primera.repartos.map((x) => [x.usuarioId, x.monto])), total: primera.valorTotal }
+      : null;
+  });
+  mostrarForm.value = true;
+}
+
+// Desde la fila de una cuota: abre la edición de su compra.
+function editarCompraDe(gasto) {
+  const compra = compras.value.find((c) => c.id === gasto.compraId);
+  if (compra) abrirEdicionCompra(compra);
+}
+
+function cerrarFormulario() {
+  mostrarForm.value = false;
+  editando.value = null;
+}
+
+// Interés de la compra. Al editar va siempre explícito (si no, se quedaría el de antes).
+function interesCompra(explicito) {
+  if (hInteres.value === 'tarjeta') {
+    return explicito
+      ? {
+          tasaMensual: metodoCompraHogar.value?.tasaMensual ?? 0,
+          sistemaInteres: metodoCompraHogar.value?.sistemaInteres ?? hSistema.value,
+        }
+      : {};
+  }
+  return { tasaMensual: hInteres.value === 'otra' ? Number(hTasa.value) || 0 : 0, sistemaInteres: hSistema.value };
+}
+
+function payloadGasto() {
+  return {
+    item: item.value.trim(),
+    valorTotal: Number(valorTotal.value),
+    pagoUsuarioId: pagoUsuarioId.value,
+    fecha: fecha.value,
+    categoriaId: categoriaId.value || null,
+    metodoPagoId: pagaYo.value ? metodoPagoId.value || null : null,
+    ...(personalizarReparto.value ? { repartos: repartoManual.value.montos } : {}),
+  };
+}
+
+function payloadCompra(explicito) {
+  return {
+    item: item.value.trim(),
+    montoTotal: Number(valorTotal.value),
+    numeroCuotas: Number(numeroCuotas.value),
+    fechaCompra: fecha.value,
+    fechaPrimeraCuota: primeraCuota.value,
+    modoCobro: modoCobro.value,
+    cuotasPagadasAntes: enCurso.value ? Number(cuotasPagadasAntes.value) || 0 : 0,
+    ...interesCompra(explicito),
+    pagoUsuarioId: pagoUsuarioId.value,
+    metodoPagoId: pagaYo.value ? metodoPagoId.value || null : null,
+    categoriaId: categoriaId.value || null,
+    ...(personalizarReparto.value ? { repartos: repartoManual.value.montos } : {}),
+  };
+}
+
+async function guardarEdicion() {
+  const { tipo, registro } = editando.value;
+  if (tipo === 'gasto') {
+    if (aCuotas.value) {
+      await convertirGastoHogarACompra(registro.id, payloadCompra(false));
+    } else {
+      const datos = payloadGasto();
+      // El reparto solo se manda si cambió o si cambió el valor (en % se reescala).
+      if (datos.repartos && !repartoManual.value.cambiado && datos.valorTotal === registro.valorTotal) delete datos.repartos;
+      await actualizarGastoVariable(registro.id, datos);
+    }
+  } else if (!aCuotas.value) {
+    await convertirCompraHogarAGasto(registro.id, payloadGasto());
+  } else if (compraBloqueada.value) {
+    await actualizarCompraHogar(registro.id, {
+      item: item.value.trim(),
+      categoriaId: categoriaId.value || null,
+      ...(pagaYo.value ? { metodoPagoId: metodoPagoId.value || null } : {}),
+    });
+  } else {
+    const datos = payloadCompra(true);
+    // Un reparto igual al de antes no recalcula las cuotas.
+    if (datos.repartos && !repartoManual.value.cambiado) delete datos.repartos;
+    await actualizarCompraHogar(registro.id, datos);
+  }
+}
+
+async function onGuardar() {
   error.value = '';
   creando.value = true;
   try {
-    const payload = {
-      item: item.value,
-      valorTotal: Number(valorTotal.value),
-      pagoUsuarioId: pagoUsuarioId.value,
-      fecha: fecha.value,
-      categoriaId: categoriaId.value || undefined,
-    };
-    if (personalizarReparto.value) {
-      payload.repartos = repartoManual.value.montos;
-    }
-    if (aCuotas.value) {
-      await crearCompraHogar({
-        item: payload.item,
-        montoTotal: payload.valorTotal,
-        numeroCuotas: Number(numeroCuotas.value),
-        fechaCompra: payload.fecha,
-        fechaPrimeraCuota: primeraCuota.value,
-        modoCobro: modoCobro.value,
-        ...(enCurso.value ? { cuotasPagadasAntes: Number(cuotasPagadasAntes.value) || 0 } : {}),
-        ...(hInteres.value === 'tarjeta'
-          ? {}
-          : { tasaMensual: hInteres.value === 'otra' ? Number(hTasa.value) || 0 : 0, sistemaInteres: hSistema.value }),
-        pagoUsuarioId: payload.pagoUsuarioId,
-        metodoPagoId: pagaYo.value && metodoPagoId.value ? metodoPagoId.value : undefined,
-        repartos: payload.repartos,
-        categoriaId: payload.categoriaId,
-      });
-      await Promise.all([cargarCompras(), recargarGastos()]);
-      aCuotas.value = false;
-      enCurso.value = false;
-      cuotasPagadasAntes.value = '';
-      metodoPagoId.value = '';
+    if (editando.value) {
+      await guardarEdicion();
+    } else if (aCuotas.value) {
+      await crearCompraHogar(payloadCompra(false));
     } else {
-      if (pagaYo.value && metodoPagoId.value) payload.metodoPagoId = metodoPagoId.value;
-      const nuevo = await crearGastoVariable(payload);
-      gastos.value = ordenar([...gastos.value, nuevo]);
-      metodoPagoId.value = '';
+      await crearGastoVariable(payloadGasto());
     }
-    item.value = '';
-    categoriaId.value = '';
-    valorTotal.value = '';
-    pagoUsuarioId.value = '';
-    fecha.value = hoyISO();
-    personalizarReparto.value = false;
-    mostrarForm.value = false;
+    await Promise.all([cargarCompras(), recargarGastos()]);
+    await llenar(limpiarFormulario);
+    cerrarFormulario();
     emit('cambio');
   } catch (e) {
     error.value = extractErrorMessage(e);
@@ -350,92 +468,6 @@ async function onEliminar(gasto) {
     error.value = extractErrorMessage(e);
   } finally {
     eliminandoId.value = null;
-  }
-}
-
-// --- Editar un gasto variable (ítem, valor, fecha, quién pagó, método, categoría) ---
-const editandoGasto = ref(null);
-const formEdicion = reactive({ item: '', valorTotal: '', fecha: '', pagoUsuarioId: '', metodoPagoId: '', categoriaId: '' });
-const guardandoEdicion = ref(false);
-const errorEdicion = ref('');
-// El método es privado de quien pagó: solo se pregunta si pagaste tú.
-const edicionPagueYo = computed(() => formEdicion.pagoUsuarioId === auth.usuario?.id);
-const cambiaReparto = computed(
-  () =>
-    editandoGasto.value &&
-    (Number(formEdicion.valorTotal) !== editandoGasto.value.valorTotal ||
-      formEdicion.fecha !== editandoGasto.value.fecha.slice(0, 10)),
-);
-
-function abrirEdicion(gasto) {
-  errorEdicion.value = '';
-  editandoRepartoId.value = null;
-  Object.assign(formEdicion, {
-    item: gasto.item,
-    valorTotal: gasto.valorTotal,
-    fecha: gasto.fecha.slice(0, 10),
-    pagoUsuarioId: gasto.pagoUsuarioId,
-    metodoPagoId: gasto.metodoPagoId ?? '',
-    categoriaId: gasto.categoriaId ?? '',
-  });
-  editandoGasto.value = gasto;
-}
-
-async function onGuardarEdicion() {
-  const g = editandoGasto.value;
-  errorEdicion.value = '';
-  guardandoEdicion.value = true;
-  try {
-    const payload = {};
-    if (formEdicion.item.trim() !== g.item) payload.item = formEdicion.item.trim();
-    if (Number(formEdicion.valorTotal) !== g.valorTotal) payload.valorTotal = Number(formEdicion.valorTotal);
-    if (formEdicion.fecha !== g.fecha.slice(0, 10)) payload.fecha = formEdicion.fecha;
-    if (formEdicion.pagoUsuarioId !== g.pagoUsuarioId) payload.pagoUsuarioId = formEdicion.pagoUsuarioId;
-    if (edicionPagueYo.value && (formEdicion.metodoPagoId || null) !== (g.metodoPagoId ?? null)) {
-      payload.metodoPagoId = formEdicion.metodoPagoId || null;
-    }
-    if ((formEdicion.categoriaId || null) !== (g.categoriaId ?? null)) payload.categoriaId = formEdicion.categoriaId || null;
-    if (Object.keys(payload).length) {
-      const actualizado = await actualizarGastoVariable(g.id, payload);
-      const idx = gastos.value.findIndex((x) => x.id === g.id);
-      gastos.value[idx] = actualizado;
-      emit('cambio');
-    }
-    editandoGasto.value = null;
-  } catch (e) {
-    errorEdicion.value = extractErrorMessage(e);
-  } finally {
-    guardandoEdicion.value = false;
-  }
-}
-
-function onIniciarEditarReparto(gasto) {
-  error.value = '';
-  editandoRepartoId.value = gasto.id;
-}
-
-function onCancelarEditarReparto() {
-  editandoRepartoId.value = null;
-}
-
-function repartoActual(gasto) {
-  return Object.fromEntries(gasto.repartos.map((x) => [x.usuarioId, x.monto]));
-}
-
-async function onGuardarReparto(gasto) {
-  error.value = '';
-  guardandoRepartoId.value = gasto.id;
-  try {
-    const repartos = repartoEdicion.value.montos;
-    const actualizado = await actualizarGastoVariable(gasto.id, { repartos });
-    const idx = gastos.value.findIndex((g) => g.id === gasto.id);
-    gastos.value[idx] = actualizado;
-    editandoRepartoId.value = null;
-    emit('cambio');
-  } catch (e) {
-    error.value = extractErrorMessage(e);
-  } finally {
-    guardandoRepartoId.value = null;
   }
 }
 
@@ -464,7 +496,7 @@ watch(
   () => rutaHogar.query.registrar,
   (tipo) => {
     if (tipo !== 'variable') return;
-    if (puedeEditar.value) mostrarForm.value = true;
+    if (puedeEditar.value) abrirNuevo();
     routerHogar.replace({ query: { ...rutaHogar.query, registrar: undefined } });
   },
   { immediate: true },
@@ -478,16 +510,24 @@ watch(
         <h3 id="gastos-variables-titulo" class="section-title">Gastos variables</h3>
         <p class="section-hint">Mercado, compras y gastos puntuales. Ya están pagados, así que entran al saldo de una vez.</p>
       </div>
-      <button v-if="puedeEditar" class="btn-primary" @click="mostrarForm = true">
+      <button v-if="puedeEditar" class="btn-primary" @click="abrirNuevo">
         <AppIcon name="plus" class="h-4 w-4" />
         Agregar gasto variable
       </button>
     </div>
 
-    <AlertError :message="error" class="mb-4" />
+    <AlertError v-if="!mostrarForm" :message="error" class="mb-4" />
 
-    <AppModal v-if="mostrarForm" title="Agregar gasto variable" @close="mostrarForm = false">
-      <form class="grid grid-cols-1 sm:grid-cols-2 gap-4" @submit.prevent="onCrear">
+    <AppModal
+      v-if="mostrarForm"
+      :title="editando ? `Editar ${editando.registro.item}` : 'Agregar gasto variable'"
+      @close="cerrarFormulario"
+    >
+      <form :key="formKey" class="grid grid-cols-1 sm:grid-cols-2 gap-4" @submit.prevent="onGuardar">
+        <AlertError :message="error" class="sm:col-span-2" />
+        <p v-if="compraBloqueada" class="sm:col-span-2 rounded-lg bg-warning/10 px-3 py-2 text-[13px] font-medium text-warning">
+          Esta compra ya tiene cuotas cuadradas o pagadas a mano: solo se guardan el nombre, la categoría y la cuenta.
+        </p>
         <FormField v-model="item" label="Item" required placeholder="Mercado, cafetera…" />
         <FormField v-model="valorTotal" type="number" label="Valor total (COP)" required />
         <div>
@@ -498,11 +538,11 @@ watch(
           </select>
         </div>
         <FormField v-model="fecha" type="date" label="Fecha del gasto" required />
-        <div v-if="categoriasActivas.length">
+        <div v-if="categoriasForm.length">
           <label class="label" for="gasto-hogar-categoria">Categoría</label>
           <select id="gasto-hogar-categoria" v-model="categoriaId" class="field">
             <option value="">Sin categoría</option>
-            <option v-for="c in categoriasActivas" :key="c.id" :value="c.id">{{ c.nombre }}</option>
+            <option v-for="c in categoriasForm" :key="c.id" :value="c.id">{{ c.nombre }}</option>
           </select>
         </div>
 
@@ -516,7 +556,7 @@ watch(
 
         <div class="sm:col-span-2">
           <label class="inline-flex items-center gap-2.5 text-sm text-ink-secondary cursor-pointer">
-            <input v-model="aCuotas" type="checkbox" class="checkbox" />
+            <input v-model="aCuotas" type="checkbox" class="checkbox" :disabled="compraBloqueada" />
             Es una compra a cuotas
           </label>
         </div>
@@ -598,20 +638,30 @@ watch(
           class="sm:col-span-2"
           :miembros="miembros"
           :total="Number(valorTotal) || 0"
-          id-prefijo="reparto-nuevo"
+          :inicial="repartoInicial?.montos ?? null"
+          :inicial-total="repartoInicial?.total ?? null"
+          id-prefijo="reparto-form"
         />
 
         <div class="sm:col-span-2 pt-1">
           <p v-if="!personalizarReparto" class="text-[13px] text-ink-tertiary mb-3">
             El reparto se calcula automáticamente según el reparto de Configuración del hogar.
           </p>
-          <button
-            type="submit"
-            class="btn-primary w-full sm:w-auto"
-            :disabled="creando || (personalizarReparto && !repartoManualValido)"
-          >
-            {{ creando ? 'Agregando…' : aCuotas ? 'Agregar compra' : 'Agregar gasto' }}
-          </button>
+          <p v-if="editando && aCuotas !== (editando.tipo === 'compra')" class="text-[13px] font-medium text-warning mb-3">
+            {{ aCuotas ? 'Este gasto pasa a ser una compra a cuotas.' : 'Esta compra pasa a ser un gasto de un solo pago.' }}
+          </p>
+          <div class="flex flex-wrap justify-end gap-2">
+            <button v-if="editando" type="button" class="btn-ghost" @click="cerrarFormulario">Cancelar</button>
+            <button
+              type="submit"
+              class="btn-primary w-full sm:w-auto"
+              :disabled="creando || (personalizarReparto && !compraBloqueada && !repartoManualValido)"
+            >
+              <template v-if="creando">Guardando…</template>
+              <template v-else-if="editando">Guardar cambios</template>
+              <template v-else>{{ aCuotas ? 'Agregar compra' : 'Agregar gasto' }}</template>
+            </button>
+          </div>
         </div>
       </form>
     </AppModal>
@@ -694,10 +744,7 @@ watch(
           </button>
           </div>
         </div>
-        <div
-          v-else-if="!esEditable(gasto) || editandoRepartoId !== gasto.id"
-          class="mt-2 flex flex-wrap items-center justify-between gap-x-4 gap-y-2"
-        >
+        <div v-else class="mt-2 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
           <p class="min-w-0 text-[13px] text-ink-tertiary" :class="{ 'opacity-60': !esEditable(gasto) }">
             Reparto: {{ formatReparto(gasto.repartos) }}
           </p>
@@ -705,10 +752,6 @@ watch(
             <button class="btn-ghost btn-sm" :aria-label="`Editar ${gasto.item}`" @click="abrirEdicion(gasto)">
               <AppIcon name="edit" class="h-3.5 w-3.5" />
               Editar
-            </button>
-            <button class="btn-ghost btn-sm" @click="onIniciarEditarReparto(gasto)">
-              <AppIcon name="users" class="h-3.5 w-3.5" />
-              Reparto
             </button>
             <button
               class="btn-icon !p-1.5 hover:!text-negative hover:!bg-negative/10"
@@ -719,31 +762,6 @@ watch(
             >
               <AppIcon name="trash" class="h-4 w-4" />
             </button>
-          </div>
-        </div>
-
-        <div v-else class="panel-sunken mt-3 p-4 space-y-3">
-          <p class="text-[13px] font-medium text-ink-secondary">Reparto de este gasto</p>
-          <RepartoMiembros
-            v-model="repartoEdicion"
-            :miembros="miembros"
-            :total="gasto.valorTotal"
-            :inicial="repartoActual(gasto)"
-            :id-prefijo="`reparto-${gasto.id}`"
-          />
-          <div class="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-border">
-            <div class="flex gap-2 ml-auto">
-              <button class="btn-ghost btn-sm" @click="onCancelarEditarReparto">
-                Cancelar
-              </button>
-              <button
-                class="btn-primary btn-sm"
-                :disabled="guardandoRepartoId === gasto.id || !repartoEdicion.valido"
-                @click="onGuardarReparto(gasto)"
-              >
-                Guardar
-              </button>
-            </div>
           </div>
         </div>
       </li>
@@ -794,57 +812,5 @@ watch(
         </li>
       </ul>
     </div>
-    <AppModal v-if="editandoGasto" :title="`Editar ${editandoGasto.item}`" @close="editandoGasto = null">
-      <form class="grid grid-cols-1 gap-4 sm:grid-cols-2" @submit.prevent="onGuardarEdicion">
-        <AlertError :message="errorEdicion" class="sm:col-span-2" />
-        <FormField v-model="formEdicion.item" label="Ítem" required class="sm:col-span-2" />
-        <FormField v-model="formEdicion.valorTotal" type="number" label="Valor total (COP)" required />
-        <FormField v-model="formEdicion.fecha" type="date" label="Fecha del gasto" required />
-        <div>
-          <label class="label" for="editar-variable-pagador">Quién pagó</label>
-          <select id="editar-variable-pagador" v-model="formEdicion.pagoUsuarioId" class="field" required>
-            <option v-for="m in miembros" :key="m.id" :value="m.id">{{ m.nombre }}</option>
-          </select>
-        </div>
-        <div v-if="edicionPagueYo">
-          <label class="label" for="editar-variable-metodo">Con qué lo pagaste (solo lo ves tú)</label>
-          <select id="editar-variable-metodo" v-model="formEdicion.metodoPagoId" class="field">
-            <option value="">Sin definir</option>
-            <option v-for="m in misMetodos" :key="m.id" :value="m.id">{{ m.nombre }}</option>
-          </select>
-        </div>
-        <div v-if="categorias.length">
-          <label class="label" for="editar-variable-categoria">Categoría</label>
-          <select id="editar-variable-categoria" v-model="formEdicion.categoriaId" class="field">
-            <option value="">Sin categoría</option>
-            <option v-for="c in categoriasPara(editandoGasto)" :key="c.id" :value="c.id">{{ c.nombre }}</option>
-          </select>
-        </div>
-        <p v-if="cambiaReparto" class="sm:col-span-2 text-[13px] font-medium text-warning">
-          Al cambiar el valor o la fecha, el reparto se recalcula con el del hogar; si era otro, ajústalo después en Reparto.
-        </p>
-        <div class="flex justify-end gap-2 sm:col-span-2">
-          <button type="button" class="btn-ghost" @click="editandoGasto = null">Cancelar</button>
-          <button type="submit" class="btn-primary" :disabled="guardandoEdicion || !formEdicion.item.trim() || !(Number(formEdicion.valorTotal) > 0)">
-            {{ guardandoEdicion ? 'Guardando…' : 'Guardar cambios' }}
-          </button>
-        </div>
-      </form>
-    </AppModal>
-
-    <AppModal v-if="editandoCompra" :title="`Editar ${editandoCompra.item}`" size="lg" @close="editandoCompra = null">
-      <AlertError :message="errorCompra" class="mb-4" />
-      <CompraCuotasForm
-        tipo="hogar"
-        :compra="editandoCompra"
-        :metodos="misMetodos"
-        :categorias="categorias"
-        :miembros="miembros"
-        :usuario-actual-id="auth.usuario?.id ?? ''"
-        :guardando="guardandoCompra"
-        @guardar="onGuardarCompra"
-        @cancelar="editandoCompra = null"
-      />
-    </AppModal>
   </section>
 </template>

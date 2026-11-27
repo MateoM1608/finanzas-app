@@ -23,3 +23,8 @@ export function pagarCuotaVariable(id, payload = {}) {
 export function deshacerPagoCuotaVariable(id) {
   return api.post(`/api/gastos-variables/${id}/deshacer-pago`).then((r) => r.data.gasto);
 }
+
+// Editar un gasto suelto que pasa a ser compra a cuotas (crea la compra y borra el gasto).
+export function convertirGastoHogarACompra(id, payload) {
+  return api.post(`/api/gastos-variables/${id}/convertir-a-compra`, payload).then((r) => r.data.compra);
+}

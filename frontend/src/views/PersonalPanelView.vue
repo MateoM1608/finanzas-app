@@ -1,7 +1,14 @@
 <script setup>
 import { useRoute, useRouter } from 'vue-router';
 import { ref, computed, onMounted, watch, nextTick } from 'vue';
-import { listarGastos, crearGasto, actualizarGasto, eliminarGasto, cambiarMetodoGasto } from '../api/gastosPersonales.js';
+import {
+  listarGastos,
+  crearGasto,
+  actualizarGasto,
+  eliminarGasto,
+  cambiarMetodoGasto,
+  convertirGastoACompra,
+} from '../api/gastosPersonales.js';
 import { listarIngresos, crearIngreso, actualizarIngreso, eliminarIngreso, cambiarMetodoIngreso } from '../api/ingresosPersonales.js';
 import { listarCategorias } from '../api/categoriasPersonales.js';
 import { listarMetodosPago } from '../api/metodosPagoPersonales.js';
@@ -11,6 +18,7 @@ import {
   actualizarCompraPersonal,
   eliminarCompraPersonal,
   sugerirPrimeraCuota,
+  convertirCompraPersonalAGasto,
 } from '../api/comprasCuotas.js';
 import { confirmar } from '../composables/useConfirm.js';
 import { extractErrorMessage } from '../api/client.js';
@@ -30,7 +38,6 @@ import ResumenPersonalSection from '../components/personal/ResumenPersonalSectio
 import AhorrosPersonalesSection from '../components/personal/AhorrosPersonalesSection.vue';
 import LimitesPersonalesSection from '../components/personal/LimitesPersonalesSection.vue';
 import ProximosMesesSection from '../components/personal/ProximosMesesSection.vue';
-import CompraCuotasForm from '../components/CompraCuotasForm.vue';
 import CamposDolares from '../components/personal/CamposDolares.vue';
 
 const mostrarConfig = ref(false);
@@ -159,28 +166,9 @@ const gTasa = ref('');
 const gSistema = ref('capital_fijo');
 const compras = ref([]);
 const eliminandoCompraId = ref(null);
-const editandoCompra = ref(null);
-const guardandoCompra = ref(false);
-const errorCompra = ref('');
-
-async function onGuardarCompra(payload) {
-  errorCompra.value = '';
-  guardandoCompra.value = true;
-  try {
-    await actualizarCompraPersonal(editandoCompra.value.id, payload);
-    editandoCompra.value = null;
-    await Promise.all([cargarCompras(), cargarGastos()]);
-    recargarResumenes();
-  } catch (e) {
-    errorCompra.value = extractErrorMessage(e);
-  } finally {
-    guardandoCompra.value = false;
-  }
-}
-
 // La fecha de la primera cuota se sugiere con el día de corte/pago del método.
 async function actualizarSugerenciaCuota() {
-  if (!gACuotas.value || !gFecha.value) return;
+  if (llenandoGasto || !gACuotas.value || !gFecha.value) return;
   const metodo = metodos.value.find((m) => m.id === gMetodoPagoId.value);
   gModoCobro.value = modoCobroSugerido(metodo);
   gInteres.value = metodo?.tasaMensual > 0 && Number(gNumeroCuotas.value) !== 1 ? 'tarjeta' : 'sin';
@@ -196,6 +184,7 @@ const metodoSeleccionado = computed(() => metodos.value.find((m) => m.id === gMe
 // A 1 cuota la tarjeta no cobra interés: se paga entera con el extracto.
 const gUnaCuota = computed(() => Number(gNumeroCuotas.value) === 1);
 watch(gUnaCuota, (una) => {
+  if (llenandoGasto) return;
   if (una && gInteres.value === 'tarjeta') gInteres.value = 'sin';
   else if (!una && gInteres.value === 'sin' && metodoSeleccionado.value?.tasaMensual > 0) gInteres.value = 'tarjeta';
 });
@@ -204,7 +193,7 @@ watch(conTarjeta, (si) => {
   if (!si) gEnDolares.value = false;
 });
 watch([gEnDolares, gUsd, gTrm], () => {
-  if (!gEnDolares.value) return;
+  if (llenandoGasto || !gEnDolares.value) return;
   const usd = Number(String(gUsd.value).replace(',', '.'));
   const trm = Number(String(gTrm.value).replace(',', '.'));
   if (usd > 0 && trm > 0) gMonto.value = String(Math.round(usd * trm));
@@ -242,6 +231,187 @@ async function onEliminarCompra(compra) {
     error.value = extractErrorMessage(e);
   } finally {
     eliminandoCompraId.value = null;
+  }
+}
+
+// --- Editar un gasto o una compra a cuotas con el mismo formulario de registrar ---
+// editandoGasto = { tipo: 'gasto' | 'compra', registro } o null (registrando).
+const editandoGasto = ref(null);
+// Mientras se llena el formulario para editar, las sugerencias (primera
+// cuota, modo, interés, pesos desde dólares) no pisan lo que ya tiene.
+let llenandoGasto = false;
+// Compra manual con cuotas pagadas a mano: solo se guardan descripción, categoría, cuenta y obligatoria.
+const compraBloqueada = computed(() => {
+  const c = editandoGasto.value?.tipo === 'compra' ? editandoGasto.value.registro : null;
+  return Boolean(c && c.modoCobro === 'manual' && c.cuotas.some((q) => q.estado === 'pagado'));
+});
+
+function limpiarGasto() {
+  gMonto.value = '';
+  gFecha.value = hoyISO();
+  gDescripcion.value = '';
+  gCategoriaId.value = '';
+  gMetodoPagoId.value = '';
+  gEsObligatorio.value = false;
+  gEstado.value = 'pagado';
+  gEnDolares.value = false;
+  gUsd.value = '';
+  gTrm.value = '';
+  gACuotas.value = false;
+  gNumeroCuotas.value = '3';
+  gPrimeraCuota.value = '';
+  gModoCobro.value = 'automatico';
+  gEnCurso.value = false;
+  gCuotasPagadas.value = '';
+  gInteres.value = 'sin';
+  gTasa.value = '';
+  gSistema.value = 'capital_fijo';
+}
+
+async function llenarGasto(fn) {
+  llenandoGasto = true;
+  fn();
+  await nextTick();
+  llenandoGasto = false;
+}
+
+async function abrirEdicionGasto(gasto) {
+  error.value = '';
+  editandoGasto.value = { tipo: 'gasto', registro: gasto };
+  tipoRegistro.value = 'gasto';
+  await llenarGasto(() => {
+    limpiarGasto();
+    gMonto.value = String(gasto.monto);
+    gFecha.value = String(gasto.fecha).slice(0, 10);
+    gDescripcion.value = gasto.descripcion ?? '';
+    gCategoriaId.value = gasto.categoriaId ?? '';
+    gMetodoPagoId.value = gasto.metodoPagoId ?? '';
+    gEsObligatorio.value = Boolean(gasto.esObligatorio);
+    gEstado.value = gasto.estado ?? 'pagado';
+    gEnDolares.value = Boolean(gasto.montoUsd);
+    gUsd.value = gasto.montoUsd ? String(gasto.montoUsd / 100) : '';
+    gTrm.value = gasto.trm ? String(gasto.trm) : '';
+  });
+  mostrarRegistro.value = true;
+}
+
+async function abrirEdicionCompra(compra) {
+  error.value = '';
+  editandoGasto.value = { tipo: 'compra', registro: compra };
+  tipoRegistro.value = 'gasto';
+  const metodo = metodos.value.find((m) => m.id === compra.metodoPagoId);
+  await llenarGasto(() => {
+    limpiarGasto();
+    gMonto.value = String(compra.montoTotal);
+    gFecha.value = String(compra.creadoEn ?? compra.fechaPrimeraCuota).slice(0, 10);
+    gDescripcion.value = compra.descripcion ?? '';
+    gCategoriaId.value = compra.categoriaId ?? '';
+    gMetodoPagoId.value = compra.metodoPagoId ?? '';
+    gEsObligatorio.value = Boolean(compra.esObligatorio);
+    gEnDolares.value = Boolean(compra.montoUsd);
+    gUsd.value = compra.montoUsd ? String(compra.montoUsd / 100) : '';
+    gTrm.value = compra.trm ? String(compra.trm) : '';
+    gACuotas.value = true;
+    gNumeroCuotas.value = String(compra.numeroCuotas);
+    gPrimeraCuota.value = String(compra.fechaPrimeraCuota).slice(0, 10);
+    gModoCobro.value = compra.modoCobro;
+    gEnCurso.value = (compra.cuotasPagadasAntes ?? 0) > 0;
+    gCuotasPagadas.value = compra.cuotasPagadasAntes ? String(compra.cuotasPagadasAntes) : '';
+    const tasa = compra.tasaMensual ?? 0;
+    gInteres.value = !tasa ? 'sin' : metodo?.tasaMensual === tasa ? 'tarjeta' : 'otra';
+    gTasa.value = gInteres.value === 'otra' ? String(tasa) : '';
+    gSistema.value = compra.sistemaInteres ?? 'capital_fijo';
+  });
+  mostrarRegistro.value = true;
+}
+
+// Desde la fila de una cuota: abre la edición de su compra.
+function editarCompraDe(gasto) {
+  const compra = compras.value.find((c) => c.id === gasto.compraId);
+  if (compra) abrirEdicionCompra(compra);
+}
+
+// Interés de la compra. Al editar va siempre explícito (si no, se quedaría el de antes).
+function interesCompra(explicito) {
+  if (gInteres.value === 'tarjeta') {
+    return explicito
+      ? {
+          tasaMensual: metodoSeleccionado.value?.tasaMensual ?? 0,
+          sistemaInteres: metodoSeleccionado.value?.sistemaInteres ?? gSistema.value,
+        }
+      : {};
+  }
+  return { tasaMensual: gInteres.value === 'otra' ? Number(gTasa.value) || 0 : 0, sistemaInteres: gSistema.value };
+}
+
+// Al editar, quitar los dólares de algo que los tenía se manda explícito.
+function dolaresEdicion(registro) {
+  if (gEnDolares.value) return dolaresGasto();
+  return registro?.montoUsd ? { montoUsd: null, trm: null } : {};
+}
+
+function payloadGastoP(registro = null) {
+  return {
+    monto: Number(gMonto.value),
+    fecha: gFecha.value,
+    descripcion: gDescripcion.value.trim() || (registro ? null : undefined),
+    categoriaId: gCategoriaId.value || null,
+    metodoPagoId: gMetodoPagoId.value || null,
+    esObligatorio: gEsObligatorio.value,
+    estado: gEstado.value,
+    ...(registro ? dolaresEdicion(registro) : dolaresGasto()),
+  };
+}
+
+function payloadCompraP(explicito, registro = null) {
+  return {
+    descripcion: gDescripcion.value.trim(),
+    montoTotal: Number(gMonto.value),
+    numeroCuotas: Number(gNumeroCuotas.value),
+    fechaPrimeraCuota: gPrimeraCuota.value,
+    modoCobro: gModoCobro.value,
+    cuotasPagadasAntes: gEnCurso.value ? Number(gCuotasPagadas.value) || 0 : 0,
+    ...interesCompra(explicito),
+    metodoPagoId: gMetodoPagoId.value || null,
+    categoriaId: gCategoriaId.value || null,
+    esObligatorio: gEsObligatorio.value,
+    ...(registro ? dolaresEdicion(registro) : dolaresGasto()),
+  };
+}
+
+async function guardarEdicionGasto() {
+  error.value = '';
+  guardandoGasto.value = true;
+  try {
+    const { tipo, registro } = editandoGasto.value;
+    if (tipo === 'gasto') {
+      if (gACuotas.value) {
+        const datos = payloadCompraP(false);
+        if (datos.montoUsd === undefined) delete datos.montoUsd;
+        await convertirGastoACompra(registro.id, datos);
+      } else {
+        await actualizarGasto(registro.id, payloadGastoP(registro));
+      }
+    } else if (!gACuotas.value) {
+      const datos = payloadGastoP();
+      if (datos.descripcion === undefined) delete datos.descripcion;
+      await convertirCompraPersonalAGasto(registro.id, datos);
+    } else if (compraBloqueada.value) {
+      await actualizarCompraPersonal(registro.id, {
+        descripcion: gDescripcion.value.trim(),
+        categoriaId: gCategoriaId.value || null,
+        metodoPagoId: gMetodoPagoId.value || null,
+        esObligatorio: gEsObligatorio.value,
+      });
+    } else {
+      await actualizarCompraPersonal(registro.id, payloadCompraP(true, registro));
+    }
+    await Promise.all([cargarCompras(), cargarGastos()]);
+    recargarResumenes();
+  } catch (e) {
+    error.value = extractErrorMessage(e);
+  } finally {
+    guardandoGasto.value = false;
   }
 }
 
@@ -451,9 +621,21 @@ const LIMITE_LISTA = 8;
 const verTodo = ref(false);
 
 function abrirRegistro(tipo = 'gasto') {
+  if (editandoGasto.value) {
+    editandoGasto.value = null;
+    limpiarGasto();
+  }
   tipoRegistro.value = tipo;
   error.value = '';
   mostrarRegistro.value = true;
+}
+
+function cerrarRegistro() {
+  mostrarRegistro.value = false;
+  if (editandoGasto.value) {
+    editandoGasto.value = null;
+    limpiarGasto();
+  }
 }
 
 // "+ Registrar" de la barra del celular: /personal?registrar=gasto abre el modal.
@@ -470,6 +652,11 @@ watch(
 );
 
 async function guardarRegistro() {
+  if (editandoGasto.value) {
+    await guardarEdicionGasto();
+    if (!error.value) cerrarRegistro();
+    return;
+  }
   if (tipoRegistro.value === 'gasto') await onAgregarGasto();
   else await onAgregarIngreso();
   if (!error.value) {
@@ -1005,7 +1192,17 @@ function saldoCompra(compra) {
                     class="btn-icon !p-1.5"
                     aria-label="Editar gasto"
                     title="Editar"
-                    @click="editandoMov = { tipo: 'gasto', mov: gasto }"
+                    @click="abrirEdicionGasto(gasto)"
+                  >
+                    <AppIcon name="edit" class="h-4 w-4" />
+                  </button>
+                  <button
+                    v-if="gasto.compraId && compras.some((c) => c.id === gasto.compraId)"
+                    type="button"
+                    class="btn-icon !p-1.5"
+                    aria-label="Editar la compra"
+                    title="Editar la compra"
+                    @click="editarCompraDe(gasto)"
                   >
                     <AppIcon name="edit" class="h-4 w-4" />
                   </button>
@@ -1149,7 +1346,7 @@ function saldoCompra(compra) {
                   class="btn-icon !p-1.5"
                   :aria-label="`Editar ${compra.descripcion}`"
                   title="Editar compra"
-                  @click="(errorCompra = ''), (editandoCompra = compra)"
+                  @click="abrirEdicionCompra(compra)"
                 >
                   <AppIcon name="edit" class="h-4 w-4" />
                 </button>
@@ -1179,23 +1376,13 @@ function saldoCompra(compra) {
       </section>
     </div>
 
-    <!-- Editar compra a cuotas -->
-    <AppModal v-if="editandoCompra" :title="`Editar ${editandoCompra.descripcion}`" size="lg" @close="editandoCompra = null">
-      <AlertError :message="errorCompra" class="mb-4" />
-      <CompraCuotasForm
-        tipo="personal"
-        :compra="editandoCompra"
-        :metodos="metodos"
-        :categorias="categoriasParaGasto"
-        :guardando="guardandoCompra"
-        @guardar="onGuardarCompra"
-        @cancelar="editandoCompra = null"
-      />
-    </AppModal>
-
     <!-- Registrar movimiento -->
-    <AppModal v-if="mostrarRegistro" title="Registrar movimiento" @close="mostrarRegistro = false">
-      <div class="tabs w-full mb-5" role="tablist" aria-label="Tipo de movimiento">
+    <AppModal
+      v-if="mostrarRegistro"
+      :title="editandoGasto ? `Editar ${editandoGasto.registro.descripcion || 'gasto'}` : 'Registrar movimiento'"
+      @close="cerrarRegistro"
+    >
+      <div v-if="!editandoGasto" class="tabs w-full mb-5" role="tablist" aria-label="Tipo de movimiento">
         <button
           type="button"
           role="tab"
@@ -1219,6 +1406,9 @@ function saldoCompra(compra) {
       </div>
 
       <form v-if="tipoRegistro === 'gasto'" class="grid grid-cols-1 sm:grid-cols-2 gap-4" @submit.prevent="guardarRegistro">
+        <p v-if="compraBloqueada" class="sm:col-span-2 rounded-lg bg-warning/10 px-3 py-2 text-[13px] font-medium text-warning">
+          Ya marcaste cuotas de esta compra como pagadas: solo se guardan la descripción, la categoría, la cuenta y si es obligatoria.
+        </p>
         <FormField
           v-model="gMonto"
           type="number"
@@ -1274,7 +1464,7 @@ function saldoCompra(compra) {
         </label>
 
         <label class="sm:col-span-2 inline-flex items-center gap-2.5 text-sm text-ink-secondary cursor-pointer">
-          <input v-model="gACuotas" type="checkbox" class="checkbox" />
+          <input v-model="gACuotas" type="checkbox" class="checkbox" :disabled="compraBloqueada" />
           Es una compra a cuotas
         </label>
         <template v-if="gACuotas">
@@ -1347,8 +1537,14 @@ function saldoCompra(compra) {
 
         <div v-if="error" class="sm:col-span-2"><AlertError :message="error" /></div>
 
+        <p
+          v-if="editandoGasto && gACuotas !== (editandoGasto.tipo === 'compra')"
+          class="sm:col-span-2 text-[13px] font-medium text-warning"
+        >
+          {{ gACuotas ? 'Este gasto pasa a ser una compra a cuotas.' : 'Esta compra pasa a ser un gasto de un solo pago.' }}
+        </p>
         <div class="sm:col-span-2 flex justify-end gap-2 pt-1">
-          <button type="button" class="btn-ghost" @click="mostrarRegistro = false">Cancelar</button>
+          <button type="button" class="btn-ghost" @click="cerrarRegistro">Cancelar</button>
           <button
             type="submit"
             class="btn-primary"
@@ -1361,7 +1557,7 @@ function saldoCompra(compra) {
                   (gEnCurso && !(Number(gCuotasPagadas) >= 1 && Number(gCuotasPagadas) < Number(gNumeroCuotas)))))
             "
           >
-            {{ guardandoGasto ? 'Guardando…' : gACuotas ? 'Agregar compra' : 'Agregar gasto' }}
+            {{ guardandoGasto ? 'Guardando…' : editandoGasto ? 'Guardar cambios' : gACuotas ? 'Agregar compra' : 'Agregar gasto' }}
           </button>
         </div>
       </form>
