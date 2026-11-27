@@ -93,10 +93,10 @@ async function eliminar(meta) {
 
 // --- Aportar / retirar ---
 const moviendo = ref(null);
-const mov = reactive({ tipo: 'aporte', monto: '', fecha: '', metodoPagoId: '' });
+const mov = reactive({ tipo: 'aporte', monto: '', fecha: '', metodoPagoId: '', enCaja: true });
 function abrirMovimiento(meta, tipo) {
   moviendo.value = meta.id;
-  Object.assign(mov, { tipo, monto: '', fecha: hoyISO(), metodoPagoId: '' });
+  Object.assign(mov, { tipo, monto: '', fecha: hoyISO(), metodoPagoId: '', enCaja: true });
 }
 async function guardarMovimiento(meta) {
   const ok = await ejecutar(() =>
@@ -104,7 +104,8 @@ async function guardarMovimiento(meta) {
       tipo: mov.tipo,
       monto: Number(mov.monto),
       fecha: mov.fecha,
-      metodoPagoId: mov.metodoPagoId || null,
+      metodoPagoId: mov.enCaja ? mov.metodoPagoId || null : null,
+      enCaja: mov.enCaja,
     }),
   );
   if (ok) moviendo.value = null;
@@ -172,7 +173,11 @@ const verMovimientos = ref(null);
         <form v-if="moviendo === meta.id" class="mt-3 grid grid-cols-2 gap-2" @submit.prevent="guardarMovimiento(meta)">
           <FormField v-model="mov.monto" type="number" :label="mov.tipo === 'aporte' ? 'Aportas (COP)' : 'Retiras (COP)'" required />
           <FormField v-model="mov.fecha" type="date" label="Fecha" required />
-          <div class="col-span-2">
+          <label class="col-span-2 inline-flex items-center gap-2.5 text-sm text-ink-secondary cursor-pointer">
+            <input v-model="mov.enCaja" type="checkbox" class="h-4 w-4 rounded accent-accent" />
+            {{ mov.tipo === 'aporte' ? 'Sale de una de mis cuentas (baja mi Disponible)' : 'Llega a una de mis cuentas (sube mi Disponible)' }}
+          </label>
+          <div v-if="mov.enCaja" class="col-span-2">
             <label class="label" :for="`meta-cuenta-${meta.id}`">{{ mov.tipo === 'aporte' ? 'Sale de' : 'Llega a' }}</label>
             <select :id="`meta-cuenta-${meta.id}`" v-model="mov.metodoPagoId" class="field">
               <option value="">Sin definir</option>
@@ -180,7 +185,8 @@ const verMovimientos = ref(null);
             </select>
           </div>
           <p class="col-span-2 text-xs text-ink-tertiary">
-            {{ mov.tipo === 'aporte' ? 'Baja tu Disponible pero no cuenta como gasto.' : 'Sube tu Disponible pero no cuenta como ingreso.' }}
+            <template v-if="!mov.enCaja">{{ mov.tipo === 'aporte' ? 'Suma a la meta sin tocar tu Disponible: la plata vino de otra fuente o ya estaba ahorrada.' : 'Baja la meta sin tocar tu Disponible: la plata no llegó a una de tus cuentas.' }}</template>
+            <template v-else>{{ mov.tipo === 'aporte' ? 'Baja tu Disponible pero no cuenta como gasto.' : 'Sube tu Disponible pero no cuenta como ingreso.' }}</template>
           </p>
           <div class="col-span-2 flex justify-end gap-2">
             <button type="button" class="btn-ghost btn-sm" @click="moviendo = null">Cancelar</button>
@@ -203,7 +209,7 @@ const verMovimientos = ref(null);
 
         <ul v-if="verMovimientos === meta.id" class="list mt-2">
           <li v-for="m in [...meta.movimientos].reverse()" :key="m.id" class="list-row !py-2 text-[13px]">
-            <span class="text-ink-secondary">{{ formatDate(m.fecha) }} · {{ nombreMiembro(m.usuarioId) }} · {{ m.tipo === 'aporte' ? 'aporte' : 'retiro' }}</span>
+            <span class="text-ink-secondary">{{ formatDate(m.fecha) }} · {{ nombreMiembro(m.usuarioId) }} · {{ m.tipo === 'aporte' ? 'aporte' : 'retiro' }}<template v-if="m.enCaja === false"> · no tocó el Disponible</template></span>
             <span class="flex items-center gap-1.5">
               <span class="font-semibold" :class="m.tipo === 'aporte' ? 'text-ink-primary' : 'text-warning'">{{ m.tipo === 'aporte' ? '' : '−' }}{{ formatCurrency(m.monto) }}</span>
               <button v-if="m.usuarioId === yo" type="button" class="btn-icon !p-1" aria-label="Quitar movimiento" @click="quitarMovimiento(meta, m)">

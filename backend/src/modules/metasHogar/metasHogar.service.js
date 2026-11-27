@@ -33,7 +33,9 @@ async function requireMeta(usuarioActual, id) {
   return meta;
 }
 
-const INCLUDE = { movimientos: { orderBy: { fecha: 'asc' } } };
+const INCLUDE = {
+  movimientos: { orderBy: { fecha: 'asc' }, include: { gasto: { select: { id: true } }, ingreso: { select: { id: true } } } },
+};
 
 function vista(meta, usuarioActual, hoy) {
   const calculo = calcularMeta(meta, meta.movimientos, hoy);
@@ -41,7 +43,10 @@ function vista(meta, usuarioActual, hoy) {
     ...meta,
     ...calculo,
     miAporte: calculo.porMiembro.find((p) => p.usuarioId === usuarioActual.id)?.monto ?? 0,
-    movimientos: meta.movimientos.map((m) => (m.usuarioId === usuarioActual.id ? m : { ...m, metodoPagoId: null })),
+    // enCaja (si tocó el Disponible) también es solo de quien lo hizo.
+    movimientos: meta.movimientos.map(({ gasto, ingreso, ...m }) =>
+      m.usuarioId === usuarioActual.id ? { ...m, enCaja: Boolean(gasto || ingreso) } : { ...m, metodoPagoId: null, enCaja: null },
+    ),
   };
 }
 
@@ -129,9 +134,11 @@ export async function registrarMovimiento(usuarioActual, id, data) {
           tipo: data.tipo,
           monto: data.monto,
           fecha: data.fecha ?? hoyUTC(),
-          metodoPagoId: data.metodoPagoId ?? null,
+          metodoPagoId: data.enCaja === false ? null : (data.metodoPagoId ?? null),
         },
       });
+      // Sin caja: la plata vino de otra fuente (o el retiro no llegó a una cuenta).
+      if (data.enCaja === false) return;
       await crearCaja(tx, mov, {
         enlace: { metaHogarMovId: mov.id },
         origenes: ORIGENES,

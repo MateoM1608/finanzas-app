@@ -84,7 +84,7 @@ async function ejecutar(fn) {
 const creando = ref(false);
 const nueva = reactive({});
 function abrirNueva() {
-  Object.assign(nueva, { nombre: '', tipo: 'cdt', entidad: '', fechaInicio: hoyISO(), tasaEA: '', fechaVencimiento: '', monto: '', metodoPagoId: '' });
+  Object.assign(nueva, { nombre: '', tipo: 'cdt', entidad: '', fechaInicio: hoyISO(), tasaEA: '', fechaVencimiento: '', monto: '', metodoPagoId: '', enCaja: true });
   creando.value = true;
 }
 async function onCrear() {
@@ -97,7 +97,7 @@ async function onCrear() {
       fechaInicio: nueva.fechaInicio,
       tasaEA: nueva.tasaEA === '' ? null : Number(nueva.tasaEA),
       fechaVencimiento: nueva.fechaVencimiento || null,
-      ...(nueva.monto ? { aporteInicial: { monto: Number(nueva.monto), fecha: nueva.fechaInicio, metodoPagoId: nueva.metodoPagoId || null } } : {}),
+      ...(nueva.monto ? { aporteInicial: { monto: Number(nueva.monto), fecha: nueva.fechaInicio, metodoPagoId: nueva.enCaja ? nueva.metodoPagoId || null : null, enCaja: nueva.enCaja } } : {}),
     }),
   );
   if (ok) creando.value = false;
@@ -105,9 +105,9 @@ async function onCrear() {
 
 // --- Detalle ---
 const abiertaId = ref(null);
-const accion = reactive({ tipo: null, monto: '', fecha: '', metodoPagoId: '' });
+const accion = reactive({ tipo: null, monto: '', fecha: '', metodoPagoId: '', enCaja: true });
 function abrirAccion(tipo) {
-  Object.assign(accion, { tipo, monto: '', fecha: hoyISO(), metodoPagoId: '' });
+  Object.assign(accion, { tipo, monto: '', fecha: hoyISO(), metodoPagoId: '', enCaja: true });
 }
 async function onAccion(inv) {
   const ok = await ejecutar(() =>
@@ -117,7 +117,8 @@ async function onAccion(inv) {
           tipo: accion.tipo,
           monto: Number(accion.monto),
           fecha: accion.fecha,
-          metodoPagoId: accion.metodoPagoId || null,
+          metodoPagoId: accion.enCaja ? accion.metodoPagoId || null : null,
+          enCaja: accion.enCaja,
         }),
   );
   if (ok) accion.tipo = null;
@@ -254,7 +255,11 @@ defineExpose({ abrirNueva });
               required
             />
             <FormField v-model="accion.fecha" type="date" label="Fecha" required />
-            <div v-if="accion.tipo !== 'valor'" class="col-span-2 sm:col-span-1">
+            <label v-if="accion.tipo !== 'valor'" class="col-span-2 sm:col-span-3 inline-flex items-center gap-2.5 text-sm text-ink-secondary cursor-pointer">
+              <input v-model="accion.enCaja" type="checkbox" class="h-4 w-4 rounded accent-accent" />
+              {{ accion.tipo === 'aporte' ? 'Sale de una de mis cuentas (baja mi Disponible)' : 'Llega a una de mis cuentas (sube mi Disponible)' }}
+            </label>
+            <div v-if="accion.tipo !== 'valor' && accion.enCaja" class="col-span-2 sm:col-span-1">
               <label class="label" :for="`inv-cuenta-${inv.id}`">{{ accion.tipo === 'aporte' ? 'Sale de' : 'Llega a' }}</label>
               <select :id="`inv-cuenta-${inv.id}`" v-model="accion.metodoPagoId" class="field">
                 <option value="">Sin definir</option>
@@ -263,6 +268,8 @@ defineExpose({ abrirNueva });
             </div>
             <p class="col-span-2 sm:col-span-3 text-xs text-ink-tertiary">
               <template v-if="accion.tipo === 'valor'">Lo que dice tu extracto o la app de la entidad. Los aportes y retiros posteriores se suman o restan solos.</template>
+              <template v-else-if="!accion.enCaja && accion.tipo === 'aporte'">Suma a la inversión y a tu patrimonio sin tocar tu Disponible: la plata vino de otra fuente o ya estaba invertida.</template>
+              <template v-else-if="!accion.enCaja">Baja la inversión sin tocar tu Disponible: la plata no llegó a una de tus cuentas.</template>
               <template v-else-if="accion.tipo === 'aporte'">Baja tu Disponible pero no cuenta como gasto.</template>
               <template v-else>Sube tu Disponible pero no cuenta como ingreso.</template>
             </p>
@@ -299,7 +306,7 @@ defineExpose({ abrirNueva });
                 <span class="text-ink-secondary">
                   {{ formatDate(item.fecha) }} ·
                   <template v-if="item.clase === 'valor'">valor actualizado</template>
-                  <template v-else>{{ item.tipo }}<template v-if="inv.ambito === 'hogar'"> de {{ nombreMiembro(item.usuarioId) }}</template></template>
+                  <template v-else>{{ item.tipo }}<template v-if="inv.ambito === 'hogar'"> de {{ nombreMiembro(item.usuarioId) }}</template><template v-if="item.enCaja === false"> · no tocó el Disponible</template></template>
                 </span>
                 <span class="flex items-center gap-1.5">
                   <span class="font-semibold" :class="item.clase === 'valor' ? 'text-accent' : item.tipo === 'retiro' ? 'text-warning' : 'text-ink-primary'">
@@ -331,7 +338,11 @@ defineExpose({ abrirNueva });
         <FormField v-model="nueva.tasaEA" type="number" step="0.01" label="Tasa E.A. % (opcional)" hint="Para estimar el valor (CDT)." />
         <FormField v-model="nueva.fechaVencimiento" type="date" label="Vencimiento (opcional)" />
         <FormField v-model="nueva.monto" type="number" label="Aporte inicial (opcional)" />
-        <div v-if="nueva.monto">
+        <label v-if="nueva.monto" class="sm:col-span-2 inline-flex items-center gap-2.5 text-sm text-ink-secondary cursor-pointer">
+          <input v-model="nueva.enCaja" type="checkbox" class="h-4 w-4 rounded accent-accent" />
+          Sale de una de mis cuentas (baja mi Disponible)
+        </label>
+        <div v-if="nueva.monto && nueva.enCaja">
           <label class="label" for="inv-cuenta">Sale de</label>
           <select id="inv-cuenta" v-model="nueva.metodoPagoId" class="field">
             <option value="">Sin definir</option>
@@ -339,7 +350,7 @@ defineExpose({ abrirNueva });
           </select>
         </div>
         <p class="sm:col-span-2 text-xs text-ink-tertiary">
-          Los aportes bajan tu Disponible pero no cuentan como gasto.
+          Los aportes que salen de tus cuentas bajan tu Disponible pero no cuentan como gasto. Si ya la tenías o la plata vino de otra fuente, desmarca la casilla.
           <template v-if="pestana === 'hogar'">En el hogar, la parte de cada uno sale de lo que ha puesto.</template>
         </p>
         <div class="flex justify-end gap-2 sm:col-span-2">

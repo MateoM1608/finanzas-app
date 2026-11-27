@@ -33,8 +33,10 @@ async function requireInversion(usuarioActual, id, { editar = false } = {}) {
   return inversion;
 }
 
+const CON_CAJA = { gasto: { select: { id: true } }, ingreso: { select: { id: true } } };
+
 const INCLUDE = {
-  movimientos: { orderBy: { fecha: 'asc' } },
+  movimientos: { orderBy: { fecha: 'asc' }, include: CON_CAJA },
   valoraciones: { orderBy: { fecha: 'asc' } },
 };
 
@@ -50,7 +52,10 @@ function vista(inversion, usuarioActual, hoy) {
     miParte: Math.round(calculo.valorActual * miFraccion),
     participaciones: partes ? [...partes.entries()].map(([usuarioId, f]) => ({ usuarioId, porcentaje: f * 100 })) : null,
     // La cuenta de cada movimiento es privada de quien lo hizo.
-    movimientos: inversion.movimientos.map((m) => (m.usuarioId === usuarioActual.id ? m : { ...m, metodoPagoId: null })),
+    // enCaja (si tocó el Disponible) también es solo de quien lo hizo.
+    movimientos: inversion.movimientos.map(({ gasto, ingreso, ...m }) =>
+      m.usuarioId === usuarioActual.id ? { ...m, enCaja: Boolean(gasto || ingreso) } : { ...m, metodoPagoId: null, enCaja: null },
+    ),
   };
 }
 
@@ -129,6 +134,7 @@ export async function crearInversion(usuarioActual, data) {
           monto: aporte.monto,
           fecha: aporte.fecha ?? data.fechaInicio,
           metodoPagoId: aporte.metodoPagoId,
+          enCaja: aporte.enCaja,
         });
       }
       return inversion;
@@ -173,9 +179,11 @@ async function registrar(tx, inversion, usuarioId, mov) {
       tipo: mov.tipo,
       monto: mov.monto,
       fecha: mov.fecha,
-      metodoPagoId: mov.metodoPagoId ?? null,
+      // Sin caja no hay cuenta: la plata no salió ni llegó a una cuenta propia.
+      metodoPagoId: mov.enCaja === false ? null : (mov.metodoPagoId ?? null),
     },
   });
+  if (mov.enCaja === false) return creado;
   await crearCaja(tx, creado, {
     enlace: { inversionMovId: creado.id },
     origenes: ORIGENES,

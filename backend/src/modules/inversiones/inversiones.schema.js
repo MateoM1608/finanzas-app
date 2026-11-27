@@ -9,6 +9,8 @@ export const movimientoSchema = z.object({
   monto: z.number().int().positive().max(MONTO_MAX),
   fecha: fechaApp.optional(),
   metodoPagoId: uuid.nullable().optional(),
+  // false: la plata vino de otra fuente o ya estaba invertida (o, en un retiro, no llegó a una cuenta): no toca el Disponible.
+  enCaja: z.boolean().optional(),
 });
 
 export const crearInversionSchema = z.object({
@@ -20,7 +22,7 @@ export const crearInversionSchema = z.object({
   tasaEA: z.number().min(0).max(200).nullable().optional(),
   fechaVencimiento: fechaApp.nullable().optional(),
   aporteInicial: z
-    .object({ monto: z.number().int().positive().max(MONTO_MAX), fecha: fechaApp.optional(), metodoPagoId: uuid.nullable().optional() })
+    .object({ monto: z.number().int().positive().max(MONTO_MAX), fecha: fechaApp.optional(), metodoPagoId: uuid.nullable().optional(), enCaja: z.boolean().optional() })
     .optional(),
 });
 

@@ -19,4 +19,6 @@ export const movimientoMetaSchema = z.object({
   monto: z.number().int().positive().max(MONTO_MAX),
   fecha: fechaApp.optional(),
   metodoPagoId: z.string().uuid().nullable().optional(),
+  // false: la plata vino de otra fuente o ya estaba invertida (o, en un retiro, no llegó a una cuenta): no toca el Disponible.
+  enCaja: z.boolean().optional(),
 });
