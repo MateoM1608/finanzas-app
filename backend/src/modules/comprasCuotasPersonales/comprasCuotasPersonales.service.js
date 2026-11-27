@@ -228,9 +228,12 @@ export async function eliminarCompra(usuarioActual, compraId) {
   if (!compra || compra.usuarioId !== usuarioActual.id) {
     throw new HttpError(404, 'Compra no encontrada');
   }
-  const pagadas = await prisma.gastoPersonal.count({ where: { compraId, estado: 'pagado' } });
+  // Las cuotas automáticas se dan por pagadas solas en su fecha: no impiden
+  // borrar una compra mal registrada. Las pagadas a mano sí.
+  const pagadas =
+    compra.modoCobro === 'manual' ? await prisma.gastoPersonal.count({ where: { compraId, estado: 'pagado' } }) : 0;
   if (pagadas) {
-    throw new HttpError(409, 'Esta compra ya tiene cuotas pagadas — no se puede eliminar');
+    throw new HttpError(409, 'Ya marcaste cuotas de esta compra como pagadas — no se puede eliminar');
   }
   await prisma.$transaction([
     prisma.gastoPersonal.deleteMany({ where: { compraId } }),

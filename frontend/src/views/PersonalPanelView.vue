@@ -1148,7 +1148,7 @@ function saldoCompra(compra) {
                   <AppIcon name="edit" class="h-4 w-4" />
                 </button>
                 <button
-                  v-if="!cuotasPagadas(compra)"
+                  v-if="compra.modoCobro !== 'manual' || !cuotasPagadas(compra)"
                   type="button"
                   class="btn-icon !p-1.5 hover:!text-negative sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100"
                   :disabled="eliminandoCompraId === compra.id"

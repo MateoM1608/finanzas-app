@@ -43,6 +43,31 @@ const form = reactive({
   trm: c.trm ? String(c.trm) : '',
 });
 
+// Reparto del hogar en %: el que tienen hoy sus cuotas (el mismo en todas).
+const redondear2 = (x) => Math.round(x * 100) / 100;
+const primeraCuota = c.cuotas?.[0];
+const pctOriginal = Object.fromEntries(
+  props.miembros.map((m) => {
+    const r = primeraCuota?.repartos?.find((x) => x.usuarioId === m.id);
+    return [m.id, r && primeraCuota.valorTotal ? redondear2((r.monto / primeraCuota.valorTotal) * 100) : 0];
+  }),
+);
+const reparto = reactive({ ...pctOriginal });
+const sumaReparto = computed(() => redondear2(props.miembros.reduce((a, m) => a + (Number(reparto[m.id]) || 0), 0)));
+const repartoValido = computed(() => props.tipo !== 'hogar' || Math.abs(sumaReparto.value - 100) < 0.011);
+const cambiaReparto = computed(
+  () => props.tipo === 'hogar' && props.miembros.some((m) => (Number(reparto[m.id]) || 0) !== pctOriginal[m.id]),
+);
+// Pasa los % a pesos del valor total; lo que sobra por redondeo va al de mayor %.
+function repartoEnPesos(total) {
+  const filas = props.miembros.map((m) => ({ usuarioId: m.id, pct: Number(reparto[m.id]) || 0 }));
+  const montos = filas.map((f) => ({ usuarioId: f.usuarioId, monto: Math.floor((total * f.pct) / 100) }));
+  const resto = total - montos.reduce((a, x) => a + x.monto, 0);
+  const mayor = filas.reduce((iMax, f, i) => (f.pct > filas[iMax].pct ? i : iMax), 0);
+  montos[mayor].monto += resto;
+  return montos;
+}
+
 const conTarjeta = computed(
   () => props.tipo === 'personal' && props.metodos.find((m) => m.id === form.metodoPagoId)?.tipo === 'tarjeta_credito',
 );
@@ -74,7 +99,8 @@ const cambiaCuotas = computed(
     (props.tipo === 'hogar' && form.pagoUsuarioId !== c.pagoUsuarioId) ||
     Number(form.cuotasPagadasAntes) !== (c.cuotasPagadasAntes ?? 0) ||
     (usdCentavos.value ?? null) !== (c.montoUsd ?? null) ||
-    (form.enDolares && trmNum.value !== c.trm),
+    (form.enDolares && trmNum.value !== c.trm) ||
+    cambiaReparto.value,
 );
 
 function onSubmit() {
@@ -104,6 +130,7 @@ function onSubmit() {
       categoriaId: form.categoriaId || null,
     });
     if (pagaYo.value) payload.metodoPagoId = form.metodoPagoId || null;
+    if (cambiaReparto.value) payload.repartos = repartoEnPesos(Number(form.montoTotal));
   }
   emit('guardar', payload);
 }
@@ -170,6 +197,25 @@ function onSubmit() {
         <option v-for="cat in categoriasVisibles" :key="cat.id" :value="cat.id">{{ cat.nombre }}</option>
       </select>
     </div>
+    <fieldset v-if="tipo === 'hogar' && miembros.length > 1" class="sm:col-span-2">
+      <legend class="label">Reparto (% de cada uno)</legend>
+      <div class="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <FormField
+          v-for="m in miembros"
+          :key="m.id"
+          v-model="reparto[m.id]"
+          type="number"
+          step="0.01"
+          :label="m.nombre"
+        />
+      </div>
+      <p
+        class="mt-2 text-[13px] font-medium"
+        :class="repartoValido ? 'text-ink-tertiary' : 'text-negative'"
+      >
+        Suma: {{ sumaReparto }} %<template v-if="!repartoValido"> · tiene que dar 100 %</template>
+      </p>
+    </fieldset>
     <div v-if="pagaYo">
       <label class="label" :for="`compra-${compra.id}-metodo`">
         {{ tipo === 'hogar' ? 'Tu método de pago (solo lo ves tú)' : 'Método de pago' }}
@@ -219,7 +265,7 @@ function onSubmit() {
 
     <div class="flex justify-end gap-2 sm:col-span-2">
       <button type="button" class="btn-ghost" @click="emit('cancelar')">Cancelar</button>
-      <button type="submit" class="btn-primary" :disabled="guardando || !dolaresValidos">
+      <button type="submit" class="btn-primary" :disabled="guardando || !dolaresValidos || !repartoValido">
         {{ guardando ? 'Guardando…' : 'Guardar cambios' }}
       </button>
     </div>

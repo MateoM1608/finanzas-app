@@ -102,4 +102,4 @@ Todos los gráficos manejan estado vacío explícito ("Aún no hay gastos…", "
 - Presupuestos/deudas/metas conjuntas quedan fuera de ese documento, más adelante
 - Backlog técnico de UI que sigue abierto (ver CLAUDE.md): índices de BD, el neto en vivo de `CuadresView.vue` (`preview`) reimplementa en el cliente el mismo cálculo que hace `confirmarCuadre` en el backend, y falta la pasada de pulido visual general entre vistas.
 
-**Editar compra desde la cuota (2026-11-27):** en Gastos variables del hogar, cada cuota de una compra a cuotas (sin cuadrar) tiene "Editar compra", que abre el mismo formulario que el lápiz de la sección Compras a cuotas.
+**Editar compra desde la cuota (2026-11-27):** en Gastos variables del hogar, cada cuota de una compra a cuotas (sin cuadrar) tiene "Editar compra", que abre el mismo formulario que el lápiz de la sección Compras a cuotas. Ese formulario (`CompraCuotasForm.vue`, hogar) muestra el reparto en % de cada miembro con el actual; tiene que sumar 100 % y al cambiarlo recalcula las cuotas (se envía en pesos). En Personal, el botón de eliminar una compra automática aparece aunque tenga cuotas vencidas.

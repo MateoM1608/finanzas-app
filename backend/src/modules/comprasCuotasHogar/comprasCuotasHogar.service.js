@@ -34,7 +34,15 @@ const INCLUDE_COMPRA = {
   metodoPago: true,
   categoria: { select: { id: true, nombre: true } },
   cuotas: {
-    select: { id: true, numeroCuota: true, valorTotal: true, fecha: true, estado: true },
+    select: {
+      id: true,
+      numeroCuota: true,
+      valorTotal: true,
+      fecha: true,
+      estado: true,
+      // Para editar el reparto de la compra (el mismo en todas sus cuotas).
+      repartos: { select: { usuarioId: true, monto: true } },
+    },
     orderBy: { numeroCuota: 'asc' },
   },
 };
