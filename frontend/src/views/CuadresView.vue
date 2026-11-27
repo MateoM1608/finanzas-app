@@ -18,6 +18,7 @@ import AppLayout from '../components/AppLayout.vue';
 import AppIcon from '../components/AppIcon.vue';
 import AppModal from '../components/AppModal.vue';
 import AlertError from '../components/AlertError.vue';
+import TablaCuadre from '../components/hogar/TablaCuadre.vue';
 
 const auth = useAuthStore();
 const route = useRoute();
@@ -204,34 +205,14 @@ function textoBalances(cuadre) {
 
           <div v-if="!borrador.items.length" class="empty">Este cuadre ya no tiene gastos.</div>
 
-          <div v-for="grupo in grupos" :key="grupo.id" class="mb-4 last:mb-0">
-            <p class="mb-1 text-[13px] font-medium text-ink-secondary">{{ grupo.titulo }}</p>
-            <ul class="list">
-              <li v-for="item in grupo.items" :key="item.id" class="list-row !py-3">
-                <label class="flex min-w-0 flex-1 cursor-pointer items-center gap-3">
-                  <input
-                    type="checkbox"
-                    class="checkbox shrink-0"
-                    :checked="item.incluido"
-                    :disabled="!puedeEditar || marcandoId === item.id"
-                    @change="onMarcar(item)"
-                  />
-                  <span class="min-w-0" :class="{ 'opacity-50': !item.incluido }">
-                    <span class="block truncate text-sm font-medium text-ink-primary">{{ item.nombre }}</span>
-                    <span class="block truncate text-[13px] text-ink-tertiary">
-                      {{ formatDate(item.fecha) }} · Pagó {{ item.pagador?.nombre }}
-                    </span>
-                  </span>
-                </label>
-                <span
-                  class="shrink-0 whitespace-nowrap text-sm font-semibold"
-                  :class="item.incluido ? 'text-ink-primary' : 'text-ink-tertiary line-through'"
-                >
-                  {{ formatCurrency(item.monto) }}
-                </span>
-              </li>
-            </ul>
-          </div>
+          <TablaCuadre
+            v-if="borrador.items.length"
+            :grupos="grupos"
+            seleccionable
+            :puede-marcar="puedeEditar"
+            :marcando-id="marcandoId"
+            @marcar="onMarcar"
+          />
 
           <div class="panel-sunken mt-5 flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between">
             <div class="min-w-0">
@@ -310,19 +291,9 @@ function textoBalances(cuadre) {
                   />
                 </span>
               </button>
-              <ul v-if="expandidoId === cuadre.id" class="panel-sunken mb-3 divide-y divide-border px-3.5">
-                <li v-for="item in cuadre.items" :key="item.id" class="flex items-center justify-between gap-3 py-2.5">
-                  <span class="min-w-0">
-                    <span class="block truncate text-[13px] font-medium text-ink-primary">{{ item.nombre }}</span>
-                    <span class="block truncate text-xs text-ink-tertiary">
-                      {{ formatDate(item.fecha) }} · Pagó {{ item.pagador?.nombre }}
-                    </span>
-                  </span>
-                  <span class="shrink-0 whitespace-nowrap text-[13px] font-medium text-ink-primary">
-                    {{ formatCurrency(item.monto) }}
-                  </span>
-                </li>
-              </ul>
+              <div v-if="expandidoId === cuadre.id" class="panel-sunken mb-3 p-3.5">
+                <TablaCuadre :grupos="[{ id: 'items', items: cuadre.items }]" compacto />
+              </div>
             </li>
           </ul>
         </section>
