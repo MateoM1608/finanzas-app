@@ -17,6 +17,7 @@ import {
   sugerirPrimeraCuota,
 } from '../../api/comprasCuotas.js';
 import CompraCuotasForm from '../CompraCuotasForm.vue';
+import RepartoMiembros from './RepartoMiembros.vue';
 import { listarMetodosPago } from '../../api/metodosPagoPersonales.js';
 import { useAuthStore } from '../../stores/auth.js';
 import { confirmar } from '../../composables/useConfirm.js';
@@ -46,10 +47,11 @@ const fecha = ref(hoyISO());
 const creando = ref(false);
 
 const personalizarReparto = ref(false);
-const repartoManual = reactive({}); // usuarioId -> string
+// { montos: [{ usuarioId, monto }], valido, cambiado } — de RepartoMiembros (en % o en pesos).
+const repartoManual = ref({ montos: [], valido: false });
 
 const editandoRepartoId = ref(null);
-const repartoEdicion = reactive({}); // usuarioId -> string
+const repartoEdicion = ref({ montos: [], valido: false });
 const guardandoRepartoId = ref(null);
 
 const auth = useAuthStore();
@@ -249,18 +251,7 @@ function esEditable(gasto) {
   return puedeEditar.value && gasto.estado === 'pagado' && !gasto.compraId;
 }
 
-function inicializarRepartoManual() {
-  for (const m of miembros.value) {
-    repartoManual[m.id] = repartoManual[m.id] ?? '';
-  }
-}
-
-const sumaRepartoManual = computed(() =>
-  miembros.value.reduce((acc, m) => acc + (Number(repartoManual[m.id]) || 0), 0),
-);
-const repartoManualValido = computed(
-  () => Number(valorTotal.value) > 0 && sumaRepartoManual.value === Number(valorTotal.value),
-);
+const repartoManualValido = computed(() => repartoManual.value.valido);
 
 async function cargar() {
   loading.value = true;
@@ -277,7 +268,6 @@ async function cargar() {
     miembros.value = listaMiembros;
     compras.value = listaCompras;
     misMetodos.value = metodos;
-    inicializarRepartoManual();
   } catch (e) {
     error.value = extractErrorMessage(e);
   } finally {
@@ -297,10 +287,7 @@ async function onCrear() {
       categoriaId: categoriaId.value || undefined,
     };
     if (personalizarReparto.value) {
-      payload.repartos = miembros.value.map((m) => ({
-        usuarioId: m.id,
-        monto: Number(repartoManual[m.id]) || 0,
-      }));
+      payload.repartos = repartoManual.value.montos;
     }
     if (aCuotas.value) {
       await crearCompraHogar({
@@ -336,7 +323,6 @@ async function onCrear() {
     pagoUsuarioId.value = '';
     fecha.value = hoyISO();
     personalizarReparto.value = false;
-    for (const m of miembros.value) repartoManual[m.id] = '';
     mostrarForm.value = false;
     emit('cambio');
   } catch (e) {
@@ -419,10 +405,6 @@ async function onGuardarEdicion() {
 
 function onIniciarEditarReparto(gasto) {
   error.value = '';
-  const actuales = new Map(gasto.repartos.map((r) => [r.usuarioId, r.monto]));
-  for (const m of miembros.value) {
-    repartoEdicion[m.id] = actuales.get(m.id) ?? 0;
-  }
   editandoRepartoId.value = gasto.id;
 }
 
@@ -430,18 +412,15 @@ function onCancelarEditarReparto() {
   editandoRepartoId.value = null;
 }
 
-function sumaRepartoEdicion() {
-  return miembros.value.reduce((acc, m) => acc + (Number(repartoEdicion[m.id]) || 0), 0);
+function repartoActual(gasto) {
+  return Object.fromEntries(gasto.repartos.map((x) => [x.usuarioId, x.monto]));
 }
 
 async function onGuardarReparto(gasto) {
   error.value = '';
   guardandoRepartoId.value = gasto.id;
   try {
-    const repartos = miembros.value.map((m) => ({
-      usuarioId: m.id,
-      monto: Number(repartoEdicion[m.id]) || 0,
-    }));
+    const repartos = repartoEdicion.value.montos;
     const actualizado = await actualizarGastoVariable(gasto.id, { repartos });
     const idx = gastos.value.findIndex((g) => g.id === gasto.id);
     gastos.value[idx] = actualizado;
@@ -604,25 +583,14 @@ watch(
           </label>
         </div>
 
-        <template v-if="personalizarReparto">
-          <div v-for="m in miembros" :key="m.id">
-            <FormField
-              v-model="repartoManual[m.id]"
-              type="number"
-              :label="`Le toca a ${m.nombre} (COP)`"
-            />
-          </div>
-          <p
-            class="sm:col-span-2 flex items-center gap-2 text-[13px] font-medium rounded-lg px-3 py-2"
-            :class="repartoManualValido ? 'text-positive bg-positive/10' : 'text-negative bg-negative/10'"
-          >
-            <AppIcon :name="repartoManualValido ? 'check' : 'alert'" class="h-4 w-4 shrink-0" />
-            <span>
-              Suma del reparto: {{ formatCurrency(sumaRepartoManual) }}
-              <span v-if="valorTotal"> de {{ formatCurrency(Number(valorTotal)) }}</span>
-            </span>
-          </p>
-        </template>
+        <RepartoMiembros
+          v-if="personalizarReparto"
+          v-model="repartoManual"
+          class="sm:col-span-2"
+          :miembros="miembros"
+          :total="Number(valorTotal) || 0"
+          id-prefijo="reparto-nuevo"
+        />
 
         <div class="sm:col-span-2 pt-1">
           <p v-if="!personalizarReparto" class="text-[13px] text-ink-tertiary mb-3">
@@ -747,30 +715,21 @@ watch(
 
         <div v-else class="panel-sunken mt-3 p-4 space-y-3">
           <p class="text-[13px] font-medium text-ink-secondary">Reparto de este gasto</p>
-          <div v-for="m in miembros" :key="m.id" class="flex items-center justify-between gap-4">
-            <label :for="`reparto-${gasto.id}-${m.id}`" class="text-sm text-ink-primary truncate">{{ m.nombre }}</label>
-            <input
-              :id="`reparto-${gasto.id}-${m.id}`"
-              v-model="repartoEdicion[m.id]"
-              type="number"
-              inputmode="numeric"
-              class="field !w-36 text-right"
-            />
-          </div>
+          <RepartoMiembros
+            v-model="repartoEdicion"
+            :miembros="miembros"
+            :total="gasto.valorTotal"
+            :inicial="repartoActual(gasto)"
+            :id-prefijo="`reparto-${gasto.id}`"
+          />
           <div class="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-border">
-            <span
-              class="text-[13px] font-medium"
-              :class="sumaRepartoEdicion() === gasto.valorTotal ? 'text-positive' : 'text-negative'"
-            >
-              Suma: {{ formatCurrency(sumaRepartoEdicion()) }} de {{ formatCurrency(gasto.valorTotal) }}
-            </span>
             <div class="flex gap-2 ml-auto">
               <button class="btn-ghost btn-sm" @click="onCancelarEditarReparto">
                 Cancelar
               </button>
               <button
                 class="btn-primary btn-sm"
-                :disabled="guardandoRepartoId === gasto.id || sumaRepartoEdicion() !== gasto.valorTotal"
+                :disabled="guardandoRepartoId === gasto.id || !repartoEdicion.valido"
                 @click="onGuardarReparto(gasto)"
               >
                 Guardar
