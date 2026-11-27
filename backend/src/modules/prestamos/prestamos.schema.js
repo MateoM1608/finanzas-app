@@ -44,6 +44,20 @@ export const actualizarPrestamoSchema = z.object({
   modoCobro: z.enum(['automatico', 'manual']).optional(),
   metodoPagoId: uuid.nullable().optional(),
   pagoUsuarioId: uuid.optional(),
+  // Condiciones del plan: recalculan las cuotas sin pagar. Siempre: tasa,
+  // sistema, seguro, saldo de capital de hoy, cuotas que faltan y fecha de la
+  // próxima cuota. Solo sin pagos ni abonos: monto prestado, cuotas pagadas
+  // antes de registrarlo y fecha del desembolso.
+  tasa: z.number().min(0).max(200).optional(),
+  tasaEsAnual: z.boolean().optional(),
+  sistemaInteres: z.enum(['cuota_fija', 'capital_fijo']).optional(),
+  seguroMensual: z.number().int().min(0).max(MONTO_MAX).optional(),
+  saldoActual: monto.optional(),
+  cuotasRestantes: z.number().int().min(1).max(360).optional(),
+  fechaProximaCuota: fechaApp.optional(),
+  montoPrestado: monto.optional(),
+  cuotasPrevias: z.number().int().min(0).max(360).optional(),
+  fechaDesembolso: fechaApp.nullable().optional(),
 });
 
 export const pagarCuotaSchema = z.object({

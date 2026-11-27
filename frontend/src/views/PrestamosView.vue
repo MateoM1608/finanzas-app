@@ -213,25 +213,114 @@ async function onQuitarAbono(p, a) {
 
 // --- Editar / eliminar ---
 const editando = ref(null);
-const edicion = reactive({ nombre: '', entidad: '', modoCobro: 'manual', metodoPagoId: '', pagoUsuarioId: '' });
+const edicion = reactive({
+  nombre: '', entidad: '', tipo: 'otro', categoriaId: '', modoCobro: 'manual', metodoPagoId: '', pagoUsuarioId: '',
+  // Condiciones del plan: recalculan las cuotas sin pagar.
+  tasa: '', tasaEsAnual: true, sistemaInteres: 'cuota_fija', seguroMensual: '',
+  saldoActual: '', cuotasRestantes: '', fechaProximaCuota: '',
+  montoPrestado: '', cuotasPrevias: '', fechaDesembolso: '',
+});
+const categoriasGasto = computed(() => categorias.value.filter((c) => c.aplicaA?.includes('gasto')));
+// Con cuotas sin pagar hay condiciones que editar; sin pagos, también el monto y el desembolso.
+const editaCondiciones = computed(() => Boolean(editando.value && editando.value.cuotasRecalculables > 0 && editando.value.saldoCapital > 0));
+// Préstamo nuevo sin pagos: el saldo de hoy es el monto prestado.
+const esNuevoSinPagos = computed(() => Boolean(editando.value && !editando.value.conPagos && !editando.value.cuotasPrevias));
+const dia10 = (f) => (f ? String(f).slice(0, 10) : '');
+
 function abrirEdicion(p) {
   editando.value = p;
-  edicion.nombre = p.nombre;
-  edicion.entidad = p.entidad ?? '';
-  edicion.modoCobro = p.modoCobro;
-  edicion.metodoPagoId = p.metodoPagoId ?? '';
-  edicion.pagoUsuarioId = p.pagoUsuarioId ?? '';
+  Object.assign(edicion, {
+    nombre: p.nombre,
+    entidad: p.entidad ?? '',
+    tipo: p.tipo,
+    categoriaId: p.categoriaId ?? '',
+    modoCobro: p.modoCobro,
+    metodoPagoId: p.metodoPagoId ?? '',
+    pagoUsuarioId: p.pagoUsuarioId ?? '',
+    tasa: p.tasaIngresada ?? 0,
+    tasaEsAnual: p.tasaEsAnual,
+    sistemaInteres: p.sistemaInteres,
+    seguroMensual: p.seguroMensual || '',
+    saldoActual: p.saldoCapital,
+    cuotasRestantes: p.cuotasRecalculables,
+    fechaProximaCuota: dia10(p.proximaRecalculable),
+    montoPrestado: p.montoPrestado,
+    cuotasPrevias: p.cuotasPrevias,
+    fechaDesembolso: dia10(p.fechaDesembolso),
+  });
 }
+
+function condicionesDeEdicion() {
+  const p = editando.value;
+  const saldo = Number(esNuevoSinPagos.value ? edicion.montoPrestado : edicion.saldoActual);
+  const c = {
+    tasa: Number(edicion.tasa) || 0,
+    tasaEsAnual: edicion.tasaEsAnual,
+    sistemaInteres: edicion.sistemaInteres,
+    seguroMensual: Number(edicion.seguroMensual) || 0,
+    saldoActual: saldo,
+    cuotasRestantes: Number(edicion.cuotasRestantes),
+    fechaProximaCuota: edicion.fechaProximaCuota,
+  };
+  if (!p.conPagos) {
+    c.montoPrestado = Number(edicion.montoPrestado) || saldo;
+    c.cuotasPrevias = Number(edicion.cuotasPrevias) || 0;
+    c.fechaDesembolso = edicion.fechaDesembolso || null;
+  }
+  return c;
+}
+
+// ¿Cambia algo del plan? Entonces se avisa que se recalculan las cuotas.
+const cambiaPlan = computed(() => {
+  const p = editando.value;
+  if (!p || !editaCondiciones.value) return false;
+  const c = condicionesDeEdicion();
+  return (
+    c.tasa !== (p.tasaIngresada ?? 0) ||
+    c.tasaEsAnual !== p.tasaEsAnual ||
+    c.sistemaInteres !== p.sistemaInteres ||
+    c.seguroMensual !== (p.seguroMensual ?? 0) ||
+    c.saldoActual !== p.saldoCapital ||
+    c.cuotasRestantes !== p.cuotasRecalculables ||
+    c.fechaProximaCuota !== dia10(p.proximaRecalculable) ||
+    (!p.conPagos &&
+      (c.montoPrestado !== p.montoPrestado ||
+        c.cuotasPrevias !== p.cuotasPrevias ||
+        (c.fechaDesembolso ?? '') !== dia10(p.fechaDesembolso)))
+  );
+});
+
+// Vista previa de la primera cuota nueva, con la misma fórmula del backend.
+const cuotaNueva = computed(() => {
+  if (!cambiaPlan.value) return null;
+  const c = condicionesDeEdicion();
+  const n = c.cuotasRestantes;
+  if (!c.saldoActual || !n) return null;
+  const r = (c.tasaEsAnual ? (1 + c.tasa / 100) ** (1 / 12) - 1 : c.tasa / 100) || 0;
+  if (r <= 0) return Math.round(c.saldoActual / n) + c.seguroMensual;
+  if (c.sistemaInteres === 'capital_fijo') return Math.round(c.saldoActual / n + c.saldoActual * r) + c.seguroMensual;
+  return Math.round((c.saldoActual * r) / (1 - (1 + r) ** -n)) + c.seguroMensual;
+});
+
 async function onGuardarEdicion() {
   const p = editando.value;
   const pagaYo = p.ambito === 'personal' || edicion.pagoUsuarioId === yo.value;
+  const recalcula = cambiaPlan.value;
+  if (recalcula) {
+    const texto = p.conPagos
+      ? `Se van a recalcular las ${p.cuotasRecalculables} cuotas sin pagar. Las pagadas y los abonos no cambian.`
+      : 'Se van a recalcular todas las cuotas del préstamo.';
+    if (!(await confirmar(texto, { textoAceptar: 'Recalcular', peligroso: false }))) return;
+  }
   const ok = await ejecutar(() =>
     actualizarPrestamo(p.id, {
       nombre: edicion.nombre,
       entidad: edicion.entidad || null,
+      tipo: edicion.tipo,
       modoCobro: edicion.modoCobro,
       ...(pagaYo ? { metodoPagoId: edicion.metodoPagoId || null } : {}),
-      ...(p.ambito === 'hogar' ? { pagoUsuarioId: edicion.pagoUsuarioId } : {}),
+      ...(p.ambito === 'hogar' ? { pagoUsuarioId: edicion.pagoUsuarioId } : { categoriaId: edicion.categoriaId || null }),
+      ...(recalcula ? condicionesDeEdicion() : {}),
     }),
   );
   if (ok) editando.value = null;
@@ -541,10 +630,16 @@ function progreso(p) {
       />
     </AppModal>
 
-    <AppModal v-if="editando" :title="`Editar ${editando.nombre}`" @close="editando = null">
-      <form class="grid grid-cols-1 gap-4" @submit.prevent="onGuardarEdicion">
+    <AppModal v-if="editando" :title="`Editar ${editando.nombre}`" size="lg" @close="editando = null">
+      <form class="grid grid-cols-1 gap-4 sm:grid-cols-2" @submit.prevent="onGuardarEdicion">
         <FormField v-model="edicion.nombre" label="Nombre" required />
         <FormField v-model="edicion.entidad" label="Entidad" />
+        <div>
+          <label class="label" for="editar-tipo">Tipo</label>
+          <select id="editar-tipo" v-model="edicion.tipo" class="field">
+            <option v-for="(label, valor) in TIPO" :key="valor" :value="valor">{{ label }}</option>
+          </select>
+        </div>
         <div>
           <label class="label" for="editar-modo">Cómo se paga cada cuota</label>
           <select id="editar-modo" v-model="edicion.modoCobro" class="field">
@@ -565,10 +660,62 @@ function progreso(p) {
             <option v-for="m in metodos" :key="m.id" :value="m.id">{{ m.nombre }}</option>
           </select>
         </div>
-        <p class="text-xs text-ink-tertiary">Los cambios se aplican a las cuotas que no se han pagado. El monto, la tasa y el plazo no se editan: para cambiarlos usa un abono, o elimínalo y regístralo de nuevo mientras no tenga pagos.</p>
-        <div class="flex justify-end gap-2">
+        <div v-if="editando.ambito === 'personal' && categoriasGasto.length">
+          <label class="label" for="editar-categoria">Categoría</label>
+          <select id="editar-categoria" v-model="edicion.categoriaId" class="field">
+            <option value="">Sin categoría</option>
+            <option v-for="c in categoriasGasto" :key="c.id" :value="c.id">{{ c.nombre }}</option>
+          </select>
+        </div>
+
+        <section v-if="editaCondiciones" class="sm:col-span-2 grid grid-cols-1 gap-4 sm:grid-cols-2 border-t border-border pt-4" aria-labelledby="editar-condiciones">
+          <div class="sm:col-span-2">
+            <h3 id="editar-condiciones" class="text-sm font-semibold text-ink-primary">Condiciones del préstamo</h3>
+            <p class="mt-1 text-[13px] text-ink-secondary">
+              <template v-if="editando.conPagos">Cambiarlas recalcula las {{ editando.cuotasRecalculables }} cuotas sin pagar. Las pagadas y los abonos no cambian.</template>
+              <template v-else>Todavía no tiene pagos: cambiarlas recalcula todas las cuotas.</template>
+            </p>
+          </div>
+          <template v-if="esNuevoSinPagos">
+            <FormField v-model="edicion.montoPrestado" type="number" label="Monto prestado (COP)" required />
+            <FormField v-model="edicion.cuotasRestantes" type="number" label="Plazo (número de cuotas)" required />
+            <FormField v-model="edicion.fechaDesembolso" type="date" label="Fecha del desembolso" />
+            <FormField v-model="edicion.fechaProximaCuota" type="date" label="Fecha de la primera cuota" required />
+          </template>
+          <template v-else>
+            <FormField v-model="edicion.saldoActual" type="number" label="Lo que debes hoy (capital)" required hint="Sale en el extracto o la app del banco." />
+            <FormField v-model="edicion.cuotasRestantes" type="number" label="Cuotas que faltan" required />
+            <FormField v-model="edicion.fechaProximaCuota" type="date" label="Fecha de la próxima cuota" required />
+            <template v-if="!editando.conPagos">
+              <FormField v-model="edicion.cuotasPrevias" type="number" label="Cuotas ya pagadas antes de registrarlo" />
+              <FormField v-model="edicion.montoPrestado" type="number" label="Monto que te prestaron" />
+            </template>
+          </template>
+          <div class="grid grid-cols-[1fr_auto] gap-2 items-end">
+            <FormField v-model="edicion.tasa" type="number" step="0.01" label="Tasa de interés (%)" />
+            <select v-model="edicion.tasaEsAnual" class="field !w-auto" aria-label="Tipo de tasa">
+              <option :value="true">E.A.</option>
+              <option :value="false">mensual</option>
+            </select>
+          </div>
+          <div>
+            <label class="label" for="editar-sistema">Cómo se calculan las cuotas</label>
+            <select id="editar-sistema" v-model="edicion.sistemaInteres" class="field">
+              <option value="cuota_fija">Cuota fija (todas iguales)</option>
+              <option value="capital_fijo">Capital fijo + interés (bajan)</option>
+            </select>
+          </div>
+          <FormField v-model="edicion.seguroMensual" type="number" label="Seguro mensual" hint="Se suma a cada cuota." />
+          <p v-if="cuotaNueva" class="sm:col-span-2 text-sm text-ink-secondary" aria-live="polite">
+            Cuota nueva aproximada: <span class="font-semibold text-ink-primary">{{ formatCurrency(cuotaNueva) }}</span>
+            <template v-if="editando.proximaCuota">, hoy es de {{ formatCurrency(editando.proximaCuota.monto) }}</template>
+          </p>
+        </section>
+        <p v-else class="sm:col-span-2 text-xs text-ink-tertiary">Este préstamo ya no tiene cuotas por pagar: sus condiciones no se cambian.</p>
+
+        <div class="flex justify-end gap-2 sm:col-span-2">
           <button type="button" class="btn-ghost" @click="editando = null">Cancelar</button>
-          <button type="submit" class="btn-primary">Guardar</button>
+          <button type="submit" class="btn-primary">{{ cambiaPlan ? 'Guardar y recalcular' : 'Guardar' }}</button>
         </div>
       </form>
     </AppModal>

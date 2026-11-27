@@ -213,6 +213,7 @@ async function recalcularPendientes(tx, prestamo, modo) {
 function vistaPrestamo(prestamo, cuotas, abonos, usuarioActual, hoy) {
   const pagadas = cuotas.filter((c) => estaPagada(prestamo, c, hoy));
   const pendientes = cuotas.filter((c) => !estaPagada(prestamo, c, hoy));
+  const recalculables = cuotas.filter((c) => esRecalculable(prestamo, c, hoy));
   const capitalPagado = pagadas.reduce((a, c) => a + (c.capital ?? 0), 0);
   const totalAbonos = abonos.reduce((a, b) => a + b.monto, 0);
   const saldo = Math.max(0, prestamo.saldoInicial - capitalPagado - totalAbonos);
@@ -242,6 +243,11 @@ function vistaPrestamo(prestamo, cuotas, abonos, usuarioActual, hoy) {
     proximaCuota: proxima ? { numero: proxima.numeroCuota, fecha: proxima.fecha, monto: montoCuota(proxima) } : null,
     terminaEn: cuotas.at(-1)?.fecha ?? null,
     terminado: saldo === 0 && !pendientes.length,
+    // Para editar las condiciones: si ya hay pagos (solo se recalcula lo que
+    // falta) y cuántas cuotas sin pagar se recalcularían, desde qué fecha.
+    conPagos: abonos.length > 0 || cuotas.some((c) => estaPagada(prestamo, c, hoy) || ['en_cuadre', 'cuadrado'].includes(c.estado)),
+    cuotasRecalculables: recalculables.length,
+    proximaRecalculable: recalculables[0] ? (recalculables[0].fechaVencimiento ?? recalculables[0].fecha) : null,
     cuotas: cuotas.map((c) => ({
       id: c.id,
       numero: c.numeroCuota,
@@ -417,9 +423,82 @@ async function evaluarPagadas(prestamo) {
   }
 }
 
+const dia = (f) => (f ? new Date(f).toISOString().slice(0, 10) : null);
+
 /**
- * Edita datos que no cambian el plan: nombre, entidad, tipo, categoría,
- * cuenta, cómo se paga y (hogar) quién paga. Se aplican a las cuotas sin pagar.
+ * Condiciones nuevas del plan, o null si no cambia nada. Lo pagado (cuotas
+ * pagadas, en un cuadre, abonos) nunca se toca: se recalculan solo las cuotas
+ * sin pagar, desde el saldo de capital de hoy. Sin pagos ni abonos también se
+ * puede cambiar el monto prestado, las cuotas pagadas antes y el desembolso.
+ */
+async function condicionesNuevas(tx, prestamo, cuotas, hoy, data) {
+  const abonos = await sumaAbonos(tx, prestamo.id);
+  const conPagos = abonos > 0 || cuotas.some((c) => estaPagada(prestamo, c, hoy) || ['en_cuadre', 'cuadrado'].includes(c.estado));
+  const pendientes = cuotas.filter((c) => esRecalculable(prestamo, c, hoy));
+  const saldoHoy = Math.max(0, await saldoCapital(tx, prestamo, cuotas, hoy));
+  const proxima = pendientes[0] ? dia(pendientes[0].fechaVencimiento ?? pendientes[0].fecha) : null;
+
+  const tasa = data.tasa ?? prestamo.tasaIngresada;
+  const tasaEsAnual = data.tasaEsAnual ?? prestamo.tasaEsAnual;
+  const nuevas = {
+    tasaIngresada: tasa,
+    tasaEsAnual,
+    tasaMensual: data.tasa !== undefined || data.tasaEsAnual !== undefined ? tasaMensualDe(tasa, tasaEsAnual) : prestamo.tasaMensual,
+    sistemaInteres: data.sistemaInteres ?? prestamo.sistemaInteres,
+    seguroMensual: data.seguroMensual ?? prestamo.seguroMensual,
+    saldo: data.saldoActual ?? saldoHoy,
+    restantes: data.cuotasRestantes ?? pendientes.length,
+    desde: data.fechaProximaCuota ? dia(data.fechaProximaCuota) : proxima,
+    montoPrestado: data.montoPrestado ?? prestamo.montoPrestado,
+    cuotasPrevias: data.cuotasPrevias ?? prestamo.cuotasPrevias,
+    fechaDesembolso: data.fechaDesembolso === undefined ? prestamo.fechaDesembolso : data.fechaDesembolso,
+  };
+
+  const soloSinPagos =
+    nuevas.montoPrestado !== prestamo.montoPrestado ||
+    nuevas.cuotasPrevias !== prestamo.cuotasPrevias ||
+    dia(nuevas.fechaDesembolso) !== dia(prestamo.fechaDesembolso);
+  const cambiaPlan =
+    soloSinPagos ||
+    nuevas.tasaIngresada !== prestamo.tasaIngresada ||
+    nuevas.tasaEsAnual !== prestamo.tasaEsAnual ||
+    nuevas.sistemaInteres !== prestamo.sistemaInteres ||
+    nuevas.seguroMensual !== prestamo.seguroMensual ||
+    nuevas.saldo !== saldoHoy ||
+    nuevas.restantes !== pendientes.length ||
+    nuevas.desde !== proxima;
+  if (!cambiaPlan) return null;
+
+  if (soloSinPagos && conPagos) {
+    throw new HttpError(409, 'Este préstamo ya tiene cuotas pagadas o abonos: el monto prestado, las cuotas pagadas antes y el desembolso ya no se cambian');
+  }
+  if (!nuevas.saldo) throw new HttpError(409, 'Este préstamo ya no tiene saldo por pagar');
+  if (!nuevas.restantes) throw new HttpError(400, 'Indica cuántas cuotas faltan');
+  if (!nuevas.desde) throw new HttpError(400, 'Indica la fecha de la próxima cuota');
+  // Una cuota pagada después de la primera sin pagar chocaría con la numeración nueva.
+  const primeraPendiente = pendientes[0]?.numeroCuota ?? Infinity;
+  if (cuotas.some((c) => !esRecalculable(prestamo, c, hoy) && c.numeroCuota > primeraPendiente)) {
+    throw new HttpError(409, 'Hay cuotas pagadas después de una sin pagar: paga o deshaz esas cuotas antes de cambiar las condiciones');
+  }
+
+  const capitalPagado = cuotas.filter((c) => estaPagada(prestamo, c, hoy)).reduce((a, c) => a + (c.capital ?? 0), 0);
+  return {
+    ...nuevas,
+    conPagos,
+    pendientes,
+    // Saldo al registrarlo, de modo que saldo − capital pagado − abonos dé el saldo de hoy.
+    saldoInicial: nuevas.saldo + capitalPagado + abonos,
+    desdeNumero: conPagos
+      ? (pendientes[0]?.numeroCuota ?? prestamo.cuotasPrevias + cuotas.length + 1)
+      : nuevas.cuotasPrevias + 1,
+  };
+}
+
+/**
+ * Edita un préstamo. Datos que no cambian el plan (nombre, entidad, tipo,
+ * categoría, cuenta, cómo se paga y, en el hogar, quién paga) se aplican a las
+ * cuotas sin pagar. Las condiciones (tasa, sistema, seguro, saldo, cuotas que
+ * faltan, próxima fecha) recalculan esas cuotas; lo ya pagado no se toca.
  */
 export async function actualizarPrestamo(usuarioActual, id, data) {
   const prestamo = await requirePrestamo(usuarioActual, id, { editar: true });
@@ -452,10 +531,46 @@ export async function actualizarPrestamo(usuarioActual, id, data) {
     metodoPagoId,
   };
 
+  let recalculado = false;
   await prisma.$transaction(
     async (tx) => {
-      const actualizado = await tx.prestamo.update({ where: { id }, data: datos });
       const hoy = hoyUTC();
+      const cond = await condicionesNuevas(tx, prestamo, await cuotasDe(tx, prestamo), hoy, data);
+      let actualizado = await tx.prestamo.update({ where: { id }, data: datos });
+
+      if (cond) {
+        recalculado = true;
+        const porcentajes = actualizado.hogarId ? await porcentajesHogar(tx, actualizado) : null;
+        const todas = await cuotasDe(tx, actualizado);
+        await borrarCuotas(tx, actualizado, (cond.conPagos ? cond.pendientes : todas).map((c) => c.id));
+        const plan = planPorNumero(cond.saldo, cond.restantes, cond.tasaMensual, cond.sistemaInteres, cond.seguroMensual);
+        actualizado = await tx.prestamo.update({
+          where: { id },
+          data: {
+            tasaIngresada: cond.tasaIngresada,
+            tasaEsAnual: cond.tasaEsAnual,
+            tasaMensual: cond.tasaMensual,
+            sistemaInteres: cond.sistemaInteres,
+            seguroMensual: cond.seguroMensual,
+            saldoInicial: cond.saldoInicial,
+            montoPrestado: cond.montoPrestado,
+            cuotasPrevias: cond.cuotasPrevias,
+            fechaDesembolso: cond.fechaDesembolso,
+            // Su día es el de todas las cuotas que se generen de aquí en adelante.
+            fechaPrimeraCuota: new Date(`${cond.desde}T00:00:00.000Z`),
+            numeroCuotas: cond.desdeNumero - 1 + plan.length,
+          },
+        });
+        await crearCuotas(tx, actualizado, plan, cond.desdeNumero, new Date(`${cond.desde}T00:00:00.000Z`), porcentajes);
+        // El desembolso que llegó a una cuenta sigue al monto y la fecha (solo sin pagos).
+        if (actualizado.desembolsoIngresoId && !cond.conPagos) {
+          await tx.ingresoPersonal.update({
+            where: { id: actualizado.desembolsoIngresoId },
+            data: { monto: cond.montoPrestado, ...(cond.fechaDesembolso ? { fecha: cond.fechaDesembolso } : {}) },
+          });
+        }
+      }
+
       const cuotas = await cuotasDe(tx, actualizado);
       const sinPagar = cuotas.filter((c) => esRecalculable(actualizado, c, hoy));
       if (!actualizado.hogarId) {
@@ -480,7 +595,12 @@ export async function actualizarPrestamo(usuarioActual, id, data) {
     },
     { timeout: 120000, maxWait: 20000 },
   );
-  if (!prestamo.hogarId) await pagarCuotasAutomaticasPrestamos(prestamo.usuarioId);
+  if (!prestamo.hogarId) {
+    await pagarCuotasAutomaticasPrestamos(prestamo.usuarioId);
+    if (recalculado) await evaluarPagadas(prestamo);
+  } else if (recalculado) {
+    await registrarActividad(usuarioActual, { tipo: 'prestamo', descripcion: `cambió las condiciones del préstamo ${datos.nombre}`, enlace: '/patrimonio' });
+  }
   return obtenerPrestamo(usuarioActual, id);
 }
 
