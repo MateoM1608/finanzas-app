@@ -183,7 +183,7 @@ async function actualizarSugerenciaCuota() {
   if (!gACuotas.value || !gFecha.value) return;
   const metodo = metodos.value.find((m) => m.id === gMetodoPagoId.value);
   gModoCobro.value = modoCobroSugerido(metodo);
-  gInteres.value = metodo?.tasaMensual > 0 ? 'tarjeta' : 'sin';
+  gInteres.value = metodo?.tasaMensual > 0 && Number(gNumeroCuotas.value) !== 1 ? 'tarjeta' : 'sin';
   try {
     gPrimeraCuota.value = await sugerirPrimeraCuota(gFecha.value, gMetodoPagoId.value || undefined);
   } catch {
@@ -193,6 +193,12 @@ async function actualizarSugerenciaCuota() {
 watch([gACuotas, gMetodoPagoId, gFecha], actualizarSugerenciaCuota);
 
 const metodoSeleccionado = computed(() => metodos.value.find((m) => m.id === gMetodoPagoId.value));
+// A 1 cuota la tarjeta no cobra interés: se paga entera con el extracto.
+const gUnaCuota = computed(() => Number(gNumeroCuotas.value) === 1);
+watch(gUnaCuota, (una) => {
+  if (una && gInteres.value === 'tarjeta') gInteres.value = 'sin';
+  else if (!una && gInteres.value === 'sin' && metodoSeleccionado.value?.tasaMensual > 0) gInteres.value = 'tarjeta';
+});
 const conTarjeta = computed(() => metodoSeleccionado.value?.tipo === 'tarjeta_credito');
 watch(conTarjeta, (si) => {
   if (!si) gEnDolares.value = false;
@@ -1312,12 +1318,15 @@ function saldoCompra(compra) {
             <div>
               <label class="label" for="g-interes">Interés</label>
               <select id="g-interes" v-model="gInteres" class="field">
-                <option v-if="metodoSeleccionado?.tasaMensual > 0" value="tarjeta">
+                <option v-if="metodoSeleccionado?.tasaMensual > 0 && !gUnaCuota" value="tarjeta">
                   El de la tarjeta ({{ formatTasa(metodoSeleccionado.tasaMensual) }})
                 </option>
                 <option value="sin">Sin interés</option>
                 <option value="otra">Otra tasa</option>
               </select>
+              <p v-if="gUnaCuota && gInteres === 'sin'" class="mt-1 text-xs text-ink-tertiary">
+                A 1 cuota la tarjeta no cobra interés: se paga completa con el extracto.
+              </p>
             </div>
             <template v-if="gInteres === 'otra'">
               <FormField v-model="gTasa" type="number" step="0.01" label="Tasa mensual (%)" required />
