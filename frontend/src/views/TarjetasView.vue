@@ -144,9 +144,9 @@ async function onRegistrarPago() {
 <template>
   <AppLayout title="Tarjetas y cuentas" subtitle="Qué salió y entró por cada método de pago. Solo lo ves tú.">
     <template #actions>
-      <router-link :to="{ name: 'panel-personal' }" class="btn-secondary">
+      <router-link :to="{ name: 'patrimonio' }" class="btn-secondary">
         <AppIcon name="chevronLeft" class="h-4 w-4" />
-        Personal
+        Patrimonio
       </router-link>
     </template>
 

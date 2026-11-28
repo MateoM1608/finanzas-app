@@ -37,29 +37,34 @@
     color-scheme: light;
   }
 
+  /*
+   * Oscuro: casi negro con un tinte verde (no un verde oscuro), para que las
+   * cifras y la lima resalten. El verde bosque queda solo en los bloques de
+   * marca (Disponible, saldo del hogar).
+   */
   .dark {
-    --c-canvas: 10 36 22;
-    --c-surface: 15 46 29;
-    --c-surface-hover: 22 59 38;
-    --c-surface-raised: 18 52 33;
-    --c-surface-sunken: 8 30 18;
-    --c-border: 30 70 47;
-    --c-border-strong: 46 94 66;
-    --c-ink-primary: 246 239 227;
-    --c-ink-secondary: 185 204 189;
-    --c-ink-tertiary: 141 164 149;
+    --c-canvas: 9 13 11;
+    --c-surface: 16 21 18;
+    --c-surface-hover: 24 31 27;
+    --c-surface-raised: 20 26 22;
+    --c-surface-sunken: 6 9 7;
+    --c-border: 33 41 36;
+    --c-border-strong: 50 61 54;
+    --c-ink-primary: 244 241 233;
+    --c-ink-secondary: 186 196 189;
+    --c-ink-tertiary: 138 150 142;
     --c-accent: 110 226 107;
     --c-accent-hover: 145 236 141;
-    --c-on-accent: 10 36 22;
+    --c-on-accent: 9 24 15;
     --c-highlight: 110 226 107;
-    --c-on-highlight: 10 36 22;
+    --c-on-highlight: 9 24 15;
     --c-positive: 132 228 138;
     --c-negative: 255 140 122;
     --c-warning: 242 194 98;
     --c-overlay: 0 0 0;
-    --c-brand: 24 82 52;
+    --c-brand: 17 43 29;
     --shadow-card: 0 0 0 transparent;
-    --shadow-pop: 0 16px 40px -8px rgb(0 0 0 / 0.55), 0 0 0 1px rgb(246 239 227 / 0.05);
+    --shadow-pop: 0 16px 40px -8px rgb(0 0 0 / 0.7), 0 0 0 1px rgb(244 241 233 / 0.06);
     color-scheme: dark;
   }
 
@@ -90,6 +95,30 @@
     background-image: radial-gradient(rgb(246 239 227 / 0.085) 1px, transparent 1.3px);
     background-size: 16px 16px;
     color: rgb(var(--c-ink-primary));
+  }
+
+  .dark .scope-brand {
+    --c-surface: 26 58 40;
+    --c-surface-hover: 33 68 48;
+    --c-surface-raised: 29 63 44;
+    --c-surface-sunken: 11 30 20;
+    --c-border: 38 72 52;
+    --c-border-strong: 54 92 70;
+  }
+
+  /* La barra lateral en oscuro va del mismo casi negro del fondo. */
+  .dark .sidebar {
+    --c-surface: 16 21 18;
+    --c-surface-hover: 24 31 27;
+    --c-surface-raised: 20 26 22;
+    --c-surface-sunken: 6 9 7;
+    --c-border: 33 41 36;
+    --c-border-strong: 50 61 54;
+    --c-ink-secondary: 186 196 189;
+    --c-ink-tertiary: 138 150 142;
+    background-color: rgb(16 21 18);
+    background-image: none;
+    border-right: 1px solid rgb(33 41 36);
   }
 
   html {

@@ -28,12 +28,39 @@ const routes = [
   },
   {
     path: '/',
-    redirect: { name: 'panel-personal' },
+    name: 'inicio',
+    component: () => import('../views/InicioView.vue'),
+    meta: { requiresAuth: true, requiresHogar: true },
   },
   {
+    // Toda la caja personal (#gasto-<id> / #ingreso-<id> resalta uno; ?desde=&hasta= filtra).
+    path: '/movimientos',
+    name: 'movimientos',
+    component: () => import('../views/MovimientosView.vue'),
+    meta: { requiresAuth: true, requiresHogar: true },
+  },
+  {
+    // Neto, límites, ahorros y próximos meses (?vista=limites, ahorros, proximos).
+    path: '/analisis',
+    name: 'analisis',
+    component: () => import('../views/AnalisisView.vue'),
+    meta: { requiresAuth: true, requiresHogar: true },
+  },
+  {
+    // Antes "Personal" era una sola pantalla: los enlaces viejos (avisos,
+    // notificaciones) a un movimiento van a Movimientos; el resto, a Inicio.
     path: '/personal',
     name: 'panel-personal',
-    component: () => import('../views/PersonalPanelView.vue'),
+    redirect: (to) => {
+      if (to.hash) return { name: 'movimientos', hash: to.hash, query: {} };
+      if (to.query.registrar) return { name: 'inicio', query: { registrar: to.query.registrar } };
+      return { name: 'inicio', query: {} };
+    },
+  },
+  {
+    path: '/personal/configuracion',
+    name: 'configuracion-personal',
+    component: () => import('../views/ConfiguracionPersonalView.vue'),
     meta: { requiresAuth: true, requiresHogar: true },
   },
   {
@@ -75,6 +102,13 @@ const routes = [
     meta: { requiresAuth: true, requiresHogar: true },
   },
   {
+    // Cada parte del hogar en su página (/hogar/cuentas#cuenta-<id>, /hogar/gastos?registrar=variable…).
+    path: '/hogar/:seccion(cuentas|gastos|topes|metas|informe|actividad)',
+    name: 'hogar-seccion',
+    component: () => import('../views/HogarSeccionView.vue'),
+    meta: { requiresAuth: true, requiresHogar: true },
+  },
+  {
     // Patrimonio: préstamos e inversiones (?vista=inversiones).
     path: '/patrimonio',
     name: 'patrimonio',
@@ -111,7 +145,7 @@ router.beforeEach(async (to) => {
   }
 
   if (to.meta.guest && auth.isAuthenticated) {
-    return auth.hasHogar ? { name: 'panel-personal' } : { name: 'onboarding' };
+    return auth.hasHogar ? { name: 'inicio' } : { name: 'onboarding' };
   }
 
   if (to.meta.requiresAuth && !auth.isAuthenticated) {
@@ -123,7 +157,16 @@ router.beforeEach(async (to) => {
   }
 
   if (to.name === 'onboarding' && auth.hasHogar) {
-    return { name: 'panel-personal' };
+    return { name: 'inicio' };
+  }
+
+  // Enlaces de antes de separar Hogar en páginas (avisos y notificaciones).
+  if (to.name === 'panel-hogar') {
+    if (to.hash.startsWith('#cuenta-')) return { name: 'hogar-seccion', params: { seccion: 'cuentas' }, hash: to.hash };
+    if (to.hash.startsWith('#gasto-hogar-') || to.hash.startsWith('#compra-hogar-')) {
+      return { name: 'hogar-seccion', params: { seccion: 'gastos' }, hash: to.hash };
+    }
+    if (to.query.registrar === 'variable') return { name: 'hogar-seccion', params: { seccion: 'gastos' }, query: { registrar: 'variable' } };
   }
 
   return true;

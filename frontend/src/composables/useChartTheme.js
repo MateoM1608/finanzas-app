@@ -17,13 +17,13 @@ const PALETAS = {
   },
   dark: {
     series: ['#6EE26B', '#F2C262', '#5CC8B8', '#FF8C7A', '#B59CF0', '#A8DDA6'],
-    soft: '#2E5E42',
+    soft: '#2A3A30',
     grid: 'rgba(246,239,227,0.07)',
-    ticks: '#8DA495',
-    text: '#B9CCBD',
+    ticks: '#8A968E',
+    text: '#BAC4BD',
     tooltipBg: '#F6EFE3',
-    tooltipText: '#0A2416',
-    surface: '#0F2E1D',
+    tooltipText: '#090D0B',
+    surface: '#101512',
   },
 };
 

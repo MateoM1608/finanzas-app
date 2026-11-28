@@ -364,14 +364,51 @@ function progreso(p) {
         <p class="stat-hint">Incluye tu parte de las inversiones y préstamos del hogar.</p>
       </section>
 
-      <div class="tabs w-full sm:w-auto" role="tablist" aria-label="Patrimonio">
-        <button type="button" role="tab" class="tab flex-1 sm:flex-none" :class="{ 'tab-active': vista === 'prestamos' }" :aria-selected="vista === 'prestamos'" @click="vista = 'prestamos'">
-          Préstamos
+      <!-- Cada parte del patrimonio como una cuenta: se toca para ver su detalle. -->
+      <nav aria-label="Partes del patrimonio" class="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <router-link :to="{ name: 'tarjetas' }" class="card px-4 py-3.5 transition-colors hover:bg-surface-hover">
+          <span class="flex items-center gap-2 text-[13px] font-semibold text-ink-secondary">
+            <AppIcon name="creditCard" class="h-4 w-4 text-accent" /> Cuentas
+          </span>
+          <span class="mt-1.5 block truncate text-base font-bold text-ink-primary">{{ patrimonio ? formatCurrency(patrimonio.disponible) : '…' }}</span>
+          <span class="block truncate text-xs text-ink-tertiary">{{ patrimonio ? `Tarjetas: ${formatCurrency(patrimonio.deudaTarjetas)}` : '' }}</span>
+        </router-link>
+        <button
+          type="button"
+          class="card px-4 py-3.5 text-left transition-colors hover:bg-surface-hover"
+          :class="{ '!border-accent ring-1 ring-accent': vista === 'prestamos' }"
+          :aria-pressed="vista === 'prestamos'"
+          @click="vista = 'prestamos'"
+        >
+          <span class="flex items-center gap-2 text-[13px] font-semibold text-ink-secondary">
+            <AppIcon name="receipt" class="h-4 w-4 text-accent" /> Préstamos
+          </span>
+          <span class="mt-1.5 block truncate text-base font-bold text-ink-primary">{{ patrimonio ? formatCurrency(patrimonio.prestamos) : '…' }}</span>
+          <span class="block truncate text-xs text-ink-tertiary">Lo que falta por pagar</span>
         </button>
-        <button type="button" role="tab" class="tab flex-1 sm:flex-none" :class="{ 'tab-active': vista === 'inversiones' }" :aria-selected="vista === 'inversiones'" @click="vista = 'inversiones'">
-          Inversiones
+        <button
+          type="button"
+          class="card px-4 py-3.5 text-left transition-colors hover:bg-surface-hover"
+          :class="{ '!border-accent ring-1 ring-accent': vista === 'inversiones' }"
+          :aria-pressed="vista === 'inversiones'"
+          @click="vista = 'inversiones'"
+        >
+          <span class="flex items-center gap-2 text-[13px] font-semibold text-ink-secondary">
+            <AppIcon name="trendingUp" class="h-4 w-4 text-accent" /> Inversiones
+          </span>
+          <span class="mt-1.5 block truncate text-base font-bold text-ink-primary">{{ patrimonio ? formatCurrency(patrimonio.inversiones) : '…' }}</span>
+          <span class="block truncate text-xs text-ink-tertiary">Valor de hoy</span>
         </button>
-      </div>
+        <router-link :to="{ name: 'analisis', query: { vista: 'ahorros' } }" class="card px-4 py-3.5 transition-colors hover:bg-surface-hover">
+          <span class="flex items-center gap-2 text-[13px] font-semibold text-ink-secondary">
+            <AppIcon name="piggy" class="h-4 w-4 text-accent" /> Ahorros
+          </span>
+          <span class="mt-1.5 block truncate text-base font-bold text-ink-primary">
+            {{ patrimonio ? formatCurrency((patrimonio.ahorros ?? 0) + (patrimonio.metasHogar ?? 0)) : '…' }}
+          </span>
+          <span class="block truncate text-xs text-ink-tertiary">Metas tuyas y del hogar</span>
+        </router-link>
+      </nav>
 
       <InversionesSection v-if="vista === 'inversiones'" @cambio="cargarPatrimonio" />
 

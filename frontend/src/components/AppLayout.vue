@@ -4,8 +4,11 @@ import { contarNotificaciones } from '../api/avisos.js';
 import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/auth.js';
 import AppIcon from './AppIcon.vue';
+import AppModal from './AppModal.vue';
 import ThemeToggle from './ThemeToggle.vue';
 import { confirmar } from '../composables/useConfirm.js';
+import { abrirRegistro } from '../stores/registro.js';
+import RegistrarMovimientoModal from './personal/RegistrarMovimientoModal.vue';
 
 defineProps({
   title: { type: String, required: true },
@@ -17,17 +20,28 @@ const route = useRoute();
 const router = useRouter();
 
 const NAV = [
-  { name: 'panel-personal', label: 'Personal', icon: 'wallet', incluye: ['tarjetas'] },
-  { name: 'panel-hogar', label: 'Hogar', icon: 'home', incluye: ['configuracion-hogar'] },
+  { name: 'inicio', label: 'Inicio', icon: 'wallet' },
+  { name: 'movimientos', label: 'Movimientos', icon: 'list' },
+  { name: 'panel-hogar', label: 'Hogar', icon: 'home', incluye: ['configuracion-hogar', 'hogar-seccion'] },
+  { name: 'analisis', label: 'Análisis', icon: 'chart', incluye: ['configuracion-personal'] },
+  { name: 'patrimonio', label: 'Patrimonio', icon: 'trendingUp', incluye: ['tarjetas'] },
   { name: 'cuadres', label: 'Cuadres', icon: 'scale' },
-  { name: 'patrimonio', label: 'Patrimonio', icon: 'trendingUp' },
   { name: 'cuenta', label: 'Cuenta', icon: 'user' },
 ];
-// En el celular, Cuadres se abre desde Hogar y su lugar lo toma "+ Registrar"
-// (la acción más frecuente), en el centro de la barra.
-const NAV_MOVIL = NAV.filter((i) => i.name !== 'cuadres');
-const NAV_MOVIL_IZQ = NAV_MOVIL.slice(0, 2);
-const NAV_MOVIL_DER = NAV_MOVIL.slice(2);
+// Celular: lo de todos los días en la barra, el resto en "Más".
+const NAV_MOVIL_IZQ = NAV.slice(0, 2);
+const NAV_MOVIL_DER = [NAV[2]];
+const NAV_MAS = [
+  { name: 'analisis', label: 'Análisis', texto: 'Neto, límites, ahorros y próximos meses', icon: 'chart' },
+  { name: 'patrimonio', label: 'Patrimonio', texto: 'Préstamos, inversiones y ahorros', icon: 'trendingUp' },
+  { name: 'tarjetas', label: 'Tarjetas y cuentas', texto: 'Deuda, pagos y extractos', icon: 'creditCard' },
+  { name: 'cuadres', label: 'Cuadres', texto: 'Cuadrar cuentas del hogar', icon: 'scale' },
+  { name: 'configuracion-personal', label: 'Configuración personal', texto: 'Ciclo, cuentas, categorías, fijos', icon: 'sliders' },
+  { name: 'cuenta', label: 'Cuenta', texto: 'Perfil, seguridad y exportar', icon: 'user' },
+];
+const RUTAS_MAS = ['analisis', 'configuracion-personal', 'patrimonio', 'tarjetas', 'cuadres', 'cuenta', 'notificaciones'];
+const enMas = computed(() => RUTAS_MAS.includes(route.name));
+const menuMas = ref(false);
 
 // "+": un menú corto con lo que se registra más seguido. El gasto del hogar
 // solo aparece con permiso para editar gastos del hogar.
@@ -37,12 +51,23 @@ const puedeGastoHogar = computed(() =>
 );
 function registrar(tipo) {
   menuRegistrar.value = false;
-  if (tipo === 'variable') router.push({ name: 'panel-hogar', query: { registrar: 'variable' } });
-  else router.push({ name: 'panel-personal', query: { registrar: tipo } });
+  if (tipo === 'variable') router.push({ name: 'hogar-seccion', params: { seccion: 'gastos' }, query: { registrar: 'variable' } });
+  else abrirRegistro(tipo);
 }
 watch(() => route.fullPath, () => {
   menuRegistrar.value = false;
+  menuMas.value = false;
 });
+// Enlaces viejos con ?registrar=gasto|ingreso abren el formulario donde estés.
+watch(
+  () => route.query.registrar,
+  (tipo) => {
+    if (tipo !== 'gasto' && tipo !== 'ingreso') return;
+    abrirRegistro(tipo);
+    router.replace({ query: { ...route.query, registrar: undefined } });
+  },
+  { immediate: true },
+);
 
 const iniciales = computed(() =>
   (auth.usuario?.nombre || '?')
@@ -85,7 +110,7 @@ async function onLogout() {
   <div class="min-h-screen lg:pl-64">
     <!-- Barra lateral (escritorio) -->
     <aside
-      class="scope-brand hidden lg:flex fixed inset-y-0 left-0 w-64 flex-col"
+      class="sidebar scope-brand hidden lg:flex fixed inset-y-0 left-0 w-64 flex-col"
     >
       <div class="h-16 flex items-center gap-2.5 px-5">
         <span class="grid h-8 w-8 place-items-center rounded-lg bg-accent text-accent-on">
@@ -96,6 +121,13 @@ async function onLogout() {
           <AppIcon name="bell" class="h-[18px] w-[18px]" />
           <span v-if="noLeidas" class="absolute -right-0.5 -top-0.5 grid h-4 min-w-4 place-items-center rounded-full bg-negative px-1 text-[10px] font-semibold text-white">{{ noLeidas > 9 ? '9+' : noLeidas }}</span>
         </router-link>
+      </div>
+
+      <div class="px-3 pt-3">
+        <button type="button" class="btn-primary w-full" @click="abrirRegistro('gasto')">
+          <AppIcon name="plus" class="h-4 w-4" :stroke-width="2.4" />
+          Registrar movimiento
+        </button>
       </div>
 
       <nav class="flex-1 px-3 pt-4 space-y-0.5" aria-label="Principal">
@@ -239,9 +271,43 @@ async function onLogout() {
           :aria-current="activo(item) ? 'page' : undefined"
         >
           <AppIcon :name="item.icon" class="h-[22px] w-[22px]" />
-          {{ item.short || item.label }}
+          {{ item.label }}
         </router-link>
+        <button
+          type="button"
+          class="flex flex-col items-center gap-1 py-2.5 text-[11px] font-medium transition-colors"
+          :class="enMas || menuMas ? 'text-accent' : 'text-ink-tertiary hover:text-ink-primary'"
+          :aria-expanded="menuMas"
+          @click="menuMas = true"
+        >
+          <AppIcon name="grid" class="h-[22px] w-[22px]" />
+          Más
+        </button>
       </div>
     </nav>
+
+    <!-- "Más" (celular): lo que no cabe en la barra. -->
+    <AppModal v-if="menuMas" title="Más" @close="menuMas = false">
+      <nav aria-label="Más secciones" class="-mx-2 -my-1">
+        <router-link
+          v-for="item in NAV_MAS"
+          :key="item.name"
+          :to="{ name: item.name }"
+          class="flex items-center gap-3 rounded-xl px-2 py-2.5 transition-colors hover:bg-surface-hover"
+          :class="{ 'bg-surface-hover': route.name === item.name }"
+        >
+          <span class="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-surface-sunken text-accent">
+            <AppIcon :name="item.icon" class="h-5 w-5" />
+          </span>
+          <span class="min-w-0 flex-1">
+            <span class="block text-sm font-semibold text-ink-primary">{{ item.label }}</span>
+            <span class="block truncate text-[13px] text-ink-tertiary">{{ item.texto }}</span>
+          </span>
+          <AppIcon name="chevronRight" class="h-4 w-4 shrink-0 text-ink-tertiary" />
+        </router-link>
+      </nav>
+    </AppModal>
+
+    <RegistrarMovimientoModal />
   </div>
 </template>

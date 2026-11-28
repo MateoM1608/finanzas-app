@@ -29,7 +29,7 @@ async function onSubmit() {
   loading.value = true;
   try {
     await auth.login({ usuario: usuario.value, password: password.value });
-    router.push(auth.hasHogar ? { name: 'panel-personal' } : { name: 'onboarding' });
+    router.push(auth.hasHogar ? { name: 'inicio' } : { name: 'onboarding' });
   } catch (e) {
     error.value = extractErrorMessage(e);
   } finally {

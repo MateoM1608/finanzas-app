@@ -31,7 +31,7 @@ async function onSubmit() {
   try {
     const { data } = await api.post('/api/auth/recuperar', { usuario: usuario.value, codigo: codigo.value, nueva: nueva.value });
     auth.setUsuario(data.usuario);
-    router.push(auth.hasHogar ? { name: 'panel-personal' } : { name: 'onboarding' });
+    router.push(auth.hasHogar ? { name: 'inicio' } : { name: 'onboarding' });
   } catch (e) {
     error.value = extractErrorMessage(e);
   } finally {
